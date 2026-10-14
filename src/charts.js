@@ -24,6 +24,12 @@ export const DOW_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 export const PALETTE = ['#4cc9f0', '#f72585', '#ffd166', '#06d6a0', '#9b5de5', '#fb8500', '#8ecae6', '#e63946', '#2a9d8f', '#e9c46a'];
 
+// Acento del design system (css/style.css --accent) + escala secuencial de
+// heatmaps (css --heat-0…--heat-5). Los charts no leen variables CSS (son
+// strings SVG puros), así que la paleta se duplica acá como constantes.
+export const ACCENT = '#1db954';
+export const HEAT = ['#1a1e26', '#123524', '#14532d', '#15803d', '#22c55e', '#4ade80'];
+
 export function esc(s) {
   return String(s)
     .replaceAll('&', '&amp;')
@@ -53,28 +59,21 @@ export function fmtPct(x) {
   return `${(x * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })}%`;
 }
 
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-}
-
-function lerpColor(a, b, t) {
-  const [ar, ag, ab] = hexToRgb(a);
-  const [br, bg, bb] = hexToRgb(b);
-  return `rgb(${Math.round(ar + (br - ar) * t)},${Math.round(ag + (bg - ag) * t)},${Math.round(ab + (bb - ab) * t)})`;
-}
-
-// Escala secuencial no cromática: value/max → color entre from (oscuro) y to.
-export function makeScale(max, from = '#1c2b3a', to = '#4cc9f0') {
+// Escala discreta cuantizada de 6 niveles sobre la paleta del design system.
+// Nivel 0 reservado para v <= 0 (sin actividad); v > 0 usa raíz cuadrada para
+// dar resolución a los valores chicos. Por encima del máximo satura.
+export function makeScale(max, palette = HEAT) {
+  const top = palette.length - 1;
   return (v) => {
-    if (max <= 0 || v <= 0) return from;
-    return lerpColor(from, to, Math.min(1, v / max));
+    if (max <= 0 || v <= 0) return palette[0];
+    const t = Math.min(1, v / max);
+    return palette[1 + Math.min(top - 1, Math.floor(Math.sqrt(t) * top))];
   };
 }
 
 // ---------- barChart ----------
 
-export function barChart({ data, width = 640, height = 220, format = fmtNum, accent = '#4cc9f0', showValue = true }) {
+export function barChart({ data, width = 640, height = 220, format = fmtNum, accent = ACCENT, showValue = true }) {
   const n = data.length;
   if (n === 0) return '';
   const max = Math.max(...data.map((d) => d.value), 1);
@@ -108,7 +107,7 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
 
 // ---------- lineChart ----------
 
-export function lineChart({ points, width = 640, height = 200, format = fmtNum, accent = '#4cc9f0', area = true }) {
+export function lineChart({ points, width = 640, height = 200, format = fmtNum, accent = ACCENT, area = true }) {
   const n = points.length;
   if (n === 0) return '';
   const pad = { l: 8, r: 8, t: 10, b: 18 };
@@ -124,9 +123,14 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const title = raw ? `${raw}: ${format(p.y)}` : format(p.y);
     return `<circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
   }).join('');
-  const labels = points.map((p, i) => (p.label != null
-    ? `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="9">${esc(String(p.label))}</text>`
-    : '')).join('');
+  const labels = points.map((p, i) => {
+    // Diezmado del eje X: con muchas etiquetas se superponen. Se muestra
+    // 1 de cada `step` más la última (los extremos siempre visibles).
+    if (p.label == null) return '';
+    const step = Math.max(1, Math.ceil(n / 8));
+    if (i % step !== 0 && i !== n - 1) return '';
+    return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="10">${esc(String(p.label))}</text>`;
+  }).join('');
   const aria = `Gráfico de líneas: ${points.map((p, i) => `${p.label ?? i}: ${format(p.y)}`).join(', ')}`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">
     ${area ? `<path d="${areaPath}" fill="${accent}" opacity="0.15"/>` : ''}
@@ -214,7 +218,7 @@ export function donut({ segments, size = 180, format = fmtNum, centerLabel = '',
 
 // ---------- sparkline ----------
 
-export function sparkline({ points, width = 120, height = 32, accent = '#4cc9f0' }) {
+export function sparkline({ points, width = 120, height = 32, accent = ACCENT }) {
   const n = points.length;
   if (n === 0) return '';
   const max = Math.max(...points, 1);
@@ -281,7 +285,7 @@ export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LO
 
 // ---------- stackedBar ----------
 
-export function stackedBar({ series, width = 640, height = 200, colors = PALETTE, format = fmtNum }) {
+export function stackedBar({ series, width = 640, height = 200, colors = PALETTE, format = fmtNum, segmentLabels = null }) {
   const n = series.length;
   if (n === 0) return '';
   const rowH = Math.min(28, (height - 20) / n);
@@ -295,11 +299,19 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
     const segs = s.values.map((v, j) => {
       if (v <= 0) return '';
       const w = (v / total) * plotW;
-      const seg = `<rect x="${x.toFixed(1)}" y="${(y + 1).toFixed(1)}" width="${Math.max(1, w - 1).toFixed(1)}" height="${(rowH - 2).toFixed(1)}" fill="${colors[j % colors.length]}"><title>${esc(s.label)}: ${format(v)}</title></rect>`;
+      const segLabel = segmentLabels != null && segmentLabels[j] != null ? String(segmentLabels[j]) : '';
+      const title = segLabel ? `${s.label} — ${segLabel}: ${format(v)}` : `${s.label}: ${format(v)}`;
+      const seg = `<rect x="${x.toFixed(1)}" y="${(y + 1).toFixed(1)}" width="${Math.max(1, w - 1).toFixed(1)}" height="${(rowH - 2).toFixed(1)}" fill="${colors[j % colors.length]}"><title>${esc(title)}</title></rect>`;
       x += w;
       return seg;
     }).join('');
-    return `<g><text x="${labelW - 6}" y="${(y + rowH / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="9">${esc(s.label)}</text>${segs}</g>`;
+    return `<g><text x="${labelW - 6}" y="${(y + rowH / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="10">${esc(s.label)}</text>${segs}</g>`;
   }).join('');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" class="chart" aria-label="Barras apiladas">${rows}</svg>`;
+  const legend = segmentLabels != null
+    ? `<ul class="legend">${segmentLabels.map((l, j) => {
+        const color = colors[j % colors.length];
+        return `<li class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(String(l))}</li>`;
+      }).join('')}</ul>`
+    : '';
+  return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${height}" role="img" class="chart" aria-label="Barras apiladas">${rows}</svg>${legend}</div>`;
 }

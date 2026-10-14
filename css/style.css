@@ -380,6 +380,7 @@ code {
   font-size: var(--fs-lg);
   font-weight: 700;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .kpi-sub {
@@ -464,6 +465,21 @@ td a:hover {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* Números tabulares en tablas (los KPIs lo tienen en .kpi dd). */
+.card table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Primera columna fija en scroll horizontal (las cards ya tienen
+   overflow-x: auto; el fondo evita transparencias al solapar). */
+.card table th:first-child,
+.card table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
 }
 
 .chart-label,
@@ -603,6 +619,91 @@ td a:hover {
   accent-color: var(--accent);
 }
 
+.chip-active {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+}
+
+.filter-advanced {
+  margin: 0;
+}
+
+.filter-advanced summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Controles de rankings */
+.rank-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.rank-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.rank-opts select,
+.rank-opts input[type="search"] {
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Toast de títulos de gráficos (táctil) */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-6);
+  transform: translateX(-50%);
+  max-width: min(90vw, 480px);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+
+/* Recibo en texto plano (copia manual) */
+.receipt-plain {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+/* Año anterior plegado en el índice del calendario */
+details.calendar-year {
+  padding: var(--sp-4) var(--sp-6);
+}
+
+details.calendar-year summary {
+  cursor: pointer;
+  font-size: var(--fs-lg);
+  margin-bottom: var(--sp-3);
+}
+
 .filter-summary {
   margin-left: auto;
   color: var(--text-muted);
@@ -635,15 +736,23 @@ td a:hover {
   font-weight: 600;
 }
 
-/* Recibo (Wrapped) */
+/* Recibo (Wrapped): estética de ticket monoespaciado en dos columnas. */
 .receipt {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: 0 auto;
+  padding: var(--sp-4);
+  max-width: 460px;
+  font-family: var(--font-mono);
   font-size: var(--fs-sm);
+  background: var(--surface-2);
+  border-top: 2px dashed var(--border);
+  border-bottom: 2px dashed var(--border);
 }
 
 .receipt li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
   padding: var(--sp-2) 0;
   border-bottom: 1px dashed var(--border);
 }
