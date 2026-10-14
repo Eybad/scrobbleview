@@ -7,21 +7,35 @@
 
 import { parse } from '../src/parse/parse.js';
 import { aggregate } from '../src/aggregate/aggregate.js';
+import { derive } from '../src/aggregate/impl/derive.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
-import { renderView } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS } from './filter-ui.js';
+import { renderView, rankCardHTML, receiptText } from './views.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, monthOptionsHTML, isoDateToDay, locToISODate } from './filter-ui.js';
+import { fmtNum, fmtMs } from '../src/charts.js';
 import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
 const appRoot = document.getElementById('app-root');
 
 let ds = null;
+let derived = null; // derive(ds, tz): se calcula una vez por dataset+tz y se
 let model = null; // modelo completo (sin filtros)
 let current = null; // modelo activo (filtrado o completo)
 let tz = null;
 let state = emptyFilterState();
+let rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
 let cacheOffer = null; // null | 'save' | 'saved' | 'error'
+
+// Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
+// re-renders porque vive fuera de #app-root; el texto va por textContent).
+const toast = document.createElement('div');
+toast.id = 'chart-toast';
+toast.className = 'toast';
+toast.setAttribute('role', 'status');
+toast.hidden = true;
+document.body.appendChild(toast);
+let toastTimer = 0;
 
 // ---------- tz del navegador sobre el rango del dataset ----------
 
@@ -48,8 +62,10 @@ function buildTz(dataset) {
 async function analyze(sources, { onProgress }) {
   ds = await parse(sources, { onProgress });
   tz = buildTz(ds);
+  derived = derive(ds, tz);
   model = aggregate(ds, { tz, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
+  rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
   current = model;
   cacheOffer = cacheAvailable() ? 'save' : null;
   return { ds, model, tz };
@@ -61,8 +77,10 @@ async function loadCached() {
   if (!cached) return null;
   ds = cached;
   tz = buildTz(ds);
+  derived = derive(ds, tz);
   model = aggregate(ds, { tz, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
+  rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
   current = model;
   cacheOffer = 'saved';
   return { ds, model, tz };
@@ -80,7 +98,7 @@ function refreshModel() {
     current = model;
     return;
   }
-  const { indices } = applyFilters(ds, state, tz);
+  const { indices } = applyFilters(ds, state, tz, derived);
   const subset = filterDataset(ds, indices);
   current = aggregate(subset, { tz, now: model.meta.generatedAt });
 }
@@ -93,14 +111,15 @@ function parseHash() {
   return [name || 'dashboard', id || null];
 }
 
-function navHTML() {
+function navHTML(active) {
+  const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
   return `<nav class="app-nav" aria-label="Secciones">
-    <a href="#/dashboard">Resumen</a>
-    <a href="#/sessions">Sesiones</a>
-    <a href="#/discovery">Descubrimiento</a>
-    <a href="#/yearly">Años</a>
-    <a href="#/calendar">Calendario</a>
-    <a href="#/wrapped">Resumen del año</a>
+    ${link('dashboard', 'Resumen', 'dashboard')}
+    ${link('sessions', 'Sesiones', 'sessions')}
+    ${link('discovery', 'Descubrimiento', 'discovery')}
+    ${link('yearly', 'Años', 'yearly')}
+    ${link('calendar', 'Calendario', 'calendar')}
+    ${link('wrapped', 'Resumen del año', 'wrapped')}
     <button type="button" class="btn btn-secondary" data-action="reset">Nuevos archivos</button>
   </nav>`;
 }
@@ -132,33 +151,54 @@ function cacheBannerHTML() {
 function render() {
   if (!current) return;
   const [name, id] = parseHash();
-  appRoot.innerHTML = cacheBannerHTML() + navHTML() + filterBarHTML(model, state, current.totals) + renderView(name, current, id);
-  wireInteractions();
+  appRoot.innerHTML = cacheBannerHTML() + navHTML(name) + filterBarHTML(model, state, current.totals) + `<div id="view-root">${renderView(name, current, id, { years: state.years })}</div>`;
+  wireFilters();
+  wireView();
 }
 
-// ---------- interacciones ----------
-
-function applyAndRender() {
+// Cambio de filtro: re-agrega y actualiza SOLO la vista + los dinámicos de la
+// barra (presets, meses, fechas, chips, resumen). La barra persiste: no se
+// pierde el foco ni el estado del <details> de avanzados.
+function applyAndRenderView() {
   refreshModel();
-  render();
+  const [name, id] = parseHash();
+  const root = document.getElementById('view-root');
+  if (root) root.innerHTML = renderView(name, current, id, { years: state.years });
+  updateFilterDynamics();
+  wireView();
 }
 
-function wireInteractions() {
-  // Tabs de rankings.
-  appRoot.querySelectorAll('[data-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const group = btn.closest('.tabs');
-      group.querySelectorAll('[data-tab]').forEach((b) => {
-        const on = b === btn;
-        b.setAttribute('aria-selected', String(on));
-        b.classList.toggle('active', on);
-      });
-      group.parentElement.querySelectorAll('[data-panel]').forEach((p) => {
-        p.hidden = p.dataset.panel !== btn.dataset.tab;
-      });
-    });
+// Sincroniza los controles de la barra con el estado (sin re-renderizarla).
+function updateFilterDynamics() {
+  const bar = document.getElementById('filter-bar');
+  if (!bar || !model || !current) return;
+  const last = model.meta.lastTs ?? 0;
+  bar.querySelectorAll('[data-preset]').forEach((btn) => {
+    const p = RANGE_PRESETS.find((x) => x.id === btn.dataset.preset);
+    const active = p.id === 'all'
+      ? !state.range
+      : state.range != null && state.range.from === last - p.days * 86400 && state.range.to === last;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
   });
+  const month = document.getElementById('filter-month');
+  if (month) month.innerHTML = monthOptionsHTML(model, state);
+  const from = bar.querySelector('[data-filter="from"]');
+  if (from) from.value = state.range ? locToISODate(state.range.from) : '';
+  const to = bar.querySelector('[data-filter="to"]');
+  if (to) to.value = state.range ? locToISODate(state.range.to) : '';
+  const chips = document.getElementById('filter-chips');
+  if (chips) chips.innerHTML = chipsHTML(model, state);
+  const summary = document.getElementById('filter-summary');
+  if (summary) summary.textContent = `${fmtNum(current.totals.records)} reproducciones · ${fmtMs(current.totals.ms)}`;
+  const clear = document.getElementById('filter-clear');
+  if (clear) {
+    if (isFilterActive(state)) clear.removeAttribute('disabled');
+    else clear.setAttribute('disabled', '');
+  }
+}
 
+function wireFilters() {
   // Presets de rango.
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -169,7 +209,7 @@ function wireInteractions() {
         const last = model.meta.lastTs;
         state.range = { from: last - p.days * 86400, to: last };
       }
-      applyAndRender();
+      applyAndRenderView();
     });
   });
 
@@ -179,7 +219,7 @@ function wireInteractions() {
       const v = sel.value;
       state.years = v ? new Set([Number(v)]) : null;
       if (v) state.months = null;
-      applyAndRender();
+      applyAndRenderView();
     });
   });
   appRoot.querySelectorAll('[data-filter="month"]').forEach((sel) => {
@@ -192,9 +232,30 @@ function wireInteractions() {
       } else {
         state.months = null;
       }
-      applyAndRender();
+      applyAndRenderView();
     });
   });
+
+  // Rango personalizado con fechas (from/to en época local).
+  const fromInput = appRoot.querySelector('[data-filter="from"]');
+  const toInput = appRoot.querySelector('[data-filter="to"]');
+  const onDate = () => {
+    const f = fromInput ? isoDateToDay(fromInput.value) : null;
+    const t = toInput ? isoDateToDay(toInput.value) : null;
+    if (f == null && t == null) {
+      state.range = null;
+    } else {
+      const first = model.meta.firstTs ?? 0;
+      const lastTs = model.meta.lastTs ?? 0;
+      state.range = {
+        from: f != null ? f * 86400 : first,
+        to: t != null ? t * 86400 + 86399 : lastTs
+      };
+    }
+    applyAndRenderView();
+  };
+  if (fromInput) fromInput.addEventListener('change', onDate);
+  if (toInput) toInput.addEventListener('change', onDate);
 
   // Días de semana.
   appRoot.querySelectorAll('[data-dow]').forEach((cb) => {
@@ -204,7 +265,7 @@ function wireInteractions() {
       if (cb.checked) state.dows.add(d);
       else state.dows.delete(d);
       if (state.dows.size === 7 || state.dows.size === 0) state.dows = null;
-      applyAndRender();
+      applyAndRenderView();
     });
   });
 
@@ -216,17 +277,17 @@ function wireInteractions() {
       if (cb.checked) b.hours.forEach((h) => state.hours.add(h));
       else b.hours.forEach((h) => state.hours.delete(h));
       if (state.hours.size === 24 || state.hours.size === 0) state.hours = null;
-      applyAndRender();
+      applyAndRenderView();
     });
   });
 
-  // Toggles skip/shuffle/offline (allowlist explícita).
-  const TOGGLES = new Set(['skip', 'shuffle', 'offline']);
-  appRoot.querySelectorAll('[data-toggle]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      if (!TOGGLES.has(cb.dataset.toggle)) return;
-      state[cb.dataset.toggle] = cb.checked ? true : null;
-      applyAndRender();
+  // Toggles skip/shuffle/offline de 3 estados (Todos / Solo sí / Excluir).
+  appRoot.querySelectorAll('[data-toggle3]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const k = sel.dataset.toggle3;
+      if (k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
+      state[k] = sel.value === '' ? null : sel.value === 'yes';
+      applyAndRenderView();
     });
   });
 
@@ -234,7 +295,7 @@ function wireInteractions() {
   appRoot.querySelectorAll('[data-action="clear"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state = emptyFilterState();
-      applyAndRender();
+      applyAndRenderView();
     });
   });
   appRoot.querySelectorAll('[data-action="reset"]').forEach((btn) => {
@@ -265,6 +326,91 @@ function wireInteractions() {
   });
 }
 
+// ---------- vista (se re-renderiza sin tocar la barra de filtros) ----------
+
+let searchTimer = 0;
+
+function updateRankCard() {
+  const card = document.getElementById('rank-card');
+  if (!card || !current) return;
+  card.innerHTML = rankCardHTML(current, rankUI);
+  wireRankCard();
+}
+
+function wireRankCard() {
+  const card = document.getElementById('rank-card');
+  if (!card) return;
+  card.querySelectorAll('[data-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      rankUI.tab = btn.dataset.tab;
+      updateRankCard();
+    });
+  });
+  card.querySelectorAll('[data-metric]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      rankUI.metric = btn.dataset.metric;
+      updateRankCard();
+    });
+  });
+  const sel = card.querySelector('[data-topn]');
+  if (sel) sel.addEventListener('change', () => {
+    rankUI.topN = Number(sel.value);
+    updateRankCard();
+  });
+  const input = card.querySelector('[data-search]');
+  if (input) input.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const v = input.value;
+    searchTimer = setTimeout(() => {
+      rankUI.query = v;
+      updateRankCard();
+      const again = card.querySelector('[data-search]');
+      if (again) {
+        again.focus();
+        again.setSelectionRange(again.value.length, again.value.length);
+      }
+    }, 200);
+  });
+}
+
+function wireView() {
+  wireRankCard();
+
+  // Filtro cruzado por entidad desde las fichas (el foco va al chip creado).
+  appRoot.querySelectorAll('[data-filter-entity]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const [kind, raw] = btn.dataset.filterEntity.split(':');
+      const id = Number(raw);
+      if (!Number.isFinite(id)) return;
+      state.artistId = state.trackId = state.albumId = null;
+      if (kind === 'artist') state.artistId = id;
+      else if (kind === 'track') state.trackId = id;
+      else if (kind === 'album') state.albumId = id;
+      else return;
+      applyAndRenderView();
+      document.querySelector('#filter-chips [data-unset]')?.focus();
+    });
+  });
+
+  // Copiar recibo en texto plano (con fallback a copia manual).
+  appRoot.querySelectorAll('[data-action="copy-receipt"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const text = receiptText(current);
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = '¡Copiado!';
+      } catch {
+        const pre = document.getElementById('receipt-text');
+        if (pre) {
+          pre.textContent = text;
+          pre.hidden = false;
+        }
+        btn.textContent = 'Copiá el texto de abajo';
+      }
+    });
+  });
+}
+
 // ---------- arranque ----------
 
 const inputApi = setupInput({
@@ -285,4 +431,41 @@ if (cacheAvailable()) {
   hasCache().then((c) => inputApi.showCachedButtons(c));
 }
 
-window.addEventListener('hashchange', render);
+let lastView = parseHash()[0] || 'dashboard';
+window.addEventListener('hashchange', () => {
+  const [name] = parseHash();
+  render();
+  if (name !== lastView) {
+    lastView = name;
+    window.scrollTo(0, 0);
+  }
+});
+
+// Chips para quitar filtros activos. Delegado una sola vez: #filter-chips se
+// re-renderiza en cada cambio (los listeners directos morirían al primero).
+// El foco va al resumen (tabindex -1).
+appRoot.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('[data-unset]');
+  if (!btn || !appRoot.contains(btn)) return;
+  const k = btn.dataset.unset;
+  if (k !== 'artistId' && k !== 'trackId' && k !== 'albumId' && k !== 'years' &&
+    k !== 'months' && k !== 'range' && k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
+  state[k] = null;
+  applyAndRenderView();
+  document.getElementById('filter-summary')?.focus();
+});
+
+// Títulos de gráficos en táctil: el <title> del SVG no se muestra al toque.
+// Delegado una sola vez (sobrevive a los re-renders). Solo sin hover.
+appRoot.addEventListener('click', (e) => {
+  if (!window.matchMedia('(hover: none)').matches) return;
+  const svg = e.target.closest?.('svg.chart');
+  if (!svg) return;
+  const holder = e.target.closest('g') ?? e.target;
+  const title = holder.querySelector?.('title');
+  if (!title || !title.textContent) return;
+  toast.textContent = title.textContent;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
+});
