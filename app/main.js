@@ -13,6 +13,7 @@ import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '..
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText } from './views.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, monthOptionsHTML, isoDateToDay, locToISODate } from './filter-ui.js';
+import { modelToJSON, exportFilename } from '../src/export.js';
 import { fmtNum, fmtMs } from '../src/charts.js';
 import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
@@ -113,6 +114,8 @@ function parseHash() {
 
 function navHTML(active) {
   const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
+  // "Nuevos archivos" fuera del nav: es acción destructiva (recarga), no una
+  // sección. En su propia fila no compite con las pestañas.
   return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('sessions', 'Sesiones', 'sessions')}
@@ -120,8 +123,11 @@ function navHTML(active) {
     ${link('yearly', 'Años', 'yearly')}
     ${link('calendar', 'Calendario', 'calendar')}
     ${link('wrapped', 'Resumen del año', 'wrapped')}
-    <button type="button" class="btn btn-secondary" data-action="reset">Nuevos archivos</button>
-  </nav>`;
+  </nav>
+  <div class="app-actions">
+    <button type="button" class="btn btn-secondary" data-action="export">Exportar datos</button>
+    <button type="button" class="btn btn-accent-outline" data-action="reset">Nuevos archivos</button>
+  </div>`;
 }
 
 function cacheBannerHTML() {
@@ -308,6 +314,24 @@ function wireFilters() {
   });
   appRoot.querySelectorAll('[data-action="reset"]').forEach((btn) => {
     btn.addEventListener('click', () => location.reload());
+  });
+
+  // Exportar el modelo completo procesado como JSON (análisis externo).
+  // Descarga por Blob + <a download>: sin red, CSP intacta.
+  appRoot.querySelectorAll('[data-action="export"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!model) return;
+      const plain = modelToJSON(model, { now: Math.floor(Date.now() / 1000) });
+      const blob = new Blob([JSON.stringify(plain)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exportFilename(plain.exportedAt);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
   });
 
   // Caché IndexedDB (banner).

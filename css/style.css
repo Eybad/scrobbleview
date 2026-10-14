@@ -329,17 +329,43 @@ code {
   align-items: center;
 }
 
-.app-nav a:hover,
-.app-nav a:focus-visible {
+.app-nav a:hover {
   color: var(--text);
   background: var(--surface-2);
 }
 
-.app-nav .btn {
-  margin-left: auto;
-  font-size: var(--fs-sm);
-  padding: var(--sp-1) var(--sp-3);
+/* La sección activa SIEMPRE se distingue (antes solo se notaba por hover/
+   focus: al clickear afuera todo quedaba igual de apagado y no se sabía
+   qué vista se estaba viendo). Mismo lenguaje que los tabs activos. */
+.app-nav a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Acciones de app (exportar / nuevos archivos): fila propia bajo el nav,
+   separadas de las pestañas de sección. */
+.app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+  margin-bottom: var(--sp-6);
+}
+
+/* Verde integrado a la paleta (nada de rojo): se diferencia del secundario
+   gris sin meter un color nuevo al design system. */
+.btn-accent-outline {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
   min-height: 44px;
+}
+
+.btn-accent-outline:hover {
+  background: var(--accent-soft);
+  filter: none;
 }
 
 /* Cabecera de vista */
@@ -927,10 +953,6 @@ details.calendar-year summary {
 @media (max-width: 720px) {
   .grid-2 {
     grid-template-columns: 1fr;
-  }
-
-  .app-nav .btn {
-    margin-left: 0;
   }
 
   /* En chico el padding lateral de 24px come ~13% del viewport. */
