@@ -1,7 +1,11 @@
 // filters.js — lógica pura de filtros sobre el Dataset
 //
-// applyFilters(ds, state, tz) → { indices, counts }: índices de filas que
-// cumplen el estado de filtro (rango + cruzados). filterDataset(ds, indices)
+// applyFilters(ds, state, tz, derived?) → { indices, counts }: índices de filas
+// que cumplen el estado de filtro (rango + cruzados). Si se pasa `derived`
+// (resultado de derive(ds, tz) ya calculado), se usa tal cual en vez de
+// re-ejecutar derive + order.sort() en cada cambio de filtro. El derived
+// pertenece a ese (ds, tz): si no corresponde, el resultado no corresponde.
+// filterDataset(ds, indices)
 // → Dataset subconjunto (mismos dicts, columnas recortadas) listo para
 // re-agregar: las vistas renderizan un StatsModel filtrado con el MISMO código
 // que el modelo completo. Nunca se re-parsea.
@@ -67,11 +71,11 @@ function countRange(ds, order, lo, hi) {
   return { records, ms, skipped, shuffle, offline };
 }
 
-export function applyFilters(ds, state, tz) {
-  const derived = derive(ds, tz);
+export function applyFilters(ds, state, tz, derived = null) {
+  const d = derived ?? derive(ds, tz);
   const n = ds.meta.count;
-  const { loc, hour, dow, ymd, day } = derived;
-  const order = derived.order;
+  const { loc, hour, dow, ymd, day } = d;
+  const order = d.order;
 
   let lo = 0;
   let hi = n;

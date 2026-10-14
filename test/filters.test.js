@@ -50,6 +50,24 @@ test('filters: sin filtros devuelve todo el dataset', async () => {
   compare({ indices, counts }, expected, 'todo');
 });
 
+// La derivación base se puede precalcular una vez (main.js la conserva junto
+// al dataset) y reusar en cada cambio de filtro: mismo resultado que derivar
+// adentro, sin re-ejecutar order.sort(). El derived pertenece a esa tz: si se
+// pasa, manda sobre el parámetro tz.
+test('filters: derived precalculado tiene precedencia sobre tz', async () => {
+  const ds = await makeDs();
+  const tzB = fixedTz('b', -300);
+  const derivedA = derive(ds, UTC);
+  const crossed = emptyFilterState();
+  crossed.hours = new Set([20, 21, 22]);
+  const a = applyFilters(ds, crossed, UTC); // deriva interno con UTC
+  const b = applyFilters(ds, crossed, tzB, derivedA); // el derived manda, no tzB
+  compare(b, { indices: [...a.indices], counts: a.counts }, 'derived precede a tz');
+  // Y con la misma tz, 3 args ≡ 4 args (caracterización).
+  const c = applyFilters(ds, crossed, UTC, derivedA);
+  compare(c, { indices: [...a.indices], counts: a.counts }, 'misma tz');
+});
+
 test('filters: rango por búsqueda binaria coincide con escaneo lineal', async () => {
   const ds = await makeDs();
   const derived = derive(ds, UTC);
