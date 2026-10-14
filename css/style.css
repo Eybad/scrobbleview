@@ -311,6 +311,10 @@ code {
   padding: var(--sp-1) var(--sp-3);
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
+  /* Hit-area táctil: 44px de alto (WCAG 2.5.5 / Apple 44pt). */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .app-nav a:hover,
@@ -324,6 +328,7 @@ code {
   margin-left: auto;
   font-size: var(--fs-sm);
   padding: var(--sp-1) var(--sp-3);
+  min-height: 44px;
 }
 
 /* Cabecera de vista */
@@ -397,7 +402,26 @@ code {
   border-radius: var(--radius);
   padding: var(--sp-4) var(--sp-6);
   margin-bottom: var(--sp-6);
+  /* Sin overflow: el scroll horizontal vive en .table-scroll, así el
+     título de la card nunca scrollea junto con la tabla. */
+  min-width: 0;
+}
+
+/* Wrapper de scroll para tablas: solo la tabla scrollea, el h2 queda fijo.
+   Sin tabindex: el scroll sigue al foco de los enlaces internos. */
+.table-scroll {
   overflow-x: auto;
+  max-width: 100%;
+  scrollbar-gutter: stable;
+  margin: 0 calc(var(--sp-6) * -1);
+  padding: 0 var(--sp-6) var(--sp-1);
+  /* Sombra de corte: señaliza que hay más contenido a los costados. */
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent),
+    linear-gradient(to left, var(--surface) 30%, transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 3em 100%;
+  background-attachment: local, scroll;
 }
 
 .card h2 {
@@ -424,10 +448,12 @@ code {
   margin-bottom: 0;
 }
 
-/* Tablas */
+/* Tablas (siempre dentro de .table-scroll; ver research: Roselli 2020) */
 table {
-  width: 100%;
-  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--fs-sm);
 }
 
@@ -472,14 +498,15 @@ td a:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* Primera columna fija en scroll horizontal (las cards ya tienen
-   overflow-x: auto; el fondo evita transparencias al solapar). */
-.card table th:first-child,
-.card table td:first-child {
+/* Primera columna fija en scroll horizontal. Fondo opaco + sombra derecha:
+   sin ellos la columna fija tapa a medias la segunda al scrollear. */
+.table-scroll table th:first-child,
+.table-scroll table td:first-child {
   position: sticky;
   left: 0;
   background: var(--surface);
   z-index: 1;
+  box-shadow: 1px 0 0 var(--border);
 }
 
 .chart-label,
@@ -710,11 +737,17 @@ details.calendar-year summary {
   font-size: var(--fs-sm);
 }
 
-/* Tabs de rankings */
+/* Tabs de rankings: una línea con scroll horizontal (nunca wrap: el modelo
+   de flechas APG y el indicador activo se rompen en 2 filas). */
 .tabs {
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
   gap: var(--sp-1);
   margin-bottom: var(--sp-3);
+  max-width: 100%;
 }
 
 .tabs button {
@@ -726,6 +759,11 @@ details.calendar-year summary {
   background: var(--surface-2);
   color: var(--text-muted);
   cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .tabs button.active,
@@ -776,5 +814,15 @@ details.calendar-year summary {
 
   .app-nav .btn {
     margin-left: 0;
+  }
+
+  /* En chico el padding lateral de 24px come ~13% del viewport. */
+  .card {
+    padding: var(--sp-3) var(--sp-4);
+  }
+
+  .table-scroll {
+    margin: 0 calc(var(--sp-4) * -1);
+    padding: 0 var(--sp-4) var(--sp-1);
   }
 }

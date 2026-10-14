@@ -45,9 +45,11 @@ function monthLabel(mi) {
 // `rows` es HTML YA escapado por el llamador: las celdas reciben markup (enlaces
 // de entidad, <span> de color), por eso no se escapan aquí. Todo valor de dato
 // debe pasar por esc() o entityLink() ANTES de entrar en `rows`.
+// El scroll horizontal vive en .table-scroll (solo la tabla scrollea; el h2 de
+// la card queda fijo). Sin tabindex: el scroll sigue al foco de los enlaces.
 function table(headers, rows, cls = '') {
-  return `<table class="${cls}"><thead><tr>${headers.map((h) => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return `<div class="table-scroll"><table class="${cls}"><thead><tr>${headers.map((h) => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones' }) {

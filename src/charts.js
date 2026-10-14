@@ -166,7 +166,7 @@ export function heatmapTable({ cells, xLabels, yLabels, cellText = (c) => String
   const rows = yLabels.length || Math.max(...cells.map((c) => c.y)) + 1;
   const cols = xLabels.length || Math.max(...cells.map((c) => c.x)) + 1;
   const grid = new Map(cells.map((c) => [`${c.x}-${c.y}`, c]));
-  let html = `<details class="table-fallback"><summary>Ver como tabla</summary><table>`;
+  let html = `<details class="table-fallback"><summary>Ver como tabla</summary><div class="table-scroll"><table>`;
   if (caption) html += `<caption>${esc(caption)}</caption>`;
   html += '<thead><tr><th></th>';
   for (let x = 0; x < cols; x++) html += `<th scope="col">${xLabels[x] != null ? esc(String(xLabels[x])) : x}</th>`;
@@ -179,7 +179,7 @@ export function heatmapTable({ cells, xLabels, yLabels, cellText = (c) => String
     }
     html += '</tr>';
   }
-  html += '</tbody></table></details>';
+  html += '</tbody></table></div></details>';
   return html;
 }
 
