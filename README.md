@@ -9,7 +9,7 @@ Scrobbleview es una web estática que analiza tu historial extendido de Spotify 
 - **100 % local**: arrastrás tus archivos JSON y el navegador los procesa. Cero servidores, cero telemetría, cero CDN. Funciona incluso sin conexión a internet.
 - **Sin build, sin dependencias**: JavaScript vanilla + SVG, ES modules. Un repo estático que se sirve tal cual.
 - **7 vistas**: dashboard con KPIs y heatmap día×hora, fichas de artista/canción/álbum, sesiones, descubrimiento mensual, comparación anual, calendario con días de inactividad y un "Wrapped" personal.
-- **Filtros cruzados** (rango, año, mes, franja horaria, día, skip/shuffle/offline) que re-agregan las estadísticas sin re-parsear los archivos. El filtrado por artista/canción/álbum existe en la lógica (`src/filters.js`); su UI está en camino.
+- **Filtros cruzados** (rango con presets y fechas custom, año, mes, franja horaria, día, artista, canción, álbum, skip/shuffle/offline con 3 estados) que re-agregan las estadísticas sin re-parsear los archivos. El filtro por entidad se activa desde las fichas y queda visible como chip.
 - **Accesible**: gráficos SVG con `aria-label`, tooltips no dependientes del hover, tablas de respaldo navegables por teclado y soporte de `prefers-reduced-motion`.
 - **Caché opcional** en IndexedDB con consentimiento explícito y botón para borrar.
 
@@ -53,7 +53,7 @@ No hay archivo de configuración. Las constantes del análisis viven en un solo 
 ## Tests
 
 ```sh
-node --test        # 77 tests: parse, aggregate, analyze, filtros, zonas horarias, escaping
+node --test        # 101 tests: parse (20), aggregate (24), analyze (6), filtros (11), zonas horarias (12), escaping (12), charts (4), vistas (11)
 ```
 
 - Sin dependencias: `package.json` solo define `type: module` y el script de tests.
