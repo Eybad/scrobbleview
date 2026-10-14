@@ -33,6 +33,7 @@ export function createTemporalAcc() {
     if (!y) {
       y = {
         plays: 0, ms: 0, skips: 0, shuffle: 0, newTracks: 0, newArtists: 0,
+        blocks: [0, 0, 0, 0], // franjas [madrugada, mañana, tarde, noche] del año
         artistsC: new Map(), tracksC: new Map(), albumsC: new Map(),
         artistsMs: new Map(), tracksMs: new Map(), albumsMs: new Map()
       };
@@ -57,6 +58,7 @@ export function createTemporalAcc() {
       const y = yearlyEntry(year);
       y.plays++;
       y.ms += ev.ms;
+      y.blocks[block]++;
       if (ev.isSkipped) y.skips++;
       if (ev.flags & 1) y.shuffle++;
       bump(y.artistsC, ev.ar, 1);

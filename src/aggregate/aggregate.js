@@ -87,9 +87,11 @@ export function aggregate(ds, opts = {}) {
 
 // ---------- post-proceso ----------
 
-function localMonthIndex(loc) {
+// Meses absolutos (y*12+m-1) para medir distancias: restar índices YYYYMM
+// (y*100+m) cruza mal el año (202401 − 202312 + 1 = 90 en vez de 2).
+function absoluteMonths(loc) {
   const c = civilFromDays(Math.floor(loc / 86400));
-  return c.y * 100 + c.m;
+  return c.y * 12 + (c.m - 1);
 }
 
 function longestStreak(days) {
@@ -284,7 +286,7 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
   const constancy = artistList
     .filter((a) => a.months.size >= MIN_MONTHS_FOR_CONSTANCY && a.firstTs != null && a.lastTs != null)
     .map((a) => {
-      const span = Math.max(1, localMonthIndex(a.lastTs) - localMonthIndex(a.firstTs) + 1);
+      const span = Math.max(1, absoluteMonths(a.lastTs) - absoluteMonths(a.firstTs) + 1);
       return { ...a, coverage: a.months.size / span };
     })
     .sort((a, b) => b.coverage - a.coverage || b.months.size - a.months.size || b.years.size - a.years.size || b.days.size - a.days.size || b.plays - a.plays)

@@ -16,9 +16,9 @@ export function albumKey(ar, al) {
 }
 
 export function createGroupsAcc(ds) {
-  const artists = new Map(); // ar -> {id, name, plays, ms, skips, days, months, years, firstTs, firstTrack, lastTs}
-  const tracks = new Map(); // tk -> {id: tr, name, artist, plays, ms, skips, days, years, firstTs, lastTs}
-  const albums = new Map(); // ak -> {id: ak, artist, name, plays, ms}
+  const artists = new Map(); // ar -> {id, name, plays, ms, skips, days, months, years, firstTs, firstTrack, lastTs, albums, clock}
+  const tracks = new Map(); // tk -> {id: tr, tk, ak, ar, name, artist, plays, ms, skips, days, years, firstTs, lastTs}
+  const albums = new Map(); // ak -> {id: ak, artist, name, plays, ms, firstTs, lastTs, days, tracks}
 
   return {
     onEvent(ev) {
@@ -32,6 +32,8 @@ export function createGroupsAcc(ds) {
             name: ds.dicts.artists.get(ev.ar),
             plays: 0, ms: 0, skips: 0,
             days: new Set(), months: new Set(), years: new Set(),
+            albums: new Set(), // ak de los álbumes del artista
+            clock: new Int32Array(168), // plays por dow*24+hour (reloj del artista)
             firstTs: ev.loc, firstTrack: '', lastTs: ev.loc
           };
           artists.set(ev.ar, a);
@@ -42,16 +44,20 @@ export function createGroupsAcc(ds) {
         a.days.add(ev.day);
         a.months.add(Math.floor(ev.ymd / 100));
         a.years.add(year);
+        a.clock[ev.dow * 24 + ev.hour]++;
+        if (ev.al > 0) a.albums.add(albumKey(ev.ar, ev.al));
         a.lastTs = ev.loc;
         if (a.firstTrack === '') a.firstTrack = ds.dicts.tracks.get(ev.tr);
       }
 
       const tk = trackKey(ev.tr, ev.ar);
+      const ak = ev.al > 0 ? albumKey(ev.ar, ev.al) : 0;
       let t = tracks.get(tk);
       if (!t) {
         t = {
           id: ev.tr,
           tk,
+          ak, // clave del álbum (0 si no hay); habilita el enlace canción→álbum
           ar: ev.ar,
           name: ds.dicts.tracks.get(ev.tr),
           artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
@@ -69,19 +75,24 @@ export function createGroupsAcc(ds) {
       t.lastTs = ev.loc;
 
       if (ev.al > 0) {
-        const ak = albumKey(ev.ar, ev.al);
         let al = albums.get(ak);
         if (!al) {
           al = {
             id: ak,
             artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
             name: ds.dicts.albums.get(ev.al),
-            plays: 0, ms: 0
+            plays: 0, ms: 0,
+            firstTs: ev.loc, lastTs: ev.loc,
+            days: new Set(), // días con escucha del álbum
+            tracks: new Set() // tk de las canciones del álbum
           };
           albums.set(ak, al);
         }
         al.plays++;
         al.ms += ev.ms;
+        al.lastTs = ev.loc;
+        al.days.add(ev.day);
+        al.tracks.add(tk);
       }
     },
 

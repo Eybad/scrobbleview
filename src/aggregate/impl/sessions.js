@@ -2,7 +2,7 @@
 //
 // Port del v2: start/end en local, duration en segundos, artists/tracks como
 // contadores. Nuevo: intraSession = repeticiones de canciones dentro de una
-// misma sesión (repeatedPlays = plays extra de tracks repetidos; 
+// misma sesión (repeatedPlays = plays extra de tracks repetidos;
 // sessionsWithRepeats = sesiones con al menos una repetición).
 
 import { civilFromDays } from './derive.js';
@@ -67,7 +67,7 @@ export function createSessionsAcc() {
         const c = civilFromDays(d);
         const month = c.y * 100 + c.m;
         const wd = ((d + 3) % 7 + 7) % 7; // lunes=0 (consistente con derive.js)
-        const hr = Math.floor(s.start / 3600) % 24;
+        const hr = ((Math.floor(s.start / 3600) % 24) + 24) % 24; // doble módulo (start pre-1970)
         byMonth.set(month, (byMonth.get(month) || 0) + 1);
         byWeekday.set(wd, (byWeekday.get(wd) || 0) + 1);
         byBlock.set(Math.floor(hr / 6), (byBlock.get(Math.floor(hr / 6)) || 0) + 1);

@@ -47,7 +47,7 @@ export function derive(ds, tz) {
     const l = local[i];
     t[k] = abs;
     loc[k] = l;
-    hour[k] = Math.floor(l / 3600) % 24;
+    hour[k] = ((Math.floor(l / 3600) % 24) + 24) % 24; // doble módulo: el local puede ser < 0 (pre-1970) y el % simple da negativo → 254 en Uint8Array
     const d = Math.floor(l / 86400);
     dow[k] = ((d + 3) % 7 + 7) % 7; // lunes=0 (1970-01-01, jueves → 3)
     day[k] = d;
