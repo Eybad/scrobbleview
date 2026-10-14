@@ -493,6 +493,24 @@ td a:hover {
   display: block;
 }
 
+/* Scroll por componente para grillas 2D (heatmaps, reloj, calendario):
+   actúa la excepción de Reflow 1.4.10 — el scroll vive en el componente,
+   nunca en la página. El piso preserva celdas legibles en 360px. */
+.chart-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-gutter: stable;
+}
+
+.chart-scroll--heat svg,
+.chart-scroll--clock svg {
+  min-width: 480px;
+}
+
+.chart-scroll--cal svg {
+  min-width: 620px;
+}
+
 /* Números tabulares en tablas (los KPIs lo tienen en .kpi dd). */
 .card table {
   font-variant-numeric: tabular-nums;

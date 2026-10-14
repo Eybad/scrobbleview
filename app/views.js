@@ -229,14 +229,12 @@ export function dashboard(model) {
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate }
     ])}
+    ${card('Rankings', rankings)}
     <div class="grid-2">
-      ${card('Cuándo escuchás (día × hora)', heat + heatTable)}
       ${card('Evolución mensual', evolution)}
-    </div>
-    <div class="grid-2">
       ${card('Duración de reproducciones', dist)}
-      ${card('Rankings', rankings)}
     </div>
+    ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat">${heat}</div>` + heatTable)}
     ${card('Obsesión (plays por día activo)', table(['Canción', 'Intensidad', 'Reproducciones'], model.tables.obsession.slice(0, 10).map((o) => [
       entityLink('track', o.tk, o.name),
       o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
@@ -329,11 +327,11 @@ export function artistView(model, ar) {
       ${card('Tus canciones de este artista', rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: tr.plays, id: tr.tk })), { link: (r) => `#/track/${r.id}` }))}
     </div>
     <div class="grid-2">
-      ${card('Tu semana con este artista', listeningClock({
+      ${card('Tu semana con este artista', `<div class="chart-scroll chart-scroll--clock">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxPlays),
         cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      }))}
+      })}</div>`)}
       ${card('Álbumes de este artista', albumRows.length
         ? rankTable(albumRows, { link: (r) => `#/album/${r.id}` })
         : '<p class="empty">Sin álbumes registrados.</p>')}
@@ -558,12 +556,13 @@ export function calendarView(model, year) {
       <h1>Calendario ${esc(String(year))}</h1>
       <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin escuchar</p>
     </header>
-    ${card('Actividad diaria', calendarGrid({
+    ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal">${calendarGrid({
       days,
       year,
       colorScale: makeScale(maxMs),
       cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`
-    }))}`;
+    })}</div>`)}
+`;
 }
 
 export function calendarIndexView(model) {
@@ -589,11 +588,11 @@ export function calendarIndexView(model) {
       <h1>Calendario</h1>
       <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin escuchar en total</p>
     </header>
-    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, yearGrid(last), '', true) : ''}
+    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal">${yearGrid(last)}</div>`, '', true) : ''}
     ${prev.map((y) => `
       <details class="card calendar-year">
         <summary><a href="#/calendar/${esc(String(y))}">${esc(String(y))}</a></summary>
-        ${yearGrid(y)}
+        <div class="chart-scroll chart-scroll--cal">${yearGrid(y)}</div>
       </details>`).join('')}`;
 }
 
@@ -640,11 +639,11 @@ export function wrappedView(model, id, ctx) {
     ])}
     <div class="grid-2">
       ${topArtist ? card(`Sprint de ${topArtist.name}`, sprintChart) : ''}
-      ${card('Tu semana típica', listeningClock({
+      ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxPlays),
         cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      }))}
+      })}</div>`)}
     </div>
     ${card('Recibo', `<ul class="receipt">
       <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>

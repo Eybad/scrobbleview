@@ -126,10 +126,13 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   const labels = points.map((p, i) => {
     // Diezmado del eje X: con muchas etiquetas se superponen. Se muestra
     // 1 de cada `step` más la última (los extremos siempre visibles).
+    // Ancla variable en los extremos: con text-anchor middle se cortaban
+    // contra el borde del viewBox ("v 2021" / "sep 20" en móvil).
     if (p.label == null) return '';
     const step = Math.max(1, Math.ceil(n / 8));
     if (i % step !== 0 && i !== n - 1) return '';
-    return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="10">${esc(String(p.label))}</text>`;
+    const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
+    return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="${anchor}" class="chart-label" font-size="10">${esc(String(p.label))}</text>`;
   }).join('');
   const aria = `Gráfico de líneas: ${points.map((p, i) => `${p.label ?? i}: ${format(p.y)}`).join(', ')}`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">
@@ -147,18 +150,32 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
   const labelH = xLabels.length ? 16 : 0;
   const plotW = width - labelW;
   const plotH = height - labelH;
-  const cols = xLabels.length || Math.max(...cells.map((c) => c.x)) + 1;
-  const rows = yLabels.length || Math.max(...cells.map((c) => c.y)) + 1;
+  // Columnas = máximo entre labels y datos: con xLabels diezmados (8) sobre
+  // 24 horas, usar xLabels.length achicaba la grilla y desalineaba los ticks.
+  const cols = Math.max(xLabels.length, Math.max(...cells.map((c) => c.x)) + 1);
+  const rows = Math.max(yLabels.length, Math.max(...cells.map((c) => c.y)) + 1);
   const cw = Math.min(cellSize, (plotW - gap * (cols - 1)) / cols);
   const ch = Math.min(cellSize, (plotH - gap * (rows - 1)) / rows);
+  // viewBox ajustado al contenido (sin aire muerto a derecha/abajo).
+  const gridW = cols * (cw + gap) - gap;
+  const gridH = rows * (ch + gap) - gap;
+  const vbW = Math.ceil(labelW + gridW + 8);
+  const vbH = Math.ceil(gridH + labelH + 4);
   const rects = cells.map((c) => {
     const x = labelW + c.x * (cw + gap);
     const y = c.y * (ch + gap);
     return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="${colorScale(c.value)}" rx="1.5"><title>${esc(cellTitle(c))}</title></rect>`;
   }).join('');
-  const xl = xLabels.map((l, i) => `<text x="${(labelW + i * (cw + gap) + cw / 2).toFixed(1)}" y="${height - 3}" text-anchor="middle" class="chart-label" font-size="8">${esc(String(l))}</text>`).join('');
-  const yl = yLabels.map((l, i) => `<text x="${labelW - 4}" y="${(i * (ch + gap) + ch / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="8">${esc(String(l))}</text>`).join('');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(ariaLabel)}" class="chart">${rects}${xl}${yl}</svg>`;
+  // Ticks posicionados por VALOR (no por índice) + ancla variable en los
+  // extremos para que no se corten contra el borde del viewBox.
+  const xl = xLabels.map((l, i) => {
+    const v = Number(l);
+    const h = l !== '' && Number.isFinite(v) ? v : i;
+    const anchor = i === 0 ? 'start' : (i === xLabels.length - 1 ? 'end' : 'middle');
+    return `<text x="${(labelW + h * (cw + gap) + cw / 2).toFixed(1)}" y="${gridH + 13}" text-anchor="${anchor}" class="chart-label" font-size="9">${esc(String(l))}</text>`;
+  }).join('');
+  const yl = yLabels.map((l, i) => `<text x="${labelW - 4}" y="${(i * (ch + gap) + ch / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="9">${esc(String(l))}</text>`).join('');
+  return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(ariaLabel)}" class="chart">${rects}${xl}${yl}</svg>`;
 }
 
 // Tabla fallback cell-navegable para heatmaps (SC 2.5.8 / no solo hover).
