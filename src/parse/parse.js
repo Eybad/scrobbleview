@@ -60,7 +60,14 @@ export async function parse(src, opts = {}) {
       throw new SchemaError('Demasiados reason_* distintos (máx 255)');
     }
 
-    const m = ev.ms ?? 0;
+    // ms_played negativo, NaN o imposible (> 24 h): un valor así se storeaba
+    // tal cual en Uint32Array (-1 → 4294967295, ~49,7 días en una pista).
+    // Se acota a 0 con warning BAD_MS y el evento se conserva.
+    let m = ev.ms ?? 0;
+    if (ev.ms != null && (!(ev.ms >= 0) || ev.ms > 86400000)) {
+      warnings.push({ code: 'BAD_MS', index: count });
+      m = 0;
+    }
     let flags = 0;
     if (ev.shuffle) flags |= 1;
     if (ev.skipped) flags |= 2;
@@ -100,6 +107,13 @@ export async function parse(src, opts = {}) {
       }
       if (carry && carry.length > 0) scanner.push(carry);
       scanner.end();
+    } catch (err) {
+      // Con varias fuentes, el error debe decir QUÉ archivo falló (código y
+      // byteOffset intactos: solo se antepone el label al mensaje).
+      if (err && (err.code === 'E_PARSE' || err.code === 'E_SCHEMA') && s.label) {
+        err.message = `[${s.label}] ${err.message}`;
+      }
+      throw err;
     } finally {
       await s.close();
     }

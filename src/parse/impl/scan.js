@@ -26,7 +26,10 @@ const S = {
   SKIP_STRING: 10,
   SKIP_STRING_ESCAPE: 11,
   SKIP_VALUE: 12,
-  END: 13
+  SKIP_NESTED: 13,
+  SKIP_NESTED_STRING: 14,
+  SKIP_NESTED_STRING_ESCAPE: 15,
+  END: 16
 };
 
 const SP = 0x20, TAB = 0x09, LF = 0x0a, CR = 0x0d;
@@ -91,6 +94,7 @@ export function createScanner({ onEvent, onError }) {
   let events = 0;
   let expectKey = false; // tras "," en objeto: la próxima key es obligatoria (JSON estricto)
   let expectItem = false; // tras "," en array: el próximo item es obligatorio
+  let skipDepth = 0; // profundidad del subárbol salteado (claves fuera de ALLOWLIST)
 
   function fail(code, msg, i) {
     const err = code === 'E_PARSE'
@@ -227,6 +231,14 @@ export function createScanner({ onEvent, onError }) {
             if (currentKey) { beginRange(i); state = S.LITERAL; }
             else state = S.SKIP_VALUE;
             i++;
+          } else if (b === LBRACE || b === LBRACKET) {
+            // Objeto/array en clave fuera de ALLOWLIST: se salta el subárbol
+            // completo (compatibilidad hacia adelante con campos nuevos de la
+            // export). Con clave conocida sigue siendo error (fail-fast).
+            if (currentKey) fail('E_PARSE', 'Se esperaba valor', i);
+            skipDepth = 1;
+            state = S.SKIP_NESTED;
+            i++;
           } else if (isWS(b)) i++;
           else fail('E_PARSE', 'Se esperaba valor', i);
           break;
@@ -291,6 +303,32 @@ export function createScanner({ onEvent, onError }) {
           else if (b === RBRACE) { closeObject(i); i++; }
           else if (isWS(b)) i++;
           else i++;
+          break;
+
+        case S.SKIP_NESTED:
+          // Salto de un subárbol completo, char por char (sin acumular rango:
+          // el estado + skipDepth viven en el closure y sobreviven a los
+          // cortes entre chunks). Los strings se respetan para que una llave
+          // o escape interno no altere la profundidad.
+          if (b === QUOTE) { state = S.SKIP_NESTED_STRING; i++; }
+          else if (b === LBRACE || b === LBRACKET) { skipDepth++; i++; }
+          else if (b === RBRACE || b === RBRACKET) {
+            skipDepth--;
+            if (skipDepth === 0) { currentKey = null; state = S.OBJECT_COMMA; }
+            i++;
+          }
+          else i++;
+          break;
+
+        case S.SKIP_NESTED_STRING:
+          if (b === QUOTE) { state = S.SKIP_NESTED; i++; }
+          else if (b === BACKSLASH) { state = S.SKIP_NESTED_STRING_ESCAPE; i++; }
+          else i++;
+          break;
+
+        case S.SKIP_NESTED_STRING_ESCAPE:
+          state = S.SKIP_NESTED_STRING;
+          i++;
           break;
 
         case S.END:
