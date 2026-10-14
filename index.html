@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Scrobbleview: tus estadísticas de Spotify, en tu dispositivo. Procesamiento 100% local, tus datos nunca se suben.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Scrobbleview — tus estadísticas de Spotify, en tu dispositivo</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="app/main.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <p class="brand">Scrobbleview</p>
+      <p class="tagline">Tus estadísticas de Spotify, en tu dispositivo</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Vista de inicio: carga de archivos -->
+    <section id="view-home" class="view" aria-labelledby="home-title">
+      <h1 id="home-title" class="visually-hidden">Cargá tus datos de Spotify</h1>
+
+      <aside class="privacy-note" role="note">
+        <strong>Privacidad:</strong> tus archivos se procesan 100% en este dispositivo.
+        Nunca se suben a ningún servidor. Podés desconectarte de internet y sigue funcionando.
+      </aside>
+
+      <div id="drop-zone" class="drop-zone" tabindex="0" role="button"
+           aria-label="Cargar archivos de historial de Spotify. Arrastrá los archivos o presioná Enter para elegirlos.">
+        <p class="drop-zone-title">Arrastrá tus archivos acá</p>
+        <p class="drop-zone-hint">o presioná para elegirlos</p>
+        <p class="drop-zone-files">Archivos <code>Streaming_History_Audio_*.json</code> (podés seleccionar varios)</p>
+        <input type="file" id="file-input" accept=".json,application/json" multiple hidden>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="btn-demo" class="btn btn-secondary">Probar con datos de ejemplo</button>
+        <button type="button" id="btn-cached" class="btn btn-secondary" hidden>Cargar datos guardados</button>
+        <button type="button" id="btn-cached-clear" class="btn btn-link" hidden>Borrar datos guardados</button>
+      </div>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- Vista de la aplicación (se monta tras cargar datos) -->
+    <section id="view-app" class="view" aria-labelledby="app-title" hidden>
+      <h1 id="app-title" class="visually-hidden">Tus estadísticas</h1>
+      <div id="app-root"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Tus datos se procesan localmente en tu dispositivo. Nunca se suben a ningún servidor.</p>
+    </div>
+  </footer>
+</body>
+</html>

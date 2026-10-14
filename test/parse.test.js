@@ -1,0 +1,213 @@
+// parse.test.js — red de seguridad del scanner y del pipeline de parseo
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parse } from '../src/parse/parse.js';
+import { memoryBytes } from '../src/parse/adapters/memory-bytes.js';
+import { syntheticJSON } from '../src/synthetic.js';
+
+function assertSameDataset(a, b, label) {
+  assert.deepEqual(a.t, b.t, `${label}: t`);
+  assert.deepEqual(a.m, b.m, `${label}: m`);
+  assert.deepEqual(a.tr, b.tr, `${label}: tr`);
+  assert.deepEqual(a.ar, b.ar, `${label}: ar`);
+  assert.deepEqual(a.al, b.al, `${label}: al`);
+  assert.deepEqual(a.rs, b.rs, `${label}: rs`);
+  assert.deepEqual(a.re, b.re, `${label}: re`);
+  assert.deepEqual(a.flags, b.flags, `${label}: flags`);
+  assert.equal(a.meta.tsMin, b.meta.tsMin, `${label}: tsMin`);
+  for (const k of ['tracks', 'artists', 'albums', 'reasons']) {
+    assert.equal(a.dicts[k].size, b.dicts[k].size, `${label}: dict ${k} size`);
+    for (let i = 0; i < a.dicts[k].size; i++) {
+      assert.equal(a.dicts[k].get(i), b.dicts[k].get(i), `${label}: dict ${k}[${i}]`);
+    }
+  }
+  assert.deepEqual(a.meta.warnings, b.meta.warnings, `${label}: warnings`);
+}
+
+test('split-invariance: mismo dataset para todo tamaño de chunk', async () => {
+  const json = syntheticJSON(500, 7);
+  const ref = await parse(memoryBytes('ref', json), { chunkBytes: 262144 });
+  for (const chunkBytes of [1, 2, 7, 64, 4096, 262144]) {
+    const ds = await parse(memoryBytes(`c${chunkBytes}`, json), { chunkBytes });
+    assertSameDataset(ds, ref, `chunk ${chunkBytes}`);
+  }
+});
+
+test('allowlist: ip_addr/conn_country/incognito/platform nunca se materializan', async () => {
+  const json = JSON.stringify([{
+    ts: '2021-01-01T00:00:00Z',
+    ms_played: 1000,
+    master_metadata_track_name: 'T',
+    master_metadata_album_artist_name: 'A',
+    master_metadata_album_album_name: 'Al',
+    spotify_track_uri: 'spotify:track:x',
+    ip_addr: '1.2.3.4',
+    conn_country: 'AR',
+    offline_timestamp: 123,
+    incognito_mode: true,
+    platform: 'android',
+    user_agent_decrypted: 'ua'
+  }]);
+  const ds = await parse(memoryBytes('allow', json));
+  assert.equal(ds.meta.count, 1);
+  const allStrings = [
+    ...ds.dicts.tracks.strings,
+    ...ds.dicts.artists.strings,
+    ...ds.dicts.albums.strings,
+    ...ds.dicts.reasons.strings
+  ].join('\n');
+  assert.ok(!allStrings.includes('1.2.3.4'), 'ip_addr materializado');
+  assert.ok(!allStrings.includes('conn_country'), 'conn_country materializado');
+  assert.ok(!allStrings.includes('incognito'), 'incognito_mode materializado');
+  assert.ok(!allStrings.includes('android'), 'platform materializado');
+  assert.ok(!allStrings.includes('user_agent'), 'user_agent materializado');
+});
+
+test('episodios descartados con warning', async () => {
+  const json = JSON.stringify([
+    { ts: '2021-01-01T00:00:00Z', ms_played: 1000, master_metadata_track_name: 'T', spotify_track_uri: 'spotify:track:x' },
+    { ts: '2021-01-01T01:00:00Z', ms_played: 5000, spotify_track_uri: 'spotify:episode:y' }
+  ]);
+  const ds = await parse(memoryBytes('ep', json));
+  assert.equal(ds.meta.count, 1);
+  assert.ok(ds.meta.warnings.some((w) => w.code === 'EPISODE'));
+});
+
+test('evento sin ts → descartado con warning', async () => {
+  const json = JSON.stringify([
+    { ms_played: 1000, master_metadata_track_name: 'T' },
+    { ts: '2021-01-01T00:00:00Z', ms_played: 2000, master_metadata_track_name: 'T2' }
+  ]);
+  const ds = await parse(memoryBytes('nots', json));
+  assert.equal(ds.meta.count, 1);
+  assert.ok(ds.meta.warnings.some((w) => w.code === 'NO_TS'));
+});
+
+test('JSON malformado → ParseError con byteOffset', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": 100,}]';
+  await assert.rejects(parse(memoryBytes('bad', json)), (err) => {
+    assert.equal(err.code, 'E_PARSE');
+    assert.ok(typeof err.byteOffset === 'number' && err.byteOffset >= 0);
+    return true;
+  });
+});
+
+test('tipo incorrecto → SchemaError', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": "mucho"}]';
+  await assert.rejects(parse(memoryBytes('schema', json)), (err) => {
+    assert.equal(err.code, 'E_SCHEMA');
+    return true;
+  });
+});
+
+test('campos opcionales ausentes → default (id 0 = vacío) + warning', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": 1000, "master_metadata_track_name": "T"}]';
+  const ds = await parse(memoryBytes('opt', json));
+  assert.equal(ds.meta.count, 1);
+  assert.equal(ds.ar[0], 0);
+  assert.equal(ds.al[0], 0);
+  assert.equal(ds.rs[0], 0);
+  assert.equal(ds.re[0], 0);
+});
+
+test('ms_played ausente → m=0 + flag ms_unknown', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "master_metadata_track_name": "T"}]';
+  const ds = await parse(memoryBytes('noms', json));
+  assert.equal(ds.m[0], 0);
+  assert.equal(ds.flags[0] & 8, 8);
+});
+
+test('ts parseo: ISO con Z, offset y fracción', async () => {
+  const { parseISOToEpoch } = await import('../src/parse/impl/ts.js');
+  const enc = new TextEncoder();
+  assert.equal(parseISOToEpoch(enc.encode('1970-01-01T00:00:00Z')), 0);
+  assert.equal(parseISOToEpoch(enc.encode('1970-01-01T00:00:00.000Z')), 0);
+  assert.equal(parseISOToEpoch(enc.encode('1970-01-01T01:00:00+01:00')), 0);
+  assert.equal(parseISOToEpoch(enc.encode('1970-01-01T23:00:00-01:00')), 86400); // 23:00 UTC-1 = 00:00 UTC del día siguiente
+  assert.equal(parseISOToEpoch(enc.encode('2020-01-02T03:04:05Z')), 1577934245);
+  assert.equal(parseISOToEpoch(enc.encode('no-es-fecha')), null);
+});
+
+// La columna t es Int32Array (columns.js): un epoch > 0x7FFFFFFF desborda en
+// silencio al storear y derive.js calcula una fecha equivocada sin avisar.
+// El límite es el tope de Int32, NO el año 2100: el epoch de 2100 ya lo excede.
+test('ts parseo: epoch fuera del rango de Int32 → null (fail-fast, no wrap)', async () => {
+  const { parseISOToEpoch } = await import('../src/parse/impl/ts.js');
+  const enc = new TextEncoder();
+  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:07Z')), 2147483647); // tope exacto, se acepta
+  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:08Z')), null); // 1 s más: desborda
+  assert.equal(parseISOToEpoch(enc.encode('2100-01-01T00:00:00Z')), null); // 4.1e9 > 0x7FFFFFFF
+  assert.equal(parseISOToEpoch(enc.encode('9999-12-31T23:59:59Z')), null);
+  // El offset puede empujar el epoch hacia arriba: 03:14:07 en UTC-14 rebasa el tope.
+  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:07-14:00')), null);
+  // Y hacia abajo, aceptando el mismo instante UTC que la aserción de arriba
+  // (local = UTC − 14 h, o sea 2038-01-18T13:14:07 local = 2038-01-19T03:14:07Z).
+  assert.equal(parseISOToEpoch(enc.encode('2038-01-18T13:14:07-14:00')), 2147483647);
+});
+
+test('interning: duplicados → mismo id; escapes → mismo id', async () => {
+  const { Interner } = await import('../src/parse/impl/intern.js');
+  const enc = new TextEncoder();
+  const interner = new Interner();
+  const a = interner.add(enc.encode('Canción'));
+  const b = interner.add(enc.encode('Canción'));
+  assert.equal(a, b);
+  const c = interner.add(enc.encode('Canci\\u00f3n'));
+  assert.equal(c, a);
+  assert.equal(interner.get(a), 'Canción');
+  assert.equal(interner.get(0), '');
+});
+
+// fromParts rehidrata desde la caché IndexedDB. count ya se acota contra la
+// longitud de los arrays, pero los RANGOS de bytes no: keys.subarray(start, end)
+// recorta en silencio y una caché corrupta entraría como entidad truncada o vacía
+// en vez de caer en el miss (storage.js:146 devuelve null ante excepción).
+test('interning: caché corrupta → RangeError, no entidad truncada', async () => {
+  const { Interner } = await import('../src/parse/impl/intern.js');
+  const keys = new Uint8Array([65, 66, 67]);
+  // offsets[1] + lengths[1] = 99 > keys.length = 3
+  const corrupt = { keys, offsets: new Uint32Array([0, 2]), lengths: new Uint32Array([1, 97]), count: 2 };
+  assert.throws(() => Interner.fromParts(corrupt), RangeError);
+  // length que se sale por el mismo motivo, con start válido
+  assert.throws(
+    () => Interner.fromParts({ keys, offsets: new Uint32Array([0, 0]), lengths: new Uint32Array([1, 4]), count: 2 }),
+    RangeError,
+  );
+  // Sanity: el caso bien formado NO lanza y rehidrata las claves tal cual.
+  // (fromParts no reserva el id 0 para la cadena vacía: ese caso está en
+  // insert(); aquí las claves vienen tal cual de la caché serializada.)
+  const ok = Interner.fromParts({ keys, offsets: new Uint32Array([0, 1]), lengths: new Uint32Array([1, 2]), count: 2 });
+  assert.equal(ok.size, 2);
+  assert.equal(ok.get(0), 'A');
+  assert.equal(ok.get(1), 'BC');
+});
+
+test('archivo vacío → EmptyFileError', async () => {
+  await assert.rejects(parse(memoryBytes('empty', '[]')), (err) => err.code === 'E_EMPTY');
+});
+
+test('archivo que no es array → ParseError', async () => {
+  await assert.rejects(parse(memoryBytes('obj', '{"a":1}')), (err) => err.code === 'E_PARSE');
+});
+
+test('node-fs-bytes: lee un archivo real', async () => {
+  const { nodeFsBytes } = await import('../src/parse/adapters/node-fs-bytes.js');
+  const { fileURLToPath } = await import('node:url');
+  const path = fileURLToPath(new URL('./fixtures/sample.json', import.meta.url));
+  const ds = await parse(nodeFsBytes(path));
+  assert.equal(ds.meta.count, 2);
+  assert.equal(ds.meta.sources[0], path);
+});
+
+test('progreso: onProgress reporta avance', async () => {
+  const json = syntheticJSON(100, 3);
+  const seen = [];
+  await parse(memoryBytes('prog', json), {
+    chunkBytes: 1024,
+    onProgress: (frac, label) => seen.push([frac, label])
+  });
+  assert.ok(seen.length > 0);
+  assert.equal(seen[seen.length - 1][0], 1);
+  assert.equal(seen[seen.length - 1][1], 'prog');
+});

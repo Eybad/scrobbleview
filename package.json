@@ -1,0 +1,13 @@
+{
+  "name": "scrobbleview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tus estadísticas de Spotify, en tu dispositivo. Procesamiento 100% local en el navegador.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.13"
+  }
+}

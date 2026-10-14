@@ -1,0 +1,28 @@
+[
+  {
+    "ts": "2020-01-02T03:04:05Z",
+    "ms_played": 180000,
+    "master_metadata_track_name": "Canción de prueba",
+    "master_metadata_album_artist_name": "Artista de prueba",
+    "master_metadata_album_album_name": "Álbum de prueba",
+    "spotify_track_uri": "spotify:track:abcdef123456",
+    "reason_start": "apptrack",
+    "reason_end": "trackdone",
+    "shuffle": false,
+    "skipped": false,
+    "offline": false
+  },
+  {
+    "ts": "2020-01-02T03:07:05Z",
+    "ms_played": 45000,
+    "master_metadata_track_name": "Otra canción",
+    "master_metadata_album_artist_name": "Artista de prueba",
+    "master_metadata_album_album_name": "Otro álbum",
+    "spotify_track_uri": "spotify:track:fedcba654321",
+    "reason_start": "clickrow",
+    "reason_end": "endplay",
+    "shuffle": true,
+    "skipped": true,
+    "offline": true
+  }
+]
