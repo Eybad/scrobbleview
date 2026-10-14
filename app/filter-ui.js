@@ -124,9 +124,9 @@ export function filterBarHTML(model, state, counts = null) {
 
   return `<div class="filter-bar" id="filter-bar" role="group" aria-label="Filtros">
     <div class="filter-row">${presets}</div>
-    <div class="filter-row">
-      <label>Desde <input type="date" data-filter="from" value="${fromISO}"></label>
-      <label>Hasta <input type="date" data-filter="to" value="${toISO}"></label>
+    <div class="filter-row filter-dates">
+      <label class="field">Desde <input type="date" data-filter="from" value="${fromISO}"></label>
+      <label class="field">Hasta <input type="date" data-filter="to" value="${toISO}"></label>
     </div>
     <div class="filter-row" id="filter-chips">${chipsHTML(model, state)}</div>
     <details class="filter-advanced">

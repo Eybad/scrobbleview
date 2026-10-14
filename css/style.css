@@ -599,6 +599,12 @@ td a:hover {
   align-items: center;
 }
 
+/* Los flex items no bajan de su min-content por defecto: esto mata el
+   desborde de inputs/selects en 360px (research: MDN flex/min-width). */
+.filter-row > * {
+  min-width: 0;
+}
+
 .filter-bar button[data-preset],
 .filter-bar button[data-action] {
   font: inherit;
@@ -609,6 +615,58 @@ td a:hover {
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Fechas: 1 columna en móvil (2 filas, aceptado), 2 columnas desde 700px. */
+.filter-dates {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+}
+
+.filter-dates .field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.filter-bar input[type="date"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+}
+
+.filter-bar select,
+.rank-opts select,
+.rank-opts input[type="search"] {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+}
+
+/* Buscador flexible + Top N compacto: lado a lado sin solaparse. */
+.rank-opts input[type="search"] {
+  flex: 1 1 0%;
+}
+
+.rank-opts select {
+  flex: 0 1 auto;
+  max-width: 45%;
+}
+
+@media (min-width: 700px) {
+  .filter-dates {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .filter-bar button[data-preset].active {
@@ -633,17 +691,25 @@ td a:hover {
   color: var(--text);
 }
 
+/* Hit-area táctil en el label (el padding en el input nativo es errático):
+   el label mide 44px de alto, el checkbox conserva su tamaño nativo. */
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   font-size: var(--fs-sm);
   color: var(--text-muted);
   cursor: pointer;
+  min-height: 44px;
+  padding: var(--sp-1) var(--sp-2);
 }
 
-.chip input {
+.chip input[type="checkbox"] {
   accent-color: var(--accent);
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin: 0;
 }
 
 .chip-active {
@@ -655,6 +721,9 @@ td a:hover {
   font-size: var(--fs-sm);
   padding: var(--sp-1) var(--sp-3);
   cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .filter-advanced {
@@ -665,6 +734,9 @@ td a:hover {
   cursor: pointer;
   color: var(--text-muted);
   font-size: var(--fs-sm);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Controles de rankings */

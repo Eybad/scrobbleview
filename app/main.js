@@ -199,6 +199,14 @@ function updateFilterDynamics() {
 }
 
 function wireFilters() {
+  // Avanzados: cerrados en móvil, abiertos en desktop (progresivo, sin
+  // framework). Se respeta el toggle manual dentro de cada montaje.
+  const adv = appRoot.querySelector('.filter-advanced');
+  if (adv) {
+    if (!adv.dataset.touched && window.matchMedia('(min-width: 700px)').matches) adv.open = true;
+    adv.addEventListener('toggle', () => { adv.dataset.touched = '1'; }, { once: true });
+  }
+
   // Presets de rango.
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', () => {
