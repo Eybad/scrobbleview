@@ -272,3 +272,90 @@ test('tables: tops por plays y ms, skip rate con mínimo, constancia, longevidad
   assert.equal(m.tables.constancy.length, 0); // 1 mes activo < 6
   assert.equal(m.tables.longevity[0].name, 'X');
 });
+
+// Un local anterior a 1970 (p. ej. 1970-01-01T00:00:00Z en UTC-4 → local
+// negativo) daba hora negativa; al storear en Uint8Array se convertía en
+// 252 y temporal.js lanzaba TypeError en hour[252]. Con doble módulo da 20.
+test('hora local pre-1970 (offset negativo) → hora 20, sin TypeError', () => {
+  const ds = buildDataset([{ t: 0, m: 1000, track: 'A', artist: 'X' }]);
+  const m = aggregate(ds, { tz: fixedTz('w4', -240) });
+  assert.equal(m.cols.hour[0], 20);
+  assert.equal(m.hour[20].plays, 1);
+  assert.equal(m.sessionsStats.startHour.get(20), 1);
+  assert.equal(m.sessionsStats.byBlock.get(3), 1); // 20h → franja Noche
+});
+
+// La constancia es meses_activos / meses_del_intervalo. El intervalo se
+// calculaba restando índices YYYYMM (202403 − 202310 + 1 = 94 en vez de 6),
+// subestimando el coverage de toda carrera multianual. Con meses absolutos
+// (y*12+m-1), 6 meses activos en oct-2023→mar-2024 dan coverage 1.
+test('constancia interanual: oct-2023→mar-2024 activo da coverage 1', () => {
+  const ds = buildDataset([
+    { t: 1697371200, m: 1000, track: 'A', artist: 'X' }, // oct-2023
+    { t: 1700049600, m: 1000, track: 'B', artist: 'X' }, // nov-2023
+    { t: 1702641600, m: 1000, track: 'C', artist: 'X' }, // dic-2023
+    { t: 1705320000, m: 1000, track: 'D', artist: 'X' }, // ene-2024
+    { t: 1707998400, m: 1000, track: 'E', artist: 'X' }, // feb-2024
+    { t: 1710504000, m: 1000, track: 'F', artist: 'X' } // mar-2024
+  ]);
+  const m = aggregate(ds, { tz: UTC });
+  assert.equal(m.tables.constancy.length, 1);
+  assert.equal(m.tables.constancy[0].name, 'X');
+  assert.equal(m.tables.constancy[0].coverage, 1);
+});
+
+// Los álbumes guardan firstTs/lastTs/days/tracks (la ficha del álbum los
+// necesita); cada track guarda su ak (enlace canción→álbum, 0 si no hay
+// álbum); cada artista guarda sus ak (álbumes del artista) y su reloj
+// día×hora (listeningClock por artista, índice dow*24+hour como dayHour).
+test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clock', () => {
+  const ds = buildDataset([
+    { t: D0, m: 1000, track: 'A1', artist: 'X', album: 'L' },
+    { t: D0 + 86400, m: 1000, track: 'A2', artist: 'X', album: 'L' },
+    { t: D0 + 2 * 86400, m: 1000, track: 'B1', artist: 'X', album: 'M' },
+    { t: D0 + 3 * 86400, m: 1000, track: 'A1', artist: 'Y', album: 'L' },
+    { t: D0 + 4 * 86400, m: 1000, track: 'S', artist: 'X' } // sin álbum
+  ]);
+  const m = aggregate(ds, { tz: UTC });
+  const album = (artist, name) => [...m.albums.byId.values()].find((a) => a.artist === artist && a.name === name);
+  const track = (artist, name) => [...m.tracks.byId.values()].find((t) => t.artist === artist && t.name === name);
+  const artist = (name) => [...m.artists.byId.values()].find((a) => a.name === name);
+
+  const xl = album('X', 'L');
+  assert.equal(xl.plays, 2);
+  assert.equal(xl.tracks.size, 2);
+  assert.equal(xl.days.size, 2);
+  assert.equal(xl.firstTs, D0);
+  assert.equal(xl.lastTs, D0 + 86400);
+  assert.equal(album('X', 'M').tracks.size, 1);
+  assert.notEqual(album('Y', 'L').id, xl.id); // mismo nombre, otro artista → otro ak
+
+  assert.equal(track('X', 'A1').ak, xl.id);
+  assert.equal(track('X', 'S').ak, 0); // sin álbum
+
+  const x = artist('X');
+  assert.equal(x.albums.size, 2); // L y M
+  assert.ok(x.albums.has(xl.id));
+  // D0 = lunes 2024-01-01 00:00Z → idx 0, 24, 48 (mar/mié 00:00), resto 0.
+  assert.equal(x.clock[0], 1);
+  assert.equal(x.clock[24], 1);
+  assert.equal(x.clock[48], 1);
+  let sum = 0;
+  for (let i = 0; i < 168; i++) sum += x.clock[i];
+  assert.equal(sum, x.plays);
+});
+
+// Cada entrada de yearly desglosa sus 4 franjas horarias: el stackedBar anual
+// debe alimentarse del año, no del acumulado global (que supera el 100% del
+// total del año cuando el historial abarca más de uno).
+test('yearly desglosa franjas horarias por año (blocks)', () => {
+  const ds = buildDataset([
+    { t: 1685584800, m: 1000, track: 'A', artist: 'X' }, // 2023, 02:00 → madrugada
+    { t: 1685584900, m: 1000, track: 'B', artist: 'Y' }, // 2023, 02:00 → madrugada
+    { t: 1717250400, m: 1000, track: 'C', artist: 'Z' } // 2024, 14:00 → tarde
+  ]);
+  const m = aggregate(ds, { tz: UTC });
+  assert.deepEqual([...m.yearly.get(2023).blocks], [2, 0, 0, 0]);
+  assert.deepEqual([...m.yearly.get(2024).blocks], [0, 0, 1, 0]);
+  assert.equal(m.blocks[0].plays, 2); // el global sigue intacto
+});

@@ -27,7 +27,7 @@ function jsonConPayload(n) {
   for (let i = 0; i < n; i++) {
     events.push({
       ts: `2024-0${(i % 3) + 1}-1${i % 9}T1${i % 9}:30:00Z`,
-      ms: 180000,
+      ms_played: 180000,
       master_metadata_track_name: i % 2 === 0 ? XSS : `canción ${i}`,
       master_metadata_album_artist_name: i % 3 === 0 ? XSS2 : `artista ${i % 5}`,
       master_metadata_album_album_name: i % 4 === 0 ? XSS3 : `álbum ${i % 3}`,

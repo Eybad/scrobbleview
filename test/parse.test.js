@@ -146,6 +146,41 @@ test('ts parseo: epoch fuera del rango de Int32 → null (fail-fast, no wrap)', 
   assert.equal(parseISOToEpoch(enc.encode('2038-01-18T13:14:07-14:00')), 2147483647);
 });
 
+// Validación estricta del timestamp: dígitos ASCII, separadores, offset
+// completo, rangos de offset y días reales por mes. Nunca devuelve NaN:
+// un offset truncado ("-04") antes pasaba el chequeo `t === null` de parse.js
+// como NaN y corrompía la columna t (Int32Array lo storea como 0).
+test('ts parseo: validación estricta (nunca NaN, días reales, offset completo)', async () => {
+  const { parseISOToEpoch } = await import('../src/parse/impl/ts.js');
+  const enc = new TextEncoder();
+  const t = (s) => parseISOToEpoch(enc.encode(s));
+  // Offset truncado → null (no NaN).
+  assert.equal(t('2020-01-02T03:04:05-04'), null);
+  assert.equal(t('2020-01-02T03:04:05+02'), null);
+  for (const bad of ['2020-01-02T03:04:05-04', '2020-01-02T03:04:05+02', '2020-01-02T03:04:05+']) {
+    assert.ok(t(bad) === null, `${bad} debe ser null, nunca NaN`);
+  }
+  // No-dígitos y separadores inválidos.
+  assert.equal(t('202A-01-02T03:04:05Z'), null);
+  assert.equal(t('2020/01/02T03:04:05Z'), null);
+  assert.equal(t('2020-01-02X03:04:05Z'), null);
+  assert.equal(t('2020-01-02T03-04-05Z'), null);
+  // El espacio como separador fecha/hora se acepta (variante habitual).
+  assert.equal(t('2020-01-02 03:04:05Z'), 1577934245);
+  // Offset fuera de rango.
+  assert.equal(t('2020-01-02T03:04:05+24:00'), null);
+  assert.equal(t('2020-01-02T03:04:05+02:60'), null);
+  assert.equal(t('2020-01-02T03:04:05+2X:00'), null);
+  // Días inexistentes (incluye bisiestos).
+  assert.equal(t('2024-02-31T00:00:00Z'), null);
+  assert.equal(t('2023-02-29T00:00:00Z'), null);
+  assert.equal(t('2020-04-31T00:00:00Z'), null);
+  assert.equal(t('2024-02-29T00:00:00Z'), 1709164800); // 2024 bisiesto: válido
+  // Sanos siguen pasando (fracción + offset combinado también).
+  assert.equal(t('2020-01-02T03:04:05.123Z'), 1577934245);
+  assert.equal(t('1970-01-01T01:00:00.000+01:00'), 0);
+});
+
 test('interning: duplicados → mismo id; escapes → mismo id', async () => {
   const { Interner } = await import('../src/parse/impl/intern.js');
   const enc = new TextEncoder();
@@ -185,6 +220,44 @@ test('interning: caché corrupta → RangeError, no entidad truncada', async () 
 
 test('archivo vacío → EmptyFileError', async () => {
   await assert.rejects(parse(memoryBytes('empty', '[]')), (err) => err.code === 'E_EMPTY');
+});
+
+// Spotify puede agregar campos con objetos/arrays anidados en el futuro: si la
+// clave no está en el ALLOWLIST, el scanner debe saltar el subárbol completo
+// (con contador de profundidad, respetando strings/escapes internos) en vez de
+// fallar con "Se esperaba valor". Incluye llaves dentro de strings y corte
+// a mitad del subárbol (chunkBytes chico) para la invariancia entre chunks.
+test('clave desconocida con objeto/array anidado → se ignora, el evento pasa', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": 1000, "master_metadata_track_name": "T", "spotify_track_uri": "spotify:track:1", "futuro": {"a": [1, {"b": "x } y"}], "c": "ho}la", "q": "a\\"b"}, "lista": [1, 2, {"z": "}"}]}]';
+  for (const chunkBytes of [262144, 7]) {
+    const ds = await parse(memoryBytes('nested', json), { chunkBytes });
+    assert.equal(ds.meta.count, 1);
+    assert.equal(ds.m[0], 1000);
+    assert.equal(ds.dicts.tracks.get(ds.tr[0]), 'T');
+  }
+});
+
+// Un ms_played negativo (JSON manipulado) antes se storeaba tal cual en
+// Uint32Array: -1 → 4294967295 (~49,7 días en una pista). Ahora se acota a 0
+// con warning BAD_MS y el evento se conserva (cuenta como reproducción).
+test('ms_played negativo o imposible → m=0 + warning BAD_MS', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": -5, "master_metadata_track_name": "A", "spotify_track_uri": "spotify:track:1"}, {"ts": "2021-01-01T00:01:00Z", "ms_played": 100000000000, "master_metadata_track_name": "B", "spotify_track_uri": "spotify:track:2"}, {"ts": "2021-01-01T00:02:00Z", "ms_played": 1000, "master_metadata_track_name": "C", "spotify_track_uri": "spotify:track:3"}]';
+  const ds = await parse(memoryBytes('badms', json));
+  assert.equal(ds.meta.count, 3);
+  assert.equal(ds.meta.warnings.filter((w) => w.code === 'BAD_MS').length, 2);
+  let total = 0;
+  for (let i = 0; i < ds.meta.count; i++) total += ds.m[i];
+  assert.equal(total, 1000);
+});
+
+// Con varias fuentes, el error debe decir QUÉ archivo falló.
+test('ParseError incluye el label del archivo que falló', async () => {
+  const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": 100,]';
+  await assert.rejects(parse(memoryBytes('mi-archivo.json', json)), (err) => {
+    assert.equal(err.code, 'E_PARSE');
+    assert.ok(String(err.message).includes('mi-archivo.json'));
+    return true;
+  });
 });
 
 test('archivo que no es array → ParseError', async () => {
