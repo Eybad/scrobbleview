@@ -464,8 +464,10 @@ main.container {
   overflow-x: auto;
   max-width: 100%;
   scrollbar-gutter: stable;
-  margin: 0 calc(var(--sp-6) * -1);
-  padding: 0 var(--sp-6) var(--sp-1);
+  /* El padding lateral vive en --ts-pad para que el sticky lo reuse abajo. */
+  --ts-pad: var(--sp-6);
+  margin: 0 calc(var(--ts-pad) * -1);
+  padding: 0 var(--ts-pad) var(--sp-1);
   /* Sombra de corte: señaliza que hay más contenido a los costados. */
   background:
     linear-gradient(to right, var(--surface) 30%, transparent),
@@ -581,7 +583,9 @@ td a:hover {
 .table-scroll table th:first-child,
 .table-scroll table td:first-child {
   position: sticky;
-  left: 0;
+  /* left:0 ignora el padding del scroller y la celda fija quedaba corrida:
+     por el hueco se colaba la columna de abajo. Vale el padding exacto. */
+  left: var(--ts-pad);
   background: var(--surface);
   background-clip: padding-box;
   z-index: 1;
@@ -596,14 +600,22 @@ td a:hover {
   box-shadow: none;
 }
 
-/* Números tabulares a la derecha, texto a la izquierda (Rutter). */
+/* Alineación por semántica de columna (no por posición): texto a la
+   izquierda por defecto; .n numérico comparable a la derecha + tabular;
+   .c para # rank (ordinal corto centrado). El th hereda la de sus datos. */
 .table-scroll table {
   font-variant-numeric: lining-nums tabular-nums;
 }
 
-.table-scroll table th:last-child,
-.table-scroll table td:last-child {
+.table-scroll table th.n,
+.table-scroll table td.n {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-scroll table th.c,
+.table-scroll table td.c {
+  text-align: center;
 }
 
 /* Nombres a 1 línea con ellipsis en tablas (el title del link lleva el
@@ -671,6 +683,7 @@ td a:hover {
 .legend-value {
   margin-left: auto;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Tabla fallback de heatmaps */
@@ -887,6 +900,8 @@ td a:hover {
   font-size: var(--fs-sm);
   box-shadow: var(--shadow);
   z-index: 50;
+  /* Contenedor centrado, texto a la izquierda (se lee desde el borde). */
+  text-align: left;
 }
 
 /* Recibo en texto plano (copia manual) */
@@ -993,11 +1008,13 @@ details.calendar-year summary {
   border-bottom: none;
 }
 
-/* Vacío */
+/* Vacío: bloque centrado, texto a la izquierda (Carbon). */
 .empty {
   color: var(--text-muted);
   padding: var(--sp-6);
-  text-align: center;
+  margin-inline: auto;
+  max-width: 38ch;
+  text-align: left;
 }
 
 /* Responsive app */
@@ -1018,7 +1035,6 @@ details.calendar-year summary {
   }
 
   .table-scroll {
-    margin: 0 calc(var(--sp-4) * -1);
-    padding: 0 var(--sp-4) var(--sp-1);
+    --ts-pad: var(--sp-4);
   }
 }

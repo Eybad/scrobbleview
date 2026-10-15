@@ -47,9 +47,11 @@ function monthLabel(mi) {
 // debe pasar por esc() o entityLink() ANTES de entrar en `rows`.
 // El scroll horizontal vive en .table-scroll (solo la tabla scrollea; el h2 de
 // la card queda fijo). Sin tabindex: el scroll sigue al foco de los enlaces.
-function table(headers, rows, cls = '') {
-  return `<div class="table-scroll"><table class="${cls}"><thead><tr>${headers.map((h) => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+function table(headers, rows, cls = '', colClasses = []) {
+  const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
+  const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
+  return `<div class="table-scroll"><table class="${cls}"><thead><tr>${headers.map(th).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones' }) {
@@ -57,7 +59,7 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
     String(i + 1),
     link ? `<a class="cell-name" href="${link(r)}" title="${esc(r.name)}">${esc(r.name)}</a>` : `<span class="cell-name" title="${esc(r.name)}">${esc(r.name)}</span>`,
     valueFmt(r.value)
-  ]));
+  ]), '', ['c', '', 'n']);
 }
 
 // El title lleva el nombre completo: en tablas el nombre se trunca con
@@ -242,29 +244,29 @@ export function dashboard(model) {
       entityLink('track', o.tk, o.name),
       o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
       fmtNum(o.plays)
-    ])))}
+    ]), '', ['', 'n', 'n']))}
     <div class="grid-2">
       ${card('Rachas (misma canción seguida)', table(['Canción', 'Racha'], model.tables.binge.slice(0, 10).map((b) => [
         entityLink('track', b.tk, b.track.name),
         fmtNum(b.run)
-      ])))}
+      ]), '', ['', 'n']))}
       ${card('Mayor tasa de salto', table(['Nombre', 'Saltadas'], [...model.tables.skipRate.artists.slice(0, 5).map((a) => [
         entityLink('artist', a.id, a.name),
         fmtPct(a.skips / a.plays)
       ]), ...model.tables.skipRate.tracks.slice(0, 5).map((tr) => [
         entityLink('track', tr.tk, tr.name),
         fmtPct(tr.skips / tr.plays)
-      ])]))}
+      ])], '', ['', 'n']))}
     </div>
     <div class="grid-2">
       ${card('Primera canción del día', table(['Canción', 'Días'], model.tables.dayFirst.slice(0, 10).map((d) => [
         entityLink('track', d.tk, d.track.name),
         fmtNum(d.count)
-      ])))}
+      ]), '', ['', 'n']))}
       ${card('Última canción del día', table(['Canción', 'Días'], model.tables.dayLast.slice(0, 10).map((d) => [
         entityLink('track', d.tk, d.track.name),
         fmtNum(d.count)
-      ])))}
+      ]), '', ['', 'n']))}
     </div>
     ${kpis([
       { label: 'Con shuffle', value: fmtNum(t.shuffle), sub: shuffleRate },
@@ -344,7 +346,7 @@ export function artistView(model, ar) {
           x.from === ar ? `<strong>${esc(x.fromName)}</strong>` : entityLink('artist', x.from, x.fromName),
           x.to === ar ? `<strong>${esc(x.toName)}</strong>` : entityLink('artist', x.to, x.toName),
           fmtNum(x.count)
-        ]))
+        ]), '', ['', '', 'n'])
       : '<p class="empty">Sin transiciones destacadas.</p>')}`;
 }
 
@@ -454,8 +456,8 @@ export function sessionsView(model) {
       { label: 'Reproducciones repetidas', value: fmtNum(model.intraSession.repeatedPlays) }
     ])}
     <div class="grid-2">
-      ${card('Sesiones más largas', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur)))}
-      ${card('Sesiones con más reproducciones', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays)))}
+      ${card('Sesiones más largas', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur), '', ['', 'n', 'n', 'n']))}
+      ${card('Sesiones con más reproducciones', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['', 'n', 'n', 'n']))}
     </div>
     <div class="grid-2">
       ${card('Sesiones por franja', barChart({ data: blocks, showValue: true }))}
@@ -483,21 +485,21 @@ export function discoveryView(model) {
     </header>
     ${card('Canciones nuevas por mes', line)}
     <div class="grid-2">
-      ${card('Meses con más descubrimientos', table(['Mes', 'Nuevas', 'Reproducciones'], abs.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays)])))}
-      ${card('Meses con mayor proporción de nuevas', table(['Mes', 'Nuevas', 'Reproducciones', 'Proporción'], rel.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays), fmtPct(d.new / d.plays)])))}
+      ${card('Meses con más descubrimientos', table(['Mes', 'Nuevas', 'Reproducciones'], abs.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays)]), '', ['', 'n', 'n']))}
+      ${card('Meses con mayor proporción de nuevas', table(['Mes', 'Nuevas', 'Reproducciones', 'Proporción'], rel.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['', 'n', 'n', 'n']))}
     </div>
     <div class="grid-2">
       ${card('Constancia (artistas de todos los meses)', table(['Artista', 'Meses', 'Cobertura'], model.tables.constancy.slice(0, 10).map((a) => [
         entityLink('artist', a.id, a.name),
         fmtNum(a.months.size),
         fmtPct(a.coverage)
-      ])))}
+      ]), '', ['', 'n', 'n']))}
       ${card('Longevidad (años activos)', table(['Artista', 'Años', 'Meses', 'Días'], model.tables.longevity.slice(0, 10).map((a) => [
         entityLink('artist', a.id, a.name),
         fmtNum(a.years.size),
         fmtNum(a.months.size),
         fmtNum(a.days.size)
-      ])))}
+      ]), '', ['', 'n', 'n', 'n']))}
     </div>`;
 }
 
@@ -531,7 +533,7 @@ export function yearlyView(model) {
     <header class="view-header">
       <h1>Comparación anual</h1>
     </header>
-    ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Saltadas', 'Racha'], rows))}
+    ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Saltadas', 'Racha'], rows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n']))}
     ${card('Franjas por año', stacked)}`;
 }
 

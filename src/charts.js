@@ -211,13 +211,13 @@ export function heatmapTable({ cells, xLabels, yLabels, cellText = (c) => String
   let html = `<details class="table-fallback"><summary>Ver como tabla</summary><div class="table-scroll"><table>`;
   if (caption) html += `<caption>${esc(caption)}</caption>`;
   html += '<thead><tr><th></th>';
-  for (let x = 0; x < cols; x++) html += `<th scope="col">${xLabels[x] != null ? esc(String(xLabels[x])) : x}</th>`;
+  for (let x = 0; x < cols; x++) html += `<th scope="col" class="n">${xLabels[x] != null ? esc(String(xLabels[x])) : x}</th>`;
   html += '</tr></thead><tbody>';
   for (let y = 0; y < rows; y++) {
     html += `<tr><th scope="row">${yLabels[y] != null ? esc(String(yLabels[y])) : y}</th>`;
     for (let x = 0; x < cols; x++) {
       const c = grid.get(`${x}-${y}`);
-      html += `<td>${c ? esc(cellText(c)) : ''}</td>`;
+      html += `<td class="n">${c ? esc(cellText(c)) : ''}</td>`;
     }
     html += '</tr>';
   }
