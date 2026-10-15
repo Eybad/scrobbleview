@@ -123,16 +123,33 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const title = raw ? `${raw}: ${format(p.y)}` : format(p.y);
     return `<circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
   }).join('');
+  // Greedy por aristas estimadas: el paso fijo ("1 de cada step + último")
+  // encimaba las dos últimas etiquetas en el borde. Ancho 0.6em/char
+  // (conservador en proporcional), gap mínimo 10px (AG Charts), O(n).
+  // Extremos siempre visibles + ancla variable (no se cortan en el borde).
+  const fs = 10, minGap = 10;
+  const estW = (s) => String(s).length * 0.6 * fs;
+  const leftEdge = (i) => (i === 0 ? xs[i] : xs[i] - estW(points[i].label) / 2);
+  const rightEdge = (i) => (i === n - 1 ? xs[i] : xs[i] + estW(points[i].label) / 2);
+  const keep = new Set();
+  const labeled = points.map((p, i) => i).filter((i) => points[i].label != null);
+  if (labeled.length > 0) {
+    const first = labeled[0];
+    const last = labeled[labeled.length - 1];
+    keep.add(first);
+    let cursor = rightEdge(first);
+    for (const i of labeled.slice(1, -1)) {
+      if (leftEdge(i) >= cursor + minGap && rightEdge(i) + minGap <= leftEdge(last)) {
+        keep.add(i);
+        cursor = rightEdge(i);
+      }
+    }
+    keep.add(last);
+  }
   const labels = points.map((p, i) => {
-    // Diezmado del eje X: con muchas etiquetas se superponen. Se muestra
-    // 1 de cada `step` más la última (los extremos siempre visibles).
-    // Ancla variable en los extremos: con text-anchor middle se cortaban
-    // contra el borde del viewBox ("v 2021" / "sep 20" en móvil).
-    if (p.label == null) return '';
-    const step = Math.max(1, Math.ceil(n / 8));
-    if (i % step !== 0 && i !== n - 1) return '';
+    if (p.label == null || !keep.has(i)) return '';
     const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
-    return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="${anchor}" class="chart-label" font-size="10">${esc(String(p.label))}</text>`;
+    return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="${anchor}" class="chart-label" font-size="${fs}">${esc(String(p.label))}</text>`;
   }).join('');
   const aria = `Gráfico de líneas: ${points.map((p, i) => `${p.label ?? i}: ${format(p.y)}`).join(', ')}`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">
@@ -157,10 +174,12 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
   const cw = Math.min(cellSize, (plotW - gap * (cols - 1)) / cols);
   const ch = Math.min(cellSize, (plotH - gap * (rows - 1)) / rows);
   // viewBox ajustado al contenido (sin aire muerto a derecha/abajo).
+  // Labels a font 12 usuario mínimo (ONS): a 8 se vuelven ~7px al escalar.
+  const fs = 12;
   const gridW = cols * (cw + gap) - gap;
   const gridH = rows * (ch + gap) - gap;
   const vbW = Math.ceil(labelW + gridW + 8);
-  const vbH = Math.ceil(gridH + labelH + 4);
+  const vbH = Math.ceil(gridH + (labelH ? 14 + 6 : 0));
   const rects = cells.map((c) => {
     const x = labelW + c.x * (cw + gap);
     const y = c.y * (ch + gap);
@@ -172,9 +191,9 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
     const v = Number(l);
     const h = l !== '' && Number.isFinite(v) ? v : i;
     const anchor = i === 0 ? 'start' : (i === xLabels.length - 1 ? 'end' : 'middle');
-    return `<text x="${(labelW + h * (cw + gap) + cw / 2).toFixed(1)}" y="${gridH + 13}" text-anchor="${anchor}" class="chart-label" font-size="9">${esc(String(l))}</text>`;
+    return `<text x="${(labelW + h * (cw + gap) + cw / 2).toFixed(1)}" y="${gridH + 14}" text-anchor="${anchor}" class="chart-label" font-size="${fs}">${esc(String(l))}</text>`;
   }).join('');
-  const yl = yLabels.map((l, i) => `<text x="${labelW - 4}" y="${(i * (ch + gap) + ch / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="9">${esc(String(l))}</text>`).join('');
+  const yl = yLabels.map((l, i) => `<text x="${labelW - 4}" y="${(i * (ch + gap) + ch / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="${fs}">${esc(String(l))}</text>`).join('');
   return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(ariaLabel)}" class="chart">${rects}${xl}${yl}</svg>`;
 }
 
@@ -255,12 +274,15 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
   const daysInYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
   const weeks = Math.ceil((startDow + daysInYear) / 7);
   const width = weeks * (cellSize + gap) + 34;
-  const height = 7 * (cellSize + gap) + 20;
+  // Banda de meses a font 12 (baseline 13) + celdas desde y=20: a font 8
+  // con baseline 10 las etiquetas quedaban en ~3.6px efectivas en 360px.
+  const gridTop = 20;
+  const height = gridTop + 7 * (cellSize + gap) - gap + 4;
   const monthLabels = [];
   for (let m = 0; m < 12; m++) {
     const dayOfYear = Math.floor((Date.UTC(year, m, 1) - Date.UTC(year, 0, 1)) / 86400000);
     const col = Math.floor((dayOfYear + startDow) / 7);
-    monthLabels.push(`<text x="${34 + col * (cellSize + gap)}" y="10" class="chart-label" font-size="8">${MONTHS_SHORT[m]}</text>`);
+    monthLabels.push(`<text x="${34 + col * (cellSize + gap)}" y="13" class="chart-label" font-size="12">${MONTHS_SHORT[m]}</text>`);
   }
   const cells = [];
   for (let doy = 0; doy < daysInYear; doy++) {
@@ -269,7 +291,7 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
     const dow = (date.getUTCDay() + 6) % 7;
     const col = Math.floor((doy + startDow) / 7);
     const x = 34 + col * (cellSize + gap);
-    const y = 14 + dow * (cellSize + gap);
+    const y = gridTop + dow * (cellSize + gap);
     const v = byDate.get(iso)?.value ?? 0;
     cells.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${colorScale(v)}" rx="2"><title>${esc(cellTitle({ date: iso, value: v }))}</title></rect>`);
   }
@@ -280,7 +302,9 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
 
 export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LONG[c.dow]} ${c.hour}:00 — ${c.value}`, cellSize = 14, gap = 2 }) {
   const width = 24 * (cellSize + gap) + 30;
-  const height = 7 * (cellSize + gap) + 18;
+  // Gutter bajo celdas: baseline de labels a 12px del borde de celda + 4px
+  // para descendentes (el `y=height-3` con font 8 pisaba la fila dom).
+  const height = 7 * (cellSize + gap) + 28;
   const byKey = new Map(cells.map((c) => [`${c.hour}-${c.dow}`, c]));
   const rects = [];
   for (let h = 0; h < 24; h++) {
@@ -294,9 +318,9 @@ export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LO
   }
   const hourLabels = [];
   for (let h = 0; h < 24; h += 3) {
-    hourLabels.push(`<text x="${(30 + h * (cellSize + gap) + cellSize / 2).toFixed(1)}" y="${height - 3}" text-anchor="middle" class="chart-label" font-size="8">${h}</text>`);
+    hourLabels.push(`<text x="${(30 + h * (cellSize + gap) + cellSize / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="12">${h}</text>`);
   }
-  const dowLabels = DOW_SHORT.map((l, d) => `<text x="26" y="${(14 + d * (cellSize + gap) + cellSize / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="8">${l}</text>`).join('');
+  const dowLabels = DOW_SHORT.map((l, d) => `<text x="26" y="${(14 + d * (cellSize + gap) + cellSize / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="12">${l}</text>`).join('');
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Reloj de escucha: hora del día por día de semana" class="chart clock">${rects}${hourLabels}${dowLabels}</svg>`;
 }
 

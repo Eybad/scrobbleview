@@ -555,14 +555,34 @@ td a:hover {
 }
 
 /* Primera columna fija en scroll horizontal. Fondo opaco + sombra derecha:
-   sin ellos la columna fija tapa a medias la segunda al scrollear. */
+   sin ellos la columna fija tapa a medias la segunda al scrollear.
+   background-clip: los bordes de separate+sticky se pintan mal en Gecko. */
 .table-scroll table th:first-child,
 .table-scroll table td:first-child {
   position: sticky;
   left: 0;
   background: var(--surface);
+  background-clip: padding-box;
   z-index: 1;
   box-shadow: 1px 0 0 var(--border);
+}
+
+/* La tabla fallback (a11y/teclado) no fija columnas: es suplementaria del
+   SVG y el sticky era la fuente de los dígitos fantasma al scrollear. */
+.table-fallback table th:first-child,
+.table-fallback table td:first-child {
+  position: static;
+  box-shadow: none;
+}
+
+/* Números tabulares a la derecha, texto a la izquierda (Rutter). */
+.table-scroll table {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.table-scroll table th:last-child,
+.table-scroll table td:last-child {
+  text-align: right;
 }
 
 .chart-label,

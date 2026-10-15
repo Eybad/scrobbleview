@@ -33,6 +33,25 @@ test('lineChart: diezmado de etiquetas del eje X', () => {
   assert.equal(fewLabels.length, 5, 'con pocas etiquetas no se diezma');
 });
 
+test('lineChart: etiquetas vecinas nunca colisionan (greedy por aristas)', () => {
+  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const points = Array.from({ length: 60 }, (_, i) => ({
+    label: `${months[i % 12]} ${2021 + Math.floor(i / 12)}`,
+    y: (i * 37) % 100
+  }));
+  const html = lineChart({ points });
+  const shown = [...html.matchAll(/<text x="([\d.]+)"[^>]*class="chart-label"[^>]*>([^<]+)<\/text>/g)]
+    .map((m) => ({ x: Number(m[1]), label: m[2] }));
+  assert.ok(shown.length > 2 && shown.length < 60, `${shown.length} etiquetas`);
+  assert.equal(shown[0].label, points[0].label, 'primera visible');
+  assert.equal(shown[shown.length - 1].label, points[59].label, 'última visible');
+  const w = (s) => s.length * 0.6 * 10;
+  for (let k = 1; k < shown.length; k++) {
+    const gap = shown[k].x - shown[k - 1].x - (w(shown[k - 1].label) + w(shown[k].label)) / 2;
+    assert.ok(gap >= 10, `etiquetas ${k - 1}/${k} separadas (${gap.toFixed(1)}px)`);
+  }
+});
+
 test('stackedBar: segmentLabels en titles + leyenda', () => {
   const html = stackedBar({
     series: [{ label: '2024', values: [2, 1], total: 3 }],
