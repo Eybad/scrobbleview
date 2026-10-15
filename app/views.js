@@ -55,13 +55,16 @@ function table(headers, rows, cls = '') {
 function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones' }) {
   return table(['#', 'Nombre', valueLabel], rows.map((r, i) => [
     String(i + 1),
-    link ? `<a href="${link(r)}">${esc(r.name)}</a>` : esc(r.name),
+    link ? `<a class="cell-name" href="${link(r)}" title="${esc(r.name)}">${esc(r.name)}</a>` : `<span class="cell-name" title="${esc(r.name)}">${esc(r.name)}</span>`,
     valueFmt(r.value)
   ]));
 }
 
+// El title lleva el nombre completo: en tablas el nombre se trunca con
+// ellipsis (CSS .cell-name) y el tooltip lo revela (táctil: vía toast de
+// <title>? no — los links navegan; el title es mejora progresiva desktop).
 function entityLink(type, id, name) {
-  return `<a href="#/${type}/${id}">${esc(name)}</a>`;
+  return `<a class="cell-name" href="#/${type}/${id}" title="${esc(name)}">${esc(name)}</a>`;
 }
 
 function sortedMonths(map) {

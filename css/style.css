@@ -593,6 +593,16 @@ td a:hover {
   text-align: right;
 }
 
+/* Nombres a 1 línea con ellipsis en tablas (el title del link lleva el
+   nombre completo). Fuera de tablas .cell-name no trunca nada. */
+.table-scroll td .cell-name {
+  display: block;
+  max-width: 44vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chart-label,
 .chart-value {
   fill: var(--text-muted);
