@@ -45,7 +45,7 @@ test('lineChart: cadencia regular sin colisiones (poda del penúltimo)', () => {
   assert.ok(shown.length > 2 && shown.length < 60, `${shown.length} etiquetas`);
   assert.equal(shown[0].label, points[0].label, 'primera visible');
   assert.equal(shown[shown.length - 1].label, points[59].label, 'última visible');
-  const w = (s) => s.length * 0.6 * 10;
+  const w = (s) => s.length * 0.6 * 12;
   for (let k = 1; k < shown.length; k++) {
     const gap = shown[k].x - shown[k - 1].x - (w(shown[k - 1].label) + w(shown[k].label)) / 2;
     assert.ok(gap >= 10, `etiquetas ${k - 1}/${k} separadas (${gap.toFixed(1)}px)`);

@@ -33,14 +33,15 @@
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 
-  /* Escala tipográfica (modular, ratio 1.25) */
+  /* Escala tipográfica (modular, ratio 1.25; 7 tokens, sin tamaños sin uso).
+     h1 y KPI son fluidos (Utopia): fijos por breakpoint para el resto. */
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
   --fs-md: 1rem;
   --fs-lg: 1.25rem;
   --fs-xl: 1.563rem;
-  --fs-2xl: 1.953rem;
-  --fs-3xl: 2.441rem;
+  --fs-h1: clamp(1.25rem, 1.07rem + 0.9vw, 1.75rem);
+  --fs-kpi: clamp(1.5rem, 1.3rem + 1vw, 1.875rem);
 
   /* Espaciado */
   --sp-1: 0.25rem;
@@ -181,10 +182,11 @@ main.container {
   font-size: var(--fs-sm);
 }
 
-/* Botones */
+/* Botones: label 14 como el resto de los interactivos (M3 label large). */
 .btn {
   font: inherit;
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
   padding: var(--sp-2) var(--sp-6);
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
@@ -230,7 +232,7 @@ main.container {
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
 }
 
 .btn-link:hover {
@@ -387,8 +389,10 @@ main.container {
 }
 
 .view-header h1 {
-  font-size: var(--fs-2xl);
+  font-size: var(--fs-h1);
+  line-height: 1.2;
   margin-bottom: var(--sp-1);
+  overflow-wrap: break-word;
 }
 
 .view-meta {
@@ -427,15 +431,16 @@ main.container {
   color: var(--text-muted);
   font-size: var(--fs-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  line-height: 1.33;
   margin-bottom: var(--sp-1);
 }
 
 .kpi dd {
   margin: 0;
-  font-size: var(--fs-lg);
+  font-size: var(--fs-kpi);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
 
@@ -525,7 +530,8 @@ th {
   font-weight: 600;
   font-size: var(--fs-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  line-height: 1.33;
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--border);
 }
@@ -652,7 +658,8 @@ td a:hover {
 
 .donut-center {
   fill: var(--text);
-  font-size: 14px;
+  /* En rem con el token (px fijo rompía el resize 200%). */
+  font-size: 1.25rem;
   font-weight: 700;
   text-anchor: middle;
 }
@@ -929,7 +936,8 @@ details.calendar-year {
 
 details.calendar-year summary {
   cursor: pointer;
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
+  font-weight: 600;
   margin-bottom: var(--sp-3);
   min-height: 44px;
   display: flex;
@@ -1037,9 +1045,5 @@ details.calendar-year summary {
     padding: var(--sp-3) var(--sp-4);
   }
 
-  /* El h1 de 31px + nombres largos ocupaban 2-3 pantallazos. */
-  .view-header h1 {
-    font-size: var(--fs-xl);
-    overflow-wrap: break-word;
-  }
+
 }

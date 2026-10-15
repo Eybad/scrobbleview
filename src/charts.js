@@ -93,12 +93,12 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
     const label = esc(rawLabel);
     const title = d.title != null ? String(d.title) : `${rawLabel}: ${format(d.value)}`;
     const value = showValue
-      ? `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle" class="chart-value" font-size="9">${format(d.value)}</text>`
+      ? `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" class="chart-value" font-size="12">${format(d.value)}</text>`
       : '';
     return `<g><title>${esc(title)}</title>
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${accent}" rx="2"/>
       ${value}
-      <text x="${(x + barW / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="9">${label}</text>
+      <text x="${(x + barW / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="12">${label}</text>
     </g>`;
   }).join('');
   const aria = `Gráfico de barras: ${data.map((d) => `${d.label}: ${format(d.value)}`).join(', ')}`;
@@ -128,7 +128,7 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   // Paso fijo sobre posiciones etiquetadas; si el penúltimo pisa al último,
   // se poda el penúltimo (la cadencia manda). Ancho 0.6em/char, gap 10px.
   // Extremos visibles + ancla variable (no se cortan en el borde).
-  const fs = 10, minGap = 10, maxTicks = 8;
+  const fs = 12, minGap = 10, maxTicks = 8;
   const estW = (s) => String(s).length * 0.6 * fs;
   const span = (i) => {
     const w = estW(points[i].label);
@@ -352,7 +352,7 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
       x += w;
       return seg;
     }).join('');
-    return `<g><text x="${labelW - 6}" y="${(y + rowH / 2 + 3).toFixed(1)}" text-anchor="end" class="chart-label" font-size="10">${esc(s.label)}</text>${segs}</g>`;
+    return `<g><text x="${labelW - 6}" y="${(y + rowH / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="12">${esc(s.label)}</text>${segs}</g>`;
   }).join('');
   const legend = segmentLabels != null
     ? `<ul class="legend">${segmentLabels.map((l, j) => {
