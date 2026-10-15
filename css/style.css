@@ -354,7 +354,7 @@ main.container {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent);
-  font-weight: 600;
+  /* Sin negrita: mismo motivo que en tabs (evita jitter en la fila). */
 }
 
 /* Acciones de app (exportar / nuevos archivos): fila propia ENCIMA del nav
@@ -773,15 +773,7 @@ td a:hover {
   min-height: 44px;
 }
 
-/* Buscador flexible + Top N compacto: lado a lado sin solaparse. */
-.rank-opts input[type="search"] {
-  flex: 1 1 0%;
-}
 
-.rank-opts select {
-  flex: 0 1 auto;
-  max-width: 45%;
-}
 
 @media (min-width: 700px) {
   .filter-dates {
@@ -793,7 +785,7 @@ td a:hover {
   background: var(--accent);
   color: #06130a;
   border-color: var(--accent);
-  font-weight: 600;
+  /* Sin negrita: evita que el preset activo reordene el wrap. */
 }
 
 .filter-bar button:disabled {
@@ -859,7 +851,10 @@ td a:hover {
   align-items: center;
 }
 
-/* Controles de rankings */
+/* Controles de rankings: grilla con lugares FIJOS (métrica con scroll
+   interno a la izquierda, Top N fijo a la derecha, buscador a fila completa
+   abajo). Con flex-wrap cualquier cambio de ancho de los tabs —ej. negrita
+   del activo— movía el Top N de lugar al cambiar de métrica. */
 .rank-controls {
   display: flex;
   flex-direction: column;
@@ -868,10 +863,23 @@ td a:hover {
 }
 
 .rank-opts {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sp-2);
   align-items: center;
+}
+
+.rank-opts .tabs {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.rank-opts select {
+  width: auto;
+}
+
+.rank-opts input[type="search"] {
+  grid-column: 1 / -1;
 }
 
 .rank-opts select,
@@ -968,7 +976,9 @@ details.calendar-year summary {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent);
-  font-weight: 600;
+  /* Sin font-weight: la negrita ensancha el tab activo y mueve los
+     controles vecinos (el Top N saltaba al cambiar de métrica). El color
+     + borde ya distinguen el activo. */
 }
 
 /* Recibo (Wrapped): estética de ticket monoespaciado en dos columnas. */
