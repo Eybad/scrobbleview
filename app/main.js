@@ -114,15 +114,22 @@ function parseHash() {
 
 function navHTML(active) {
   const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
-  // "Nuevos archivos" fuera del nav: es acción destructiva (recarga), no una
-  // sección. En su propia fila no compite con las pestañas.
+  // 4 primarias + "Más" (Años y Resumen del año, las estacionales) en móvil;
+  // en desktop el mismo DOM muestra las 6 en fila (CSS display:contents).
+  // Mismo DOM, puros links hash: deep-links y tab-order intactos.
+  const moreOpen = active === 'yearly' || active === 'wrapped' ? ' open' : '';
   return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('sessions', 'Sesiones', 'sessions')}
     ${link('discovery', 'Descubrimiento', 'discovery')}
-    ${link('yearly', 'Años', 'yearly')}
     ${link('calendar', 'Calendario', 'calendar')}
-    ${link('wrapped', 'Resumen del año', 'wrapped')}
+    <details class="nav-more"${moreOpen}>
+      <summary aria-label="Más secciones">Más ▾</summary>
+      <div class="nav-more-list">
+        ${link('yearly', 'Años', 'yearly')}
+        ${link('wrapped', 'Resumen del año', 'wrapped')}
+      </div>
+    </details>
   </nav>
   <div class="app-actions">
     <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">Exportar datos</button>
@@ -302,6 +309,16 @@ function wireFilters() {
       if (k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
       state[k] = sel.value === '' ? null : sel.value === 'yes';
       applyAndRenderView();
+    });
+  });
+
+  // "Más" del nav: Escape lo cierra y devuelve el foco al summary.
+  appRoot.querySelectorAll('.nav-more').forEach((d) => {
+    d.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && d.open) {
+        d.open = false;
+        d.querySelector('summary')?.focus();
+      }
     });
   });
 
