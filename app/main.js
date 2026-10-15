@@ -156,10 +156,18 @@ function cacheBannerHTML() {
 function render() {
   if (!current) return;
   const [name, id] = parseHash();
+  // Reconstruir el HTML resetea el scroll de la fila: se conserva y restaura
+  // para que navegar no pegue un salto brusco (el bug se veía al tocar una
+  // sección con el nav deslizado a la derecha).
+  const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   appRoot.innerHTML = cacheBannerHTML() + navHTML(name) + filterBarHTML(model, state, current.totals) + `<div id="view-root">${renderView(name, current, id, { years: state.years })}</div>`;
-  // La sección activa siempre entra en vista dentro de la fila deslizante
-  // (solo scroll horizontal del nav, nunca de la página: block nearest).
-  appRoot.querySelector('.app-nav a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const nav = appRoot.querySelector('.app-nav');
+  if (nav) {
+    nav.scrollLeft = navX;
+    // La sección activa entra en vista solo si no se ve (nearest = sin
+    // movimiento cuando ya está visible; nunca scrollea la página).
+    nav.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   wireFilters();
   wireView();
 }
@@ -367,7 +375,10 @@ let searchTimer = 0;
 function updateRankCard() {
   const card = document.getElementById('rank-card');
   if (!card || !current) return;
+  // Mismo caso que el nav: conservar el scroll de las filas de tabs.
+  const tabsX = [...card.querySelectorAll('.tabs')].map((t) => t.scrollLeft);
   card.innerHTML = rankCardHTML(current, rankUI);
+  card.querySelectorAll('.tabs').forEach((t, i) => { t.scrollLeft = tabsX[i] ?? 0; });
   wireRankCard();
 }
 
