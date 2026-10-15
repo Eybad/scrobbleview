@@ -33,7 +33,7 @@ test('lineChart: diezmado de etiquetas del eje X', () => {
   assert.equal(fewLabels.length, 5, 'con pocas etiquetas no se diezma');
 });
 
-test('lineChart: etiquetas vecinas nunca colisionan (greedy por aristas)', () => {
+test('lineChart: cadencia regular sin colisiones (poda del penúltimo)', () => {
   const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const points = Array.from({ length: 60 }, (_, i) => ({
     label: `${months[i % 12]} ${2021 + Math.floor(i / 12)}`,

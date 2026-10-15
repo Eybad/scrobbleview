@@ -123,13 +123,12 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const title = raw ? `${raw}: ${format(p.y)}` : format(p.y);
     return `<circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
   }).join('');
-  // Greedy por aristas estimadas: el paso fijo ("1 de cada step + último")
-  // encimaba etiquetas en los bordes. Ancho 0.6em/char (conservador en
-  // proporcional), gap mínimo 10px (AG Charts), O(n). Las aristas respetan
-  // el ancla real (start/end se extienden a un solo lado: estimarlas
-  // centradas pegaba "ene" con "feb").
-  // Extremos siempre visibles + ancla variable (no se cortan en el borde).
-  const fs = 10, minGap = 10;
+  // Cadencia regular + último siempre: el greedy ("los que entran + último")
+  // dejaba intervalos irregulares (9, 6, 6… 13 meses) y el eje se leía mal.
+  // Paso fijo sobre posiciones etiquetadas; si el penúltimo pisa al último,
+  // se poda el penúltimo (la cadencia manda). Ancho 0.6em/char, gap 10px.
+  // Extremos visibles + ancla variable (no se cortan en el borde).
+  const fs = 10, minGap = 10, maxTicks = 8;
   const estW = (s) => String(s).length * 0.6 * fs;
   const span = (i) => {
     const w = estW(points[i].label);
@@ -140,19 +139,18 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   const keep = new Set();
   const labeled = points.map((p, i) => i).filter((i) => points[i].label != null);
   if (labeled.length > 0) {
-    const first = labeled[0];
     const last = labeled[labeled.length - 1];
-    keep.add(first);
-    let cursor = span(first)[1];
-    const lastLeft = span(last)[0];
-    for (const i of labeled.slice(1, -1)) {
-      const [left, right] = span(i);
-      if (left >= cursor + minGap && right + minGap <= lastLeft) {
-        keep.add(i);
-        cursor = right;
-      }
+    if (labeled.length <= maxTicks) {
+      labeled.forEach((i) => keep.add(i));
+    } else {
+      const step = Math.ceil((labeled.length - 1) / (maxTicks - 1));
+      const cands = [];
+      for (let k = 0; k < labeled.length - 1; k += step) cands.push(labeled[k]);
+      const prev = cands[cands.length - 1];
+      if (span(prev)[1] + minGap > span(last)[0]) cands.pop();
+      cands.push(last);
+      cands.forEach((i) => keep.add(i));
     }
-    keep.add(last);
   }
   const labels = points.map((p, i) => {
     if (p.label == null || !keep.has(i)) return '';
