@@ -124,24 +124,32 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     return `<circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
   }).join('');
   // Greedy por aristas estimadas: el paso fijo ("1 de cada step + último")
-  // encimaba las dos últimas etiquetas en el borde. Ancho 0.6em/char
-  // (conservador en proporcional), gap mínimo 10px (AG Charts), O(n).
+  // encimaba etiquetas en los bordes. Ancho 0.6em/char (conservador en
+  // proporcional), gap mínimo 10px (AG Charts), O(n). Las aristas respetan
+  // el ancla real (start/end se extienden a un solo lado: estimarlas
+  // centradas pegaba "ene" con "feb").
   // Extremos siempre visibles + ancla variable (no se cortan en el borde).
   const fs = 10, minGap = 10;
   const estW = (s) => String(s).length * 0.6 * fs;
-  const leftEdge = (i) => (i === 0 ? xs[i] : xs[i] - estW(points[i].label) / 2);
-  const rightEdge = (i) => (i === n - 1 ? xs[i] : xs[i] + estW(points[i].label) / 2);
+  const span = (i) => {
+    const w = estW(points[i].label);
+    if (i === 0) return [xs[i], xs[i] + w];
+    if (i === n - 1) return [xs[i] - w, xs[i]];
+    return [xs[i] - w / 2, xs[i] + w / 2];
+  };
   const keep = new Set();
   const labeled = points.map((p, i) => i).filter((i) => points[i].label != null);
   if (labeled.length > 0) {
     const first = labeled[0];
     const last = labeled[labeled.length - 1];
     keep.add(first);
-    let cursor = rightEdge(first);
+    let cursor = span(first)[1];
+    const lastLeft = span(last)[0];
     for (const i of labeled.slice(1, -1)) {
-      if (leftEdge(i) >= cursor + minGap && rightEdge(i) + minGap <= leftEdge(last)) {
+      const [left, right] = span(i);
+      if (left >= cursor + minGap && right + minGap <= lastLeft) {
         keep.add(i);
-        cursor = rightEdge(i);
+        cursor = right;
       }
     }
     keep.add(last);
