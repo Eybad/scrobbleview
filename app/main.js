@@ -125,7 +125,7 @@ function navHTML(active) {
     ${link('wrapped', 'Resumen del año', 'wrapped')}
   </nav>
   <div class="app-actions">
-    <button type="button" class="btn btn-secondary" data-action="export">Exportar datos</button>
+    <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">Exportar datos</button>
     <button type="button" class="btn btn-accent-outline" data-action="reset">Nuevos archivos</button>
   </div>`;
 }
