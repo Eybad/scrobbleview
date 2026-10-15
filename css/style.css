@@ -464,10 +464,11 @@ main.container {
   overflow-x: auto;
   max-width: 100%;
   scrollbar-gutter: stable;
-  /* El padding lateral vive en --ts-pad para que el sticky lo reuse abajo. */
-  --ts-pad: var(--sp-6);
-  margin: 0 calc(var(--ts-pad) * -1);
-  padding: 0 var(--ts-pad) var(--sp-1);
+  /* Sin padding lateral a propósito: con sangrado, `left` del sticky queda
+     a merced de padding-box vs content-box (huecos o 2da columna tapada
+     según navegador). Sin padding, `left: 0` es exacto siempre. */
+  margin: 0;
+  padding: 0 0 var(--sp-1);
   /* Sombra de corte: señaliza que hay más contenido a los costados. */
   background:
     linear-gradient(to right, var(--surface) 30%, transparent),
@@ -583,9 +584,7 @@ td a:hover {
 .table-scroll table th:first-child,
 .table-scroll table td:first-child {
   position: sticky;
-  /* left:0 ignora el padding del scroller y la celda fija quedaba corrida:
-     por el hueco se colaba la columna de abajo. Vale el padding exacto. */
-  left: var(--ts-pad);
+  left: 0;
   background: var(--surface);
   background-clip: padding-box;
   z-index: 1;
@@ -1032,9 +1031,5 @@ details.calendar-year summary {
   .view-header h1 {
     font-size: var(--fs-xl);
     overflow-wrap: break-word;
-  }
-
-  .table-scroll {
-    --ts-pad: var(--sp-4);
   }
 }
