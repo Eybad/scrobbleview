@@ -100,6 +100,12 @@ code {
   padding: 0 var(--sp-4);
 }
 
+/* Aire bajo el header (el aviso de privacidad y el banner de caché
+   quedaban pegados al borde superior). */
+main.container {
+  padding-top: var(--sp-6);
+}
+
 /* Header */
 .site-header {
   border-bottom: 1px solid var(--border);
@@ -305,15 +311,20 @@ code {
 
 /* ============ App (vistas) ============ */
 
-/* Navegación */
+/* Navegación: UNA fila deslizante con las 6 secciones (nada oculto tras
+   botón). El fade derecho señaliza el scroll; el activo entra en vista solo. */
 .app-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--sp-2);
   align-items: center;
   padding: var(--sp-4) 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--sp-6);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 2em), transparent 100%);
 }
 
 .app-nav a {
@@ -327,6 +338,8 @@ code {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .app-nav a:hover {
@@ -344,99 +357,14 @@ code {
   font-weight: 600;
 }
 
-/* "Más" del nav: disclosure nativo (APG), sin JS ni roles de menú. */
-.nav-more {
-  position: relative;
-}
-
-.nav-more summary {
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  list-style: none;
-}
-
-.nav-more summary::-webkit-details-marker {
-  display: none;
-}
-
-.nav-more summary::marker {
-  content: '';
-}
-
-.nav-more summary:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-
-.nav-more[open] .nav-more-list {
-  position: absolute;
-  top: calc(100% + var(--sp-1));
-  right: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 200px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--sp-2);
-  box-shadow: var(--shadow);
-}
-
-.nav-more-list a {
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: var(--fs-sm);
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.nav-more-list a:hover {
-  color: var(--text);
-  background: var(--surface);
-}
-
-/* Desktop: el mismo DOM muestra las 6 en fila (summary oculto, details y
-   lista transparentes vía display:contents). */
-@media (min-width: 721px) {
-  .nav-more {
-    display: contents;
-  }
-
-  .nav-more summary {
-    display: none;
-  }
-
-  .nav-more-list {
-    display: contents;
-  }
-
-  /* En fila desktop los 6 links comparten el mismo hover. */
-  .nav-more-list a:hover {
-    background: var(--surface-2);
-  }
-}
-
-/* Acciones de app (exportar / nuevos archivos): fila propia bajo el nav,
-   separadas de las pestañas de sección. */
+/* Acciones de app (exportar / nuevos archivos): fila propia ENCIMA del nav
+   y centrada (el operador las quiere ahí, no debajo ni a la derecha). */
 .app-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
-  justify-content: flex-end;
-  margin-bottom: var(--sp-6);
+  justify-content: center;
+  margin-bottom: var(--sp-4);
 }
 
 /* Verde integrado a la paleta (nada de rojo): se diferencia del secundario

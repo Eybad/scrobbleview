@@ -114,27 +114,19 @@ function parseHash() {
 
 function navHTML(active) {
   const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
-  // 4 primarias + "Más" (Años y Resumen del año, las estacionales) en móvil;
-  // en desktop el mismo DOM muestra las 6 en fila (CSS display:contents).
-  // Mismo DOM, puros links hash: deep-links y tab-order intactos.
-  const moreOpen = active === 'yearly' || active === 'wrapped' ? ' open' : '';
-  return `<nav class="app-nav" aria-label="Secciones">
+  // Las 6 secciones en UNA fila deslizante (nada oculto tras botón).
+  return `<div class="app-actions">
+    <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">Exportar datos</button>
+    <button type="button" class="btn btn-accent-outline" data-action="reset">Nuevos archivos</button>
+  </div>
+  <nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('sessions', 'Sesiones', 'sessions')}
     ${link('discovery', 'Descubrimiento', 'discovery')}
+    ${link('yearly', 'Años', 'yearly')}
     ${link('calendar', 'Calendario', 'calendar')}
-    <details class="nav-more"${moreOpen}>
-      <summary aria-label="Más secciones">Más ▾</summary>
-      <div class="nav-more-list">
-        ${link('yearly', 'Años', 'yearly')}
-        ${link('wrapped', 'Resumen del año', 'wrapped')}
-      </div>
-    </details>
-  </nav>
-  <div class="app-actions">
-    <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">Exportar datos</button>
-    <button type="button" class="btn btn-accent-outline" data-action="reset">Nuevos archivos</button>
-  </div>`;
+    ${link('wrapped', 'Resumen del año', 'wrapped')}
+  </nav>`;
 }
 
 function cacheBannerHTML() {
@@ -165,6 +157,9 @@ function render() {
   if (!current) return;
   const [name, id] = parseHash();
   appRoot.innerHTML = cacheBannerHTML() + navHTML(name) + filterBarHTML(model, state, current.totals) + `<div id="view-root">${renderView(name, current, id, { years: state.years })}</div>`;
+  // La sección activa siempre entra en vista dentro de la fila deslizante
+  // (solo scroll horizontal del nav, nunca de la página: block nearest).
+  appRoot.querySelector('.app-nav a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   wireFilters();
   wireView();
 }
@@ -309,16 +304,6 @@ function wireFilters() {
       if (k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
       state[k] = sel.value === '' ? null : sel.value === 'yes';
       applyAndRenderView();
-    });
-  });
-
-  // "Más" del nav: Escape lo cierra y devuelve el foco al summary.
-  appRoot.querySelectorAll('.nav-more').forEach((d) => {
-    d.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && d.open) {
-        d.open = false;
-        d.querySelector('summary')?.focus();
-      }
     });
   });
 
