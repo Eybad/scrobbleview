@@ -480,6 +480,14 @@ code {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-6);
+  /* Todo bloque trae su propio margen inferior (las cards 24, los kpis 24):
+     sin este, grid-2 → kpis quedaba con 0px de aire (caja pegada). */
+  margin-bottom: var(--sp-6);
+}
+
+/* El último bloque de la vista no empuja al footer (ya trae su aire). */
+#view-root > :last-child {
+  margin-bottom: 0;
 }
 
 .grid-2 .card {
