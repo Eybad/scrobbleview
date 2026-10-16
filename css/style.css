@@ -1,13 +1,11 @@
-/* Scrobbleview — design system base (tema oscuro) */
-
 :root {
-  /* Superficies */
   --bg: #0f1115;
   --surface: #171a21;
   --surface-2: #1e222b;
+  --surface-hover: #252a35;
   --border: #2a2f3a;
+  --border-strong: #3b4252;
 
-  /* Texto */
   --text: #e8eaf0;
   --text-muted: #9aa3b2;
   --text-faint: #6b7280;
@@ -16,12 +14,14 @@
      decorativo o texto grande). */
   --text-faint-high: #9ca3af;
 
-  /* Acento (1 solo color) */
+  /* Acento único del design system. Espejo en ACCENT (src/charts.js): los
+     SVG no leen variables CSS, la paleta vive duplicada ahí. */
   --accent: #1db954;
   --accent-contrast: #0b3d1f;
   --accent-soft: rgba(29, 185, 84, 0.14);
+  --accent-border: rgba(29, 185, 84, 0.4);
 
-  /* Escala secuencial para heatmaps (verde sobre fondo oscuro) */
+  /* Escala secuencial espejo de HEAT (src/charts.js); mantener sincronizadas. */
   --heat-0: #1a1e26;
   --heat-1: #123524;
   --heat-2: #14532d;
@@ -29,7 +29,6 @@
   --heat-4: #22c55e;
   --heat-5: #4ade80;
 
-  /* Tipografía */
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 
@@ -43,7 +42,6 @@
   --fs-h1: clamp(1.25rem, 1.07rem + 0.9vw, 1.75rem);
   --fs-kpi: clamp(1.5rem, 1.3rem + 1vw, 1.875rem);
 
-  /* Espaciado */
   --sp-1: 0.25rem;
   --sp-2: 0.5rem;
   --sp-3: 0.75rem;
@@ -52,20 +50,23 @@
   --sp-8: 2rem;
   --sp-12: 3rem;
 
-  /* Radios y sombras */
   --radius: 10px;
   --radius-sm: 6px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 
-  /* Layout */
   --container-max: 1100px;
 }
 
-/* Reset básico */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* Impedir que display:flex / inline-flex de autor pise el atributo HTML hidden
+   en botones (#btn-cached, #btn-cached-clear) o vistas (#view-app). */
+[hidden] {
+  display: none !important;
 }
 
 html {
@@ -74,6 +75,10 @@ html {
 
 body {
   margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   line-height: 1.5;
@@ -91,12 +96,14 @@ code {
   font-family: var(--font-mono);
   font-size: 0.9em;
   background: var(--surface-2);
+  border: 1px solid var(--border);
   padding: 0.1em 0.35em;
   border-radius: var(--radius-sm);
 }
 
 .container {
   max-width: var(--container-max);
+  width: 100%;
   margin: 0 auto;
   padding: 0 var(--sp-4);
 }
@@ -104,14 +111,22 @@ code {
 /* Aire bajo el header (el aviso de privacidad y el banner de caché
    quedaban pegados al borde superior). */
 main.container {
+  flex: 1 0 auto;
   padding-top: var(--sp-6);
 }
 
-/* Header */
 .site-header {
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   padding: var(--sp-4) 0;
+}
+
+.site-header .container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-4);
 }
 
 .brand {
@@ -119,42 +134,69 @@ main.container {
   font-size: var(--fs-xl);
   font-weight: 700;
   letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.brand::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  flex: 0 0 auto;
 }
 
 .tagline {
-  margin: var(--sp-1) 0 0;
+  margin: 0;
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
 
-/* Footer */
 .site-footer {
   border-top: 1px solid var(--border);
-  color: var(--text-faint);
+  color: var(--text-faint-high);
   font-size: var(--fs-sm);
   padding: var(--sp-6) 0;
   margin-top: var(--sp-12);
 }
 
-/* Aviso de privacidad */
+.site-footer p {
+  margin: 0;
+}
+
+.view {
+  width: 100%;
+}
+
+/* Acota el ancho en la pantalla de carga para evitar líneas de más de 90ch
+   y una zona de arrastre desproporcionada en escritorio. */
+#view-home {
+  max-width: 680px;
+  margin: var(--sp-4) auto 0;
+}
+
 .privacy-note {
   background: var(--accent-soft);
-  border: 1px solid rgba(29, 185, 84, 0.35);
+  border: 1px solid var(--accent-border);
+  border-left: 4px solid var(--accent);
   border-radius: var(--radius);
   padding: var(--sp-4);
   margin-bottom: var(--sp-6);
   font-size: var(--fs-sm);
 }
 
-/* Drop zone */
 .drop-zone {
-  border: 2px dashed var(--border);
+  border: 2px dashed var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
   padding: var(--sp-12) var(--sp-6);
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 
 .drop-zone:hover,
@@ -162,7 +204,19 @@ main.container {
 .drop-zone.is-dragover {
   border-color: var(--accent);
   background: var(--surface-2);
-  outline: none;
+}
+
+.drop-zone.is-dragover {
+  border-style: solid;
+  background: var(--accent-soft);
+}
+
+.drop-zone.busy {
+  cursor: progress;
+  pointer-events: none;
+  opacity: 0.72;
+  border-color: var(--accent);
+  border-style: solid;
 }
 
 .drop-zone-title {
@@ -182,21 +236,21 @@ main.container {
   font-size: var(--fs-sm);
 }
 
-/* Botones: label 14 como el resto de los interactivos (M3 label large). */
+/* Botones: label 14 como el resto de los interactivos (M3 label large)
+   y min-height 44px para cumplir el target táctil WCAG 2.5.5. */
 .btn {
   font: inherit;
   font-size: var(--fs-sm);
   font-weight: 600;
   padding: var(--sp-2) var(--sp-6);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: filter 0.15s ease, background 0.15s ease;
-}
-
-.btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .btn-primary {
@@ -205,14 +259,25 @@ main.container {
   font-weight: 600;
 }
 
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
 .btn-secondary {
   background: var(--surface-2);
   color: var(--text);
   border-color: var(--border);
 }
 
-.btn:hover {
-  filter: brightness(1.1);
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn:disabled,
+.btn-link:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .actions {
@@ -221,25 +286,31 @@ main.container {
   display: flex;
   gap: var(--sp-3);
   justify-content: center;
+  align-items: center;
   flex-wrap: wrap;
 }
 
 .btn-link {
   background: none;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--accent);
   padding: var(--sp-2) var(--sp-3);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-decoration: underline;
+  text-underline-offset: 0.2em;
   cursor: pointer;
   font: inherit;
   font-size: var(--fs-sm);
 }
 
-.btn-link:hover {
-  filter: brightness(1.2);
+.btn-link:hover:not(:disabled) {
+  background: var(--accent-soft);
 }
 
-/* Banner de caché IndexedDB */
 .cache-banner {
   display: flex;
   align-items: center;
@@ -248,7 +319,7 @@ main.container {
   flex-wrap: wrap;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-4);
 }
@@ -256,23 +327,36 @@ main.container {
 .cache-banner p {
   margin: 0;
   color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
 
 .cache-actions {
   display: flex;
   gap: var(--sp-2);
   align-items: center;
+  flex-wrap: wrap;
 }
 
-/* Estado / progreso */
 .status {
   margin-top: var(--sp-6);
   min-height: 1.5em;
   color: var(--text-muted);
   text-align: center;
+  font-size: var(--fs-sm);
 }
 
-/* Utilidades */
+/* Destaca fallos sin introducir colores semáforo ajenos a la paleta. */
+.status.error {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  font-weight: 500;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -293,7 +377,6 @@ main.container {
   box-shadow: 0 0 0 4px #000;
 }
 
-/* Accesibilidad: movimiento reducido */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -301,17 +384,15 @@ main.container {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* Responsive */
 @media (max-width: 640px) {
   .drop-zone {
     padding: var(--sp-8) var(--sp-4);
   }
 }
-
-/* ============ App (vistas) ============ */
 
 /* Navegación: UNA fila deslizante con las 6 secciones (nada oculto tras
    botón). El fade derecho señaliza el scroll; el activo entra en vista solo. */
@@ -320,7 +401,7 @@ main.container {
   flex-wrap: nowrap;
   gap: var(--sp-2);
   align-items: center;
-  padding: var(--sp-4) 0;
+  padding: var(--sp-3) 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--sp-6);
   overflow-x: auto;
@@ -342,6 +423,7 @@ main.container {
   align-items: center;
   flex: 0 0 auto;
   white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .app-nav a:hover {
@@ -359,8 +441,8 @@ main.container {
   /* Sin negrita: mismo motivo que en tabs (evita jitter en la fila). */
 }
 
-/* Acciones de app (exportar / nuevos archivos): fila propia ENCIMA del nav
-   y centrada (el operador las quiere ahí, no debajo ni a la derecha). */
+/* Acciones de app (exportar / nuevos archivos): fila propia encima del nav
+   y centrada: decisión de producto. */
 .app-actions {
   display: flex;
   flex-wrap: wrap;
@@ -378,12 +460,11 @@ main.container {
   min-height: 44px;
 }
 
-.btn-accent-outline:hover {
+.btn-accent-outline:hover:not(:disabled) {
   background: var(--accent-soft);
   filter: none;
 }
 
-/* Cabecera de vista */
 .view-header {
   margin-bottom: var(--sp-6);
 }
@@ -407,12 +488,12 @@ main.container {
   font-size: var(--fs-sm);
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: var(--sp-2) var(--sp-3);
   margin: var(--sp-3) 0 0;
 }
 
-/* KPIs */
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -449,9 +530,9 @@ main.container {
   color: var(--text-faint-high);
   font-size: var(--fs-xs);
   font-weight: 400;
+  margin-top: var(--sp-1);
 }
 
-/* Cards y grillas */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -515,7 +596,7 @@ main.container {
   margin-bottom: 0;
 }
 
-/* Tablas (siempre dentro de .table-scroll; ver research: Roselli 2020) */
+/* Las tablas viven siempre dentro de .table-scroll. */
 table {
   width: max-content;
   min-width: 100%;
@@ -545,6 +626,10 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
+tbody tr:hover td {
+  background: var(--surface-2);
+}
+
 td a {
   color: var(--accent);
   text-decoration: none;
@@ -554,11 +639,19 @@ td a:hover {
   text-decoration: underline;
 }
 
-/* Charts */
-.chart {
+.chart,
+.sparkline,
+.calendar,
+.clock {
   width: 100%;
   height: auto;
   display: block;
+}
+
+.stacked-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 
 /* Scroll por componente para grillas 2D (heatmaps, reloj, calendario):
@@ -595,6 +688,11 @@ td a:hover {
   background-clip: padding-box;
   z-index: 1;
   box-shadow: 1px 0 0 var(--border);
+}
+
+/* Sincroniza el fondo opaco de la celda sticky al pasar el cursor por la fila. */
+.table-scroll table tbody tr:hover td:first-child {
+  background: var(--surface-2);
 }
 
 /* La tabla fallback (a11y/teclado) no fija columnas: es suplementaria del
@@ -692,22 +790,29 @@ td a:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* Tabla fallback de heatmaps */
 .table-fallback {
   margin-top: var(--sp-3);
   font-size: var(--fs-sm);
 }
 
+/* Hit-area táctil de 44px para abrir/cerrar la tabla accesible de los heatmaps. */
 .table-fallback summary {
   cursor: pointer;
   color: var(--text-muted);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-1) 0;
+}
+
+.table-fallback summary:hover {
+  color: var(--text);
 }
 
 .table-fallback table {
   margin-top: var(--sp-2);
 }
 
-/* Barra de filtros */
 .filter-bar {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -727,7 +832,7 @@ td a:hover {
 }
 
 /* Los flex items no bajan de su min-content por defecto: esto mata el
-   desborde de inputs/selects en 360px (research: MDN flex/min-width). */
+   desborde de inputs/selects en 360px. */
 .filter-row > * {
   min-width: 0;
 }
@@ -745,6 +850,13 @@ td a:hover {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.filter-bar button[data-preset]:hover:not(:disabled),
+.filter-bar button[data-action]:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 /* Fechas: 1 columna en móvil (2 filas, aceptado), 2 columnas desde 700px. */
@@ -769,6 +881,13 @@ td a:hover {
   min-width: 0;
   box-sizing: border-box;
   min-height: 44px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .filter-bar select,
@@ -780,7 +899,12 @@ td a:hover {
   min-height: 44px;
 }
 
-
+.filter-bar input[type="date"]:hover,
+.filter-bar select:hover,
+.rank-opts select:hover,
+.rank-opts input[type="search"]:hover {
+  border-color: var(--border-strong);
+}
 
 @media (min-width: 700px) {
   .filter-dates {
@@ -788,7 +912,8 @@ td a:hover {
   }
 }
 
-.filter-bar button[data-preset].active {
+.filter-bar button[data-preset].active,
+.filter-bar button[aria-pressed="true"] {
   background: var(--accent);
   color: #06130a;
   border-color: var(--accent);
@@ -821,6 +946,13 @@ td a:hover {
   cursor: pointer;
   min-height: 44px;
   padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.chip:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .chip input[type="checkbox"] {
@@ -843,6 +975,11 @@ td a:hover {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  gap: var(--sp-1);
+}
+
+.chip-active:hover {
+  background: rgba(29, 185, 84, 0.24);
 }
 
 .filter-advanced {
@@ -856,6 +993,10 @@ td a:hover {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+}
+
+.filter-advanced summary:hover {
+  color: var(--text);
 }
 
 /* Controles de rankings: grilla con lugares FIJOS (métrica con scroll
@@ -900,7 +1041,7 @@ td a:hover {
   color: var(--text);
 }
 
-/* Toast de títulos de gráficos (táctil) */
+/* Toast para títulos de gráficos en táctil. */
 .toast {
   position: fixed;
   left: 50%;
@@ -908,7 +1049,7 @@ td a:hover {
   transform: translateX(-50%);
   max-width: min(90vw, 480px);
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: var(--sp-2) var(--sp-4);
   font-size: var(--fs-sm);
@@ -918,18 +1059,17 @@ td a:hover {
   text-align: left;
 }
 
-/* Recibo en texto plano (copia manual) */
 .receipt-plain {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   white-space: pre-wrap;
   background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: var(--sp-3);
   margin-top: var(--sp-3);
 }
 
-/* Año anterior plegado en el índice del calendario */
 details.calendar-year {
   padding: var(--sp-4) var(--sp-6);
 }
@@ -944,10 +1084,15 @@ details.calendar-year summary {
   align-items: center;
 }
 
+details.calendar-year summary:hover {
+  color: var(--accent);
+}
+
 .filter-summary {
   margin-left: auto;
   color: var(--text-muted);
   font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Tabs de rankings: una línea con scroll horizontal (nunca wrap: el modelo
@@ -977,6 +1122,12 @@ details.calendar-year summary {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.tabs button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .tabs button.active,
@@ -1019,13 +1170,14 @@ details.calendar-year summary {
   flex: 1 1 auto;
   text-align: right;
   overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
 }
 
 .receipt li:last-child {
   border-bottom: none;
 }
 
-/* Vacío: bloque centrado, texto a la izquierda (Carbon). */
+/* Vacío: bloque centrado, texto a la izquierda. */
 .empty {
   color: var(--text-muted);
   padding: var(--sp-6);
@@ -1034,7 +1186,6 @@ details.calendar-year summary {
   text-align: left;
 }
 
-/* Responsive app */
 @media (max-width: 720px) {
   .grid-2 {
     grid-template-columns: 1fr;
@@ -1044,6 +1195,4 @@ details.calendar-year summary {
   .card {
     padding: var(--sp-3) var(--sp-4);
   }
-
-
 }
