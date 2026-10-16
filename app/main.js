@@ -18,9 +18,11 @@ import { fmtNum, fmtMs } from '../src/charts.js';
 import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
 const appRoot = document.getElementById('app-root');
+const headerActions = document.getElementById('header-actions');
+const siteFooter = document.querySelector('.site-footer');
 
 let ds = null;
-let derived = null; // derive(ds, tz): se calcula una vez por dataset+tz y se
+let derived = null;
 let model = null; // modelo completo (sin filtros)
 let current = null; // modelo activo (filtrado o completo)
 let tz = null;
@@ -37,8 +39,6 @@ toast.setAttribute('role', 'status');
 toast.hidden = true;
 document.body.appendChild(toast);
 let toastTimer = 0;
-
-// ---------- tz del navegador sobre el rango del dataset ----------
 
 function buildTz(dataset) {
   // min/max real de t: el dataset concatena fuentes en orden de archivo, así
@@ -57,8 +57,6 @@ function buildTz(dataset) {
   const iana = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   return intlTz(iana, { startSec: first - 86400, endSec: last + 86400 });
 }
-
-// ---------- análisis ----------
 
 async function analyze(sources, { onProgress }) {
   ds = await parse(sources, { onProgress });
@@ -104,8 +102,6 @@ function refreshModel() {
   current = aggregate(subset, { tz, now: model.meta.generatedAt });
 }
 
-// ---------- routing ----------
-
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, '');
   const [name, id] = h.split('/');
@@ -114,12 +110,7 @@ function parseHash() {
 
 function navHTML(active) {
   const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
-  // Las 6 secciones en UNA fila deslizante (nada oculto tras botón).
-  return `<div class="app-actions">
-    <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">Exportar datos</button>
-    <button type="button" class="btn btn-accent-outline" data-action="reset">Nuevos archivos</button>
-  </div>
-  <nav class="app-nav" aria-label="Secciones">
+  return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('sessions', 'Sesiones', 'sessions')}
     ${link('discovery', 'Descubrimiento', 'discovery')}
@@ -164,10 +155,18 @@ function render() {
   const nav = appRoot.querySelector('.app-nav');
   if (nav) {
     nav.scrollLeft = navX;
+    // Fade izquierdo solo con scroll real: en reposo atenuaría la 1ra sección.
+    const syncNavFade = () => nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
+    syncNavFade();
+    nav.addEventListener('scroll', syncNavFade, { passive: true });
     // La sección activa entra en vista solo si no se ve (nearest = sin
     // movimiento cuando ya está visible; nunca scrollea la página).
     nav.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  // Header y footer solo en la vista app: en inicio el footer repite el
+  // aviso de privacidad de la tarjeta verde y las acciones no aplican.
+  headerActions?.removeAttribute('hidden');
+  siteFooter?.removeAttribute('hidden');
   wireFilters();
   wireView();
 }
@@ -223,7 +222,6 @@ function wireFilters() {
     adv.addEventListener('toggle', () => { adv.dataset.touched = '1'; }, { once: true });
   }
 
-  // Presets de rango.
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const p = RANGE_PRESETS.find((x) => x.id === btn.dataset.preset);
@@ -237,7 +235,6 @@ function wireFilters() {
     });
   });
 
-  // Año / mes.
   appRoot.querySelectorAll('[data-filter="year"]').forEach((sel) => {
     sel.addEventListener('change', () => {
       const v = sel.value;
@@ -281,7 +278,6 @@ function wireFilters() {
   if (fromInput) fromInput.addEventListener('change', onDate);
   if (toInput) toInput.addEventListener('change', onDate);
 
-  // Días de semana.
   appRoot.querySelectorAll('[data-dow]').forEach((cb) => {
     cb.addEventListener('change', () => {
       const d = Number(cb.dataset.dow);
@@ -293,7 +289,6 @@ function wireFilters() {
     });
   });
 
-  // Franjas horarias.
   appRoot.querySelectorAll('[data-block]').forEach((cb) => {
     cb.addEventListener('change', () => {
       const b = BLOCKS.find((x) => x.id === Number(cb.dataset.block));
@@ -315,36 +310,13 @@ function wireFilters() {
     });
   });
 
-  // Limpiar / reset.
   appRoot.querySelectorAll('[data-action="clear"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state = emptyFilterState();
       applyAndRenderView();
     });
   });
-  appRoot.querySelectorAll('[data-action="reset"]').forEach((btn) => {
-    btn.addEventListener('click', () => location.reload());
-  });
 
-  // Exportar el modelo completo procesado como JSON (análisis externo).
-  // Descarga por Blob + <a download>: sin red, CSP intacta.
-  appRoot.querySelectorAll('[data-action="export"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!model) return;
-      const plain = modelToJSON(model, { now: Math.floor(Date.now() / 1000) });
-      const blob = new Blob([JSON.stringify(plain)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = exportFilename(plain.exportedAt);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
-  });
-
-  // Caché IndexedDB (banner).
   appRoot.querySelectorAll('[data-cache]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const a = btn.dataset.cache;
@@ -368,7 +340,7 @@ function wireFilters() {
   });
 }
 
-// ---------- vista (se re-renderiza sin tocar la barra de filtros) ----------
+// La vista se re-renderiza sin tocar la barra de filtros (persistencia de la barra).
 
 let searchTimer = 0;
 
@@ -456,7 +428,33 @@ function wireView() {
   });
 }
 
-// ---------- arranque ----------
+// En inicio el footer repite el aviso de privacidad de la tarjeta verde:
+// oculto hasta la primera vista de app (render lo vuelve a mostrar).
+siteFooter?.setAttribute('hidden', '');
+
+// Acciones del header: DOM estático fuera de #app-root, se cablean una vez.
+// Export descarga el modelo completo procesado como JSON (análisis externo)
+// por Blob + <a download>: sin red, CSP intacta.
+function exportModel() {
+  if (!model) return;
+  const plain = modelToJSON(model, { now: Math.floor(Date.now() / 1000) });
+  const blob = new Blob([JSON.stringify(plain)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = exportFilename(plain.exportedAt);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
+  btn.addEventListener('click', exportModel);
+});
+headerActions?.querySelectorAll('[data-action="reset"]').forEach((btn) => {
+  btn.addEventListener('click', () => location.reload());
+});
 
 const inputApi = setupInput({
   analyze,
@@ -471,7 +469,6 @@ const inputApi = setupInput({
   onClearCached: clearCached
 });
 
-// Si hay caché guardada, ofrecer cargarla sin re-parsear.
 if (cacheAvailable()) {
   hasCache().then((c) => inputApi.showCachedButtons(c));
 }

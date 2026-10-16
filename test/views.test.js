@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 
 import { renderView } from '../app/views.js';
 import { receiptText } from '../app/views.js';
-import { chipsHTML, locToISODate, isoDateToDay } from '../app/filter-ui.js';
+import { rankCardHTML } from '../app/views.js';
+import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay } from '../app/filter-ui.js';
+import { emptyFilterState } from '../src/filters.js';
 import { analyze } from '../src/analyze.js';
 import { memoryBytes } from '../src/parse/adapters/memory-bytes.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
@@ -107,6 +109,43 @@ test('calendar: último año desplegado, anteriores en details', async () => {
   // El último año (2024) va desplegado fuera de details.
   const beforeDetails = html.split('<details')[0];
   assert.ok(beforeDetails.includes('2024'), 'último año desplegado');
+});
+
+test('rankings: canciones muestran solo el nombre; álbumes apilan con artista', async () => {
+  const json = JSON.stringify([
+    { ts: '2024-06-01T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'A', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Álbum', spotify_track_uri: 'spotify:track:1' }
+  ]);
+  const model = await analyze(memoryBytes('ranklines.json', json), { tz: UTC, now: 1704067200 });
+  const tracks = rankCardHTML(model, { tab: 'tracks' });
+  assert.ok(!tracks.includes('class="cell-sub"'), 'canciones sin artista en segunda línea');
+  assert.ok(tracks.includes('title="A"'), 'tooltip de canción: solo el nombre');
+  assert.ok(!tracks.includes('A — X'), 'sin título — artista en la celda de canciones');
+  const albums = rankCardHTML(model, { tab: 'albums' });
+  assert.ok(albums.includes('class="cell-sub"'), 'álbumes conservan artista en segunda línea');
+  assert.ok(albums.includes('title="Álbum — X"'), 'tooltip de álbum: nombre completo');
+});
+
+test('rankings: título y artista escapados (canciones y álbumes)', async () => {
+  const json = JSON.stringify([
+    { ts: '2024-06-01T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'T<i>m</i>', master_metadata_album_artist_name: 'R&B "Live"', master_metadata_album_album_name: 'Ál<b>bum', spotify_track_uri: 'spotify:track:9' }
+  ]);
+  const model = await analyze(memoryBytes('xssrank.json', json), { tz: UTC, now: 1704067200 });
+  const tracks = rankCardHTML(model, { tab: 'tracks' });
+  assert.ok(tracks.includes('&lt;i&gt;'), 'título escapado');
+  assert.ok(!tracks.includes('<i>'), 'sin markup crudo del título');
+  assert.ok(!tracks.includes('R&amp;B'), 'el artista ya no aparece en el ranking de canciones');
+  const albums = rankCardHTML(model, { tab: 'albums' });
+  assert.ok(albums.includes('R&amp;B &quot;Live&quot;'), 'artista escapado en álbumes');
+  assert.ok(albums.includes('&lt;b&gt;'), 'álbum escapado');
+  assert.ok(!albums.includes('<b>'), 'sin markup crudo del álbum');
+});
+
+test('filter-ui: fechas custom dentro de los avanzados colapsables', async () => {
+  const model = await demoModel();
+  const bar = filterBarHTML(model, emptyFilterState());
+  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
+  assert.ok(details.includes('data-filter="from"'), 'Desde dentro del details');
+  assert.ok(details.includes('data-filter="to"'), 'Hasta dentro del details');
 });
 
 test('filter-ui: chips de entidad y conversión de fechas', async () => {

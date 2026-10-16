@@ -70,7 +70,6 @@ export function createTemporalAcc() {
         y.albumsMs.set(ak, (y.albumsMs.get(ak) || 0) + ev.ms);
       }
 
-      // monthly
       let mo = monthly.get(month);
       if (!mo) { mo = { plays: 0, ms: 0 }; monthly.set(month, mo); }
       mo.plays++;
@@ -113,7 +112,6 @@ export function createTemporalAcc() {
         }
       }
 
-      // weekday / hour / day_hour
       const wd = ev.dow;
       weekday[wd].plays++;
       weekday[wd].ms += ev.ms;
@@ -123,14 +121,12 @@ export function createTemporalAcc() {
       dayHour[dh]++;
       dayHourMs[dh] += ev.ms;
 
-      // blocks
       const b = blocks[block];
       b.plays++;
       b.ms += ev.ms;
       bump(b.artists, ev.ar, 1);
       bump(b.tracks, tk, 1);
 
-      // daily
       let d = daily.get(ev.day);
       if (!d) { d = { plays: 0, ms: 0, artists: new Map(), tracks: new Map() }; daily.set(ev.day, d); }
       d.plays++;
@@ -138,13 +134,11 @@ export function createTemporalAcc() {
       bump(d.artists, ev.ar, 1);
       bump(d.tracks, tk, 1);
 
-      // hour_tracks
       const ht = hourTracks[ev.hour];
       ht.set(tk, (ht.get(tk) || 0) + 1);
       const htm = hourTracksMs[ev.hour];
       htm.set(tk, (htm.get(tk) || 0) + ev.ms);
 
-      // primera/última canción del día
       if (!dayFirst.has(ev.day)) dayFirst.set(ev.day, tk);
       dayLast.set(ev.day, tk);
     },

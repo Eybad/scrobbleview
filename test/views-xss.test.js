@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { renderView, VIEWS } from '../app/views.js';
+import { renderView, VIEWS, rankCardHTML } from '../app/views.js';
 import { analyze } from '../src/analyze.js';
 import { memoryBytes } from '../src/parse/adapters/memory-bytes.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
@@ -35,7 +35,7 @@ function jsonConPayload(n) {
       reason: 'playlist',
       // reason_start/reason_end alimentan model.starts/model.ends, que son el
       // ÚNICO camino donde un string arbitrario del JSON entra como label de
-      // barChart (views.js:317-318) — la función que tenía el bug de doble
+      // barChart de sessionsView — la función que tenía el bug de doble
       // escape. Sin estas claves ese sink no se recorre end-to-end.
       reason_start: XSS,
       reason_end: XSS2,
@@ -64,10 +64,10 @@ test('views-xss: el payload de los nombres sobrevive hasta el modelo (el test no
     assert.ok(names.some((n) => n === XSS), 'el payload debe llegar al modelo sin sanitizar');
     assert.ok(names.some((n) => n === XSS2), 'el payload de artista debe llegar al modelo');
 
-    // Rankings del dashboard (views.js:137-140) y de wrappedView (views.js:473).
+    // Rankings (rankCardHTML) y wrappedView.
     assert.equal(model.tracks.top.byPlays[0].name, XSS, 'el payload debe liderar el ranking de canciones');
     assert.equal(model.artists.top.byMs[0].name, XSS2, 'el payload debe liderar el top de artistas por tiempo');
-    // reason_start/reason_end → model.starts/ends → barChart (views.js:317-318).
+    // reason_start/reason_end → model.starts/ends → barChart de sessionsView.
     assert.ok(model.starts.has(XSS), 'reason_start debe llegar a model.starts');
     assert.ok(model.ends.has(XSS2), 'reason_end debe llegar a model.ends');
   });
@@ -88,6 +88,17 @@ test('views-xss: los nombres del usuario quedan escapados en todas las vistas', 
   const cal = renderView('calendar', model, 2024);
   assert.ok(!cal.includes('<img src=x'), 'calendarView no debe inyectar el payload crudo');
   assert.ok(cal.includes('Calendario de actividad 2024'), 'el año de la ruta debe llegar al aria-label');
+
+  // El ranking de canciones renderiza el nombre solo (title = nombre); el de
+  // álbumes conserva el title compuesto "álbum — artista". Ambos llevan datos
+  // del usuario dentro de un atributo HTML: asertar el escape en cada forma,
+  // no solo en el nombre pelado.
+  const trackRanking = rankCardHTML(model, { tab: 'tracks' });
+  assert.ok(trackRanking.includes('title="&lt;img src=x onerror=alert(1)&gt;"'), 'el title de canciones lleva el nombre escapado');
+  assert.ok(!trackRanking.includes('title="<img'), 'ningún title de canciones lleva payload crudo');
+  const albumRanking = rankCardHTML(model, { tab: 'albums' });
+  assert.ok(albumRanking.includes('title="&lt;img src=z onerror=alert(3)&gt; — '), 'el title compuesto de álbumes empieza por el nombre escapado');
+  assert.ok(!albumRanking.includes('title="<img'), 'ningún title de álbumes lleva payload crudo');
 });
 
 test('views-xss: las fichas por id también escapan (artist/track/album)', async () => {

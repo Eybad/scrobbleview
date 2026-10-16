@@ -85,8 +85,6 @@ export function aggregate(ds, opts = {}) {
   });
 }
 
-// ---------- post-proceso ----------
-
 // Meses absolutos (y*12+m-1) para medir distancias: restar índices YYYYMM
 // (y*100+m) cruza mal el año (202401 − 202312 + 1 = 90 en vez de 2).
 function absoluteMonths(loc) {
@@ -125,7 +123,6 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, totals, groups,
   const { artists, tracks, albums } = groups;
   const n = ds.meta.count;
 
-  // Racha global y por año.
   const allDays = new Set(temporal.daily.keys());
   const streak = longestStreak(allDays);
   const yearlyStreaks = new Map();
@@ -137,7 +134,6 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, totals, groups,
   }
   for (const [year, set] of yearlyStreaks) yearlyStreaks.set(year, longestStreak(set));
 
-  // Razones: nombres resueltos desde dicts.
   const starts = new Map();
   for (const [rs, count] of behavior.starts) starts.set(ds.dicts.reasons.get(rs), count);
   const ends = new Map();
@@ -152,7 +148,6 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, totals, groups,
   }
   pairs.sort((a, b) => b.count - a.count);
 
-  // Transiciones: nombres de artista resueltos.
   const artistName = (ar) => (ar > 0 && artists.has(ar) ? artists.get(ar).name : '(Desconocido)');
   const transitionTop = transitions.top.map(({ from, to, count }) => ({
     from, to,
@@ -230,7 +225,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
   const tracksTop = { byPlays: byPlays(trackList).slice(0, TOP_N), byMs: byMs(trackList).slice(0, TOP_N) };
   const albumsTop = { byPlays: byPlays(albumList).slice(0, TOP_N), byMs: byMs(albumList).slice(0, TOP_N) };
 
-  // Skip rate (mín. MIN_PLAYS_FOR_RATE reproducciones).
   const rate = (list) => list
     .filter((x) => x.plays >= MIN_PLAYS_FOR_RATE)
     .sort((a, b) => b.skips / b.plays - a.skips / a.plays || b.plays - a.plays)
@@ -251,7 +245,7 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.run - a.run || b.track.plays - a.track.plays)
     .slice(0, TOP_RATE_N);
 
-  // Primera/última canción del día.
+  // Primera/última canción del día: el v2 keyea por tk (track+artista).
   const countByTrack = (map) => {
     const c = new Map();
     for (const tk of map.values()) c.set(tk, (c.get(tk) || 0) + 1);
@@ -264,7 +258,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
   const dayFirst = countByTrack(temporal.dayFirst);
   const dayLast = countByTrack(temporal.dayLast);
 
-  // Sesiones top.
   const sessByDuration = [...sessions.sessions]
     .sort((a, b) => b.duration - a.duration || b.ms - a.ms)
     .slice(0, TOP_SESSIONS_N);
@@ -272,7 +265,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.plays - a.plays || b.ms - a.ms)
     .slice(0, TOP_SESSIONS_N);
 
-  // Descubrimiento: absoluto y relativo.
   const disc = [...temporal.monthlyDiscovery.entries()];
   const discAbs = [...disc]
     .sort((a, b) => b[1].new - a[1].new || b[1].plays - a[1].plays)
@@ -292,7 +284,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.coverage - a.coverage || b.months.size - a.months.size || b.years.size - a.years.size || b.days.size - a.days.size || b.plays - a.plays)
     .slice(0, TOP_N);
 
-  // Longevidad: años activos, luego meses, días, plays.
   const longevity = [...artistList]
     .sort((a, b) => b.years.size - a.years.size || b.months.size - a.months.size || b.days.size - a.days.size || b.plays - a.plays)
     .slice(0, TOP_N);

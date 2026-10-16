@@ -12,8 +12,20 @@
 <body>
   <header class="site-header">
     <div class="container">
-      <p class="brand">Scrobbleview</p>
-      <p class="tagline">Tus estadísticas de Spotify, en tu dispositivo</p>
+      <div class="header-brand">
+        <p class="brand">Scrobbleview</p>
+        <p class="tagline">Tus estadísticas de Spotify, en tu dispositivo</p>
+      </div>
+      <div class="header-actions" id="header-actions" hidden>
+        <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+          Exportar datos
+        </button>
+        <button type="button" class="btn btn-secondary" data-action="reset" title="Volver a la pantalla de inicio para cargar otros archivos">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
+          Nuevos archivos
+        </button>
+      </div>
     </div>
   </header>
 
@@ -28,6 +40,7 @@
 
       <div id="drop-zone" class="drop-zone" tabindex="0" role="button"
            aria-label="Cargar archivos de historial de Spotify. Arrastrá los archivos o presioná Enter para elegirlos.">
+        <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
         <p class="drop-zone-title">Arrastrá tus archivos acá</p>
         <p class="drop-zone-hint">o presioná para elegirlos</p>
         <p class="drop-zone-files">Archivos <code>Streaming_History_Audio_*.json</code> (podés seleccionar varios)</p>

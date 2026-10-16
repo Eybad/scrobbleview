@@ -130,11 +130,9 @@ export function createScanner({ onEvent, onError }) {
 
   function setStringValue(bytes, i) {
     if (afterString === S.OBJECT_COLON) {
-      // es una key
       currentKey = matchKey(bytes);
       state = S.OBJECT_COLON;
     } else {
-      // es un value string
       if (currentKey) {
         if (currentKey.type !== 'string') {
           fail('E_SCHEMA', `Campo "${currentKey.name}": se esperaba ${currentKey.type}`, i);

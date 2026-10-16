@@ -55,7 +55,6 @@ const MAX_EPOCH_I32 = 0x7fffffff;
 // a 'T'. El offset truncado o fuera de rango invalida el timestamp completo.
 export function parseISOToEpoch(bytes, start = 0, end = bytes.length) {
   if (end - start < 19) return null;
-  // Separadores fijos.
   if (bytes[start + 4] !== 0x2d || bytes[start + 7] !== 0x2d) return null; // '-'
   const tsep = bytes[start + 10];
   if (tsep !== 0x54 && tsep !== 0x20) return null; // 'T' o ' '

@@ -11,8 +11,6 @@ import {
 } from '../src/charts.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 
-// ---------- helpers ----------
-
 function card(title, body, cls = '', titleHtml = false) {
   const h = title ? `<h2>${titleHtml ? title : esc(title)}</h2>` : '';
   return `<section class="card ${cls}">${h}${body}</section>`;
@@ -55,16 +53,27 @@ function table(headers, rows, cls = '', colClasses = []) {
 }
 
 function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones' }) {
+  // Con `sub` (ej. artista de un álbum) el nombre se apila en 2 líneas:
+  // título como enlace, sub en gris secundario. El title del enlace lleva
+  // el nombre completo "título — sub".
+  const cell = (r) => {
+    const full = r.sub ? `${r.name} — ${r.sub}` : r.name;
+    const inner = r.sub
+      ? `<span class="cell-name">${esc(r.name)}</span><span class="cell-sub">${esc(r.sub)}</span>`
+      : esc(r.name);
+    return link
+      ? `<a class="cell-link" href="${link(r)}" title="${esc(full)}">${inner}</a>`
+      : `<span class="cell-link" title="${esc(full)}">${inner}</span>`;
+  };
   return table(['#', 'Nombre', valueLabel], rows.map((r, i) => [
     String(i + 1),
-    link ? `<a class="cell-name" href="${link(r)}" title="${esc(r.name)}">${esc(r.name)}</a>` : `<span class="cell-name" title="${esc(r.name)}">${esc(r.name)}</span>`,
+    cell(r),
     valueFmt(r.value)
   ]), '', ['c', '', 'n']);
 }
 
-// El title lleva el nombre completo: en tablas el nombre se trunca con
-// ellipsis (CSS .cell-name) y el tooltip lo revela (táctil: vía toast de
-// <title>? no — los links navegan; el title es mejora progresiva desktop).
+// El title revela el nombre truncado por ellipsis (en táctil no hay tooltip:
+// el enlace navega a la ficha, donde están los detalles).
 function entityLink(type, id, name) {
   return `<a class="cell-name" href="#/${type}/${id}" title="${esc(name)}">${esc(name)}</a>`;
 }
@@ -104,8 +113,8 @@ export function rankCardHTML(model, opts = {}) {
   const rowOf = tab === 'artists'
     ? (a) => ({ name: a.name, value: byMs ? a.ms : a.plays, id: a.id, link: `#/artist/${a.id}` })
     : tab === 'tracks'
-      ? (tr) => ({ name: `${tr.name} — ${tr.artist}`, value: byMs ? tr.ms : tr.plays, id: tr.tk, hay: `${tr.name} ${tr.artist}`.toLowerCase(), link: `#/track/${tr.tk}` })
-      : (al) => ({ name: `${al.name} — ${al.artist}`, value: byMs ? al.ms : al.plays, id: al.id, hay: `${al.name} ${al.artist}`.toLowerCase(), link: `#/album/${al.id}` });
+      ? (tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk, hay: `${tr.name} ${tr.artist}`.toLowerCase(), link: `#/track/${tr.tk}` })
+      : (al) => ({ name: al.name, sub: al.artist, value: byMs ? al.ms : al.plays, id: al.id, hay: `${al.name} ${al.artist}`.toLowerCase(), link: `#/album/${al.id}` });
 
   let rows;
   if (query) {
@@ -161,15 +170,12 @@ function warningsNote(model) {
   return `<p class="warnings-note" role="note">Se ignoraron: ${esc(parts.join(', '))}.</p>`;
 }
 
-// ---------- dashboard ----------
-
 export function dashboard(model) {
   const t = model.totals;
   const range = model.meta.firstTs != null
     ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`
     : '—';
 
-  // Heatmap día × hora (ms).
   const heatCells = [];
   let maxMs = 0;
   for (let d = 0; d < 7; d++) {
@@ -196,22 +202,18 @@ export function dashboard(model) {
     caption: 'Tiempo escuchado por hora y día (ms)'
   });
 
-  // Evolución mensual.
   const monthly = sortedMonths(model.monthly).map((mi) => ({
     label: monthLabel(mi),
     y: model.monthly.get(mi).ms
   }));
   const evolution = lineChart({ points: monthly, format: fmtMs });
 
-  // Distribución de duración.
   const dist = donut({
     segments: t.msDist.map((b) => ({ label: b.label, value: b.count })),
     format: fmtNum,
     centerLabel: fmtNum(t.records)
   });
 
-  // Rankings (pestaña + métrica + top N + buscador; main.js re-renderiza
-  // solo #rank-card ante esos controles para no perder el foco).
   const rankings = `<div id="rank-card">${rankCardHTML(model, {})}</div>`;
 
   const skipRate = t.records > 0 ? fmtPct(t.skipped / t.records) : '—';
@@ -275,8 +277,6 @@ export function dashboard(model) {
       { label: 'Saltadas por duración', value: fmtNum(t.playsSkipped) }
     ])}`;
 }
-
-// ---------- fichas ----------
 
 export function artistView(model, ar) {
   const a = model.artists.byId.get(ar);
@@ -423,8 +423,6 @@ export function albumView(model, ak) {
     </div>`;
 }
 
-// ---------- sesiones ----------
-
 export function sessionsView(model) {
   const s = model.sessionsStats;
   const topDur = model.tables.sessions.byDuration;
@@ -467,8 +465,6 @@ export function sessionsView(model) {
     ${card('Razones de fin', barChart({ data: [...model.ends.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }))}`;
 }
 
-// ---------- descubrimiento ----------
-
 export function discoveryView(model) {
   const disc = [...model.monthlyDiscovery.entries()].sort((a, b) => a[0] - b[0]);
   const line = lineChart({
@@ -503,8 +499,6 @@ export function discoveryView(model) {
     </div>`;
 }
 
-// ---------- comparación anual ----------
-
 export function yearlyView(model) {
   const years = [...model.yearly.keys()].sort((a, b) => a - b);
   const rows = years.map((y) => {
@@ -536,8 +530,6 @@ export function yearlyView(model) {
     ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Saltadas', 'Racha'], rows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n']))}
     ${card('Franjas por año', stacked)}`;
 }
-
-// ---------- calendario ----------
 
 export function calendarView(model, year) {
   const years = [...model.yearly.keys()].sort((a, b) => a - b);
@@ -571,7 +563,7 @@ export function calendarView(model, year) {
 }
 
 export function calendarIndexView(model) {
-  const years = [...model.yearly.keys()].sort((a, b) => b - a); // último año primero
+  const years = [...model.yearly.keys()].sort((a, b) => b - a);
   const yearGrid = (y) => {
     const days = [...model.daily.entries()]
       .filter(([d]) => civilFromDays(d).y === y)
@@ -600,8 +592,6 @@ export function calendarIndexView(model) {
         <div class="chart-scroll chart-scroll--cal">${yearGrid(y)}</div>
       </details>`).join('')}`;
 }
-
-// ---------- wrapped ----------
 
 export function wrappedView(model, id, ctx) {
   const t = model.totals;
@@ -686,8 +676,6 @@ export function receiptText(model) {
   ];
   return lines.join('\n');
 }
-
-// ---------- registro de vistas ----------
 
 export const VIEWS = {
   dashboard: (model) => dashboard(model),

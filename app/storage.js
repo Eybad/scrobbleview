@@ -17,8 +17,6 @@ const DB_VERSION = 1;
 const STORE = 'columns';
 const DICT_NAMES = ['tracks', 'artists', 'albums', 'reasons'];
 
-// ---------- serialización pura (testeable) ----------
-
 export function serialize(ds) {
   const rows = {};
   for (const f of FIELDS) rows[`col:${f}`] = ds[f].buffer;
@@ -57,8 +55,6 @@ export function deserialize(rows) {
   assertDataset(ds);
   return ds;
 }
-
-// ---------- capa IndexedDB (solo navegador) ----------
 
 export function isAvailable() {
   return typeof indexedDB !== 'undefined';
