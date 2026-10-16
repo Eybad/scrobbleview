@@ -11,7 +11,7 @@
 //    (produce doble escape visible: "&amp;lt;").
 //  · `format` es la excepción: su retorno se emite crudo porque solo recibe
 //    números y debe poder devolver markup numérico. Los formatters del proyecto
-//    (fmtNum/fmtMs/fmtPct) pasan por toLocaleString/toFixed y no pueden emitir
+//    (fmtNum/fmtMs/fmtPct/fmtBytes) pasan por toLocaleString/toFixed y no pueden emitir
 //    "<". Si alguna vez se le pasa un formatter con dato de usuario, hay que
 //    escapar SU retorno en el generator.
 //  · `accent`, `colors` y `colorScale` se interpolan en atributos sin escapar:
@@ -57,6 +57,19 @@ export function fmtMs(ms) {
 
 export function fmtPct(x) {
   return `${(x * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })}%`;
+}
+
+// Múltiplos binarios (1024), la convención de los gestores de archivos.
+export function fmtBytes(n) {
+  if (n < 1024) return `${Math.round(n)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = n;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toLocaleString('es-ES', { maximumFractionDigits: 1 })} ${units[unitIndex]}`;
 }
 
 // Escala discreta cuantizada de 6 niveles sobre la paleta del design system.

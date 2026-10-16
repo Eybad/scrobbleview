@@ -7,7 +7,7 @@
 import {
   barChart, lineChart, heatmap, heatmapTable, donut, sparkline,
   calendarGrid, listeningClock, stackedBar,
-  esc, fmtNum, fmtMs, fmtPct, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
+  esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
 } from '../src/charts.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 
@@ -175,6 +175,7 @@ export function dashboard(model) {
   const range = model.meta.firstTs != null
     ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`
     : '—';
+  const filesLabel = model.meta.sources.length === 1 ? 'archivo' : 'archivos';
 
   const heatCells = [];
   let maxMs = 0;
@@ -223,7 +224,7 @@ export function dashboard(model) {
   return `
     <header class="view-header">
       <h1>Tu resumen</h1>
-      <p class="view-meta">${esc(range)} · zona ${esc(model.meta.tzId)} · ${esc(model.meta.sources.length)} archivo(s) · ${fmtNum(model.meta.bytesRead)} bytes</p>
+      <p class="view-meta">${esc(range)} · ${fmtNum(model.meta.sources.length)} ${filesLabel} · ${fmtBytes(model.meta.bytesRead)}</p>
       ${warningsNote(model)}
     </header>
     ${kpis([
@@ -622,7 +623,7 @@ export function wrappedView(model, id, ctx) {
   return `
     <header class="view-header">
       <h1>${esc(title)}</h1>
-      <p class="view-meta">${esc(model.meta.tzId)} · generado ${new Date(model.meta.generatedAt * 1000).toLocaleString('es-ES')}</p>
+      <p class="view-meta">generado ${new Date(model.meta.generatedAt * 1000).toLocaleString('es-ES')}</p>
     </header>
     ${kpis([
       { label: 'Artista del año', value: topArtist ? entityLink('artist', topArtist.id, topArtist.name) : '—' },

@@ -68,6 +68,23 @@ test('dashboard: rankings con álbumes/métrica/topN/buscador + tablas', async (
   assert.ok(html.includes('→'), 'la racha trae fechas de inicio → fin');
 });
 
+test('meta de vistas: sin zona horaria, archivos en plural y bytes humanizados', async () => {
+  const model = await demoModel();
+  const dash = renderView('dashboard', model);
+  assert.ok(dash.includes('1 archivo ·'), 'singular con una sola fuente');
+  assert.ok(!dash.includes('zona '), 'sin "zona <tzId>" en el meta del dashboard');
+  assert.ok(!dash.includes('archivo(s)'), 'sin archivo(s)');
+  assert.ok(/[\d.,]+ (B|KB|MB|GB)</.test(dash), 'bytes humanizados con unidad');
+  assert.ok(!dash.includes(' bytes<'), 'sin bytes crudos');
+  const two = await analyze([
+    memoryBytes('a.json', json2y()),
+    memoryBytes('b.json', json2y())
+  ], { tz: UTC, now: 1704067200 });
+  assert.ok(renderView('dashboard', two).includes('2 archivos ·'), 'plural con dos fuentes');
+  const wrapped = renderView('wrapped', model);
+  assert.ok(wrapped.includes('view-meta">generado '), 'el meta de wrapped empieza en "generado" (sin tz)');
+});
+
 test('discovery: constancia y longevidad', async () => {
   const model = await demoModel();
   const html = renderView('discovery', model);
