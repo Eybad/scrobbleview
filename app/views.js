@@ -224,7 +224,8 @@ export function dashboard(model) {
   return `
     <header class="view-header">
       <h1>Tu resumen</h1>
-      <p class="view-meta">${esc(range)} · ${fmtNum(model.meta.sources.length)} ${filesLabel} · ${fmtBytes(model.meta.bytesRead)}</p>
+      <p class="view-meta">${esc(range)}</p>
+      <p class="view-meta view-meta-sub">${fmtNum(model.meta.sources.length)} ${filesLabel} · ${fmtBytes(model.meta.bytesRead)}</p>
       ${warningsNote(model)}
     </header>
     ${kpis([

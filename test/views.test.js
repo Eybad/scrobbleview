@@ -72,6 +72,9 @@ test('dashboard: rankings con álbumes/métrica/topN/buscador + tablas', async (
 test('meta de vistas: sin zona horaria, archivos en plural y bytes humanizados', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);
+  const firstMeta = dash.match(/view-meta">([^<]*)</)[1];
+  assert.ok(!firstMeta.includes('·'), 'primera línea: solo el rango de fechas');
+  assert.ok(dash.includes('view-meta-sub">1 archivo'), 'archivos y bytes en segunda línea más chica');
   assert.ok(dash.includes('1 archivo ·'), 'singular con una sola fuente');
   assert.ok(!dash.includes('zona '), 'sin "zona <tzId>" en el meta del dashboard');
   assert.ok(!dash.includes('archivo(s)'), 'sin archivo(s)');
