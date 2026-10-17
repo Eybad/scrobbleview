@@ -19,6 +19,7 @@ import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, is
 const appRoot = document.getElementById('app-root');
 const headerActions = document.getElementById('header-actions');
 const siteFooter = document.querySelector('.site-footer');
+const tagline = document.querySelector('.tagline');
 
 let ds = null;
 let derived = null;
@@ -196,9 +197,12 @@ function render() {
     nav.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   // Header actions y footer solo en la vista app: en inicio el footer repite
-  // el aviso de privacidad de la tarjeta verde y las acciones no aplican.
+  // el aviso de privacidad y las acciones no aplican. La tagline también se
+  // oculta: junto al nav compite con el título de la vista (el reload del
+  // botón "Cargar archivos" la restaura).
   headerActions?.removeAttribute('hidden');
   siteFooter?.removeAttribute('hidden');
+  tagline?.setAttribute('hidden', '');
   wireFilters();
   wireView();
 }

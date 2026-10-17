@@ -218,11 +218,17 @@ export function filterBarHTML(model, state) {
         <label class="field">Hasta <input type="date" data-filter="to" value="${toISO}"></label>
       </div>
       <div class="filter-row">
-        <select data-filter="year" aria-label="Año">${yearOpts}</select>
-        <select data-filter="month" aria-label="Mes" id="filter-month">${monthOpts}</select>
+        <label class="field">Año <select data-filter="year" aria-label="Año">${yearOpts}</select></label>
+        <label class="field">Mes <select data-filter="month" aria-label="Mes" id="filter-month">${monthOpts}</select></label>
       </div>
-      <div class="filter-row filter-group-start chip-grid chip-grid-7" role="group" aria-label="Días de semana">${dows}</div>
-      <div class="filter-row chip-grid chip-grid-4" role="group" aria-label="Franjas del día">${blocks}</div>
+      <div class="filter-row filter-group-start filter-group">
+        <p class="filter-caption">Días</p>
+        <div class="chip-grid chip-grid-7" role="group" aria-label="Días de semana">${dows}</div>
+      </div>
+      <div class="filter-row filter-group">
+        <p class="filter-caption">Franjas del día</p>
+        <div class="chip-grid chip-grid-4" role="group" aria-label="Franjas del día">${blocks}</div>
+      </div>
       <div class="filter-row filter-group-start toggle-grid">${toggles}</div>
     </details>
   </div>`;
