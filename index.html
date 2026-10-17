@@ -14,18 +14,16 @@
     <div class="container">
       <div class="header-brand">
         <p class="brand">Scrobbleview</p>
-        <p class="tagline">Tus estadísticas de Spotify, en tu dispositivo</p>
+        <div class="header-actions" id="header-actions" hidden>
+          <button type="button" class="btn-icon" data-action="reset" aria-label="Cargar archivos" title="Cargar archivos: vuelve al inicio para elegir otros archivos">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>
+          </button>
+          <button type="button" class="btn-icon" data-action="export" aria-label="Exportar datos" title="Exportar datos: descarga el modelo completo (ignora los filtros activos)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="header-actions" id="header-actions" hidden>
-        <button type="button" class="btn btn-secondary" data-action="export" title="Descarga el modelo completo (ignora los filtros activos)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
-          Exportar datos
-        </button>
-        <button type="button" class="btn btn-secondary" data-action="reset" title="Volver a la pantalla de inicio para cargar otros archivos">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
-          Nuevos archivos
-        </button>
-      </div>
+      <p class="tagline">Tus estadísticas de Spotify, en tu dispositivo</p>
     </div>
   </header>
 

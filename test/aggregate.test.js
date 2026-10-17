@@ -51,8 +51,10 @@ test('determinismo: fixedTz vs offset-table producen el mismo modelo', () => {
     { t: D0 + 90000, m: 5000, track: 'C', artist: 'Z', reasonEnd: 'logout' }
   ];
   const ds = buildDataset(events);
-  const a = aggregate(ds, { tz: fixedTz('tz', -240) });
-  const b = aggregate(ds, { tz: offsetTable('tz', [[0, -240]]) });
+  // now fijo: sin él, generatedAt usa Date.now() y dos llamadas pueden cruzar
+  // el límite de segundo bajo carga (test flaky; mismo caso que analyze.test.js).
+  const a = aggregate(ds, { tz: fixedTz('tz', -240), now: 1704067200 });
+  const b = aggregate(ds, { tz: offsetTable('tz', [[0, -240]]), now: 1704067200 });
   assert.deepStrictEqual(a, b);
 });
 

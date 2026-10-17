@@ -121,31 +121,43 @@ main.container {
   padding: var(--sp-4) 0;
 }
 
-.site-header .container {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-1) var(--sp-4);
-}
-
+/* Fila del brand: título a la izquierda, acciones de app (íconos ghost) a
+   la derecha. La tagline vive fuera, apilada debajo: no compite por ancho. */
 .header-brand {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-1) var(--sp-4);
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
 }
 
-/* Acciones de app (exportar / nuevos archivos) junto al título: liberan el
-   above-the-fold de las vistas. Ocultos en inicio; main.js los muestra. */
+/* Acciones de app (exportar / cargar archivos): íconos ghost en la fila del
+   brand. margin-left:auto las empuja a la derecha; ocultas en inicio. */
 .header-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: var(--sp-2);
+  margin-left: auto;
 }
 
-.header-actions .btn {
-  padding: var(--sp-2) var(--sp-3);
+/* Botón de solo ícono: target táctil 44×44 (WCAG 2.5.5) sin peso visual;
+   el verbo viaja en aria-label + title (tooltip nativo en desktop). */
+.btn-icon {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-icon:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .brand {
@@ -169,7 +181,7 @@ main.container {
 }
 
 .tagline {
-  margin: 0;
+  margin: var(--sp-1) 0 0;
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
@@ -348,23 +360,16 @@ main.container {
   background: var(--accent-soft);
 }
 
-.cache-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--sp-3) var(--sp-4);
-  margin-bottom: var(--sp-4);
+/* Variante callada de .btn-link: el descarte de un toast nunca compite con
+   la acción principal (el acento queda reservado para confirmar). El hover
+   lleva la clase doble para ganarle a .btn-link:hover en la cascada. */
+.btn-quiet {
+  color: var(--text-muted);
 }
 
-.cache-banner p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
+.btn-link.btn-quiet:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .cache-actions {
@@ -854,11 +859,8 @@ td a:hover {
   margin-top: var(--sp-2);
 }
 
+/* Sin caja propia (anti-carditis): las píldoras flotan sobre el fondo. */
 .filter-bar {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-6);
   display: flex;
   flex-direction: column;
@@ -900,10 +902,11 @@ td a:hover {
   border-color: var(--border-strong);
 }
 
-/* Fechas: 1 columna en móvil (2 filas, aceptado), 2 columnas desde 700px. */
+/* Fechas: 2 columnas siempre (condensa el panel de avanzados; en 360px cada
+   input conserva ~160px, suficiente para el picker nativo). */
 .filter-dates {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--sp-2);
 }
 
@@ -947,12 +950,6 @@ td a:hover {
   border-color: var(--border-strong);
 }
 
-@media (min-width: 700px) {
-  .filter-dates {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
 .filter-bar button[data-preset].active,
 .filter-bar button[aria-pressed="true"] {
   /* Mismo lenguaje que tabs/nav/chips (translúcido): un seleccionado nunca
@@ -961,11 +958,6 @@ td a:hover {
   color: var(--accent);
   border-color: var(--accent);
   /* Sin negrita: evita que el preset activo reordene el wrap. */
-}
-
-.filter-bar button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .filter-bar select {
@@ -978,32 +970,70 @@ td a:hover {
   color: var(--text);
 }
 
-/* Hit-area táctil en el label (el padding en el input nativo es errático):
-   el label mide 44px de alto, el checkbox conserva su tamaño nativo. */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
+/* Chips conmutables (días/franjas): bandas de una fila. Mismo lenguaje que
+   los presets: inactivo = surface-2 + borde visible (affordance clara en
+   brillo alto), activo = translúcido accent. */
+.chip-grid {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.chip-grid-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.chip-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.chip-toggle {
+  font: inherit;
   font-size: var(--fs-sm);
-  color: var(--text-muted);
+  padding: var(--sp-1) 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
   cursor: pointer;
   min-height: 44px;
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--radius-sm);
-  transition: color 0.15s ease, background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.chip:hover {
-  color: var(--text);
-  background: var(--surface-2);
+.chip-toggle:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
-.chip input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 22px;
-  height: 22px;
-  flex: none;
-  margin: 0;
+.chip-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Toggles skip/shuffle/offline: grilla de 3 columnas iguales (sin fila
+   desbalanceada); caption arriba, select a ancho completo debajo. */
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.toggle-grid .chip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-1);
+  padding: 0;
+  min-height: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.toggle-grid .chip select {
+  width: 100%;
 }
 
 .chip-active {
@@ -1029,17 +1059,45 @@ td a:hover {
   margin: 0;
 }
 
+/* display:flex quita el marker nativo de <details>: el chevron lo reemplaza
+   a la izquierda del texto (convención de disclosure). Fila completa como
+   hit-area táctil; el chevron rota al abrir. */
 .filter-advanced summary {
   cursor: pointer;
   color: var(--text-muted);
   font-size: var(--fs-sm);
   min-height: 44px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  gap: var(--sp-2);
+}
+
+.filter-advanced summary .chevron {
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+
+.filter-advanced[open] summary .chevron {
+  transform: rotate(180deg);
 }
 
 .filter-advanced summary:hover {
   color: var(--text);
+}
+
+/* Las filas viven dentro de <details>: el gap de .filter-bar no las alcanza.
+   Ritmo por grupos: 12px tras el summary, 8px dentro del grupo, 16px entre
+   grupos (fechas+período / días+franjas / toggles). */
+.filter-advanced .filter-row {
+  margin-top: var(--sp-3);
+}
+
+.filter-advanced .filter-row + .filter-row {
+  margin-top: var(--sp-2);
+}
+
+.filter-advanced .filter-row.filter-group-start {
+  margin-top: var(--sp-4);
 }
 
 /* Controles de rankings: grilla con lugares FIJOS (métrica con scroll
@@ -1082,6 +1140,36 @@ td a:hover {
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
+}
+
+/* Toast del guardado local como bottom sheet: anclado a la base de la
+   pantalla (un elemento flotante a media altura parece descolocado). La
+   oferta persiste hasta responder, el resto se apaga solo (main.js). */
+.cache-toast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0 auto;
+  max-width: min(100%, 560px);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.cache-toast p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
 
 /* Toast para títulos de gráficos en táctil. */
@@ -1129,13 +1217,6 @@ details.calendar-year summary {
 
 details.calendar-year summary:hover {
   color: var(--accent);
-}
-
-.filter-summary {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 /* Tabs de rankings: una línea con scroll horizontal (nunca wrap: el modelo

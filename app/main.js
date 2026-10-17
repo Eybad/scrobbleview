@@ -12,9 +12,8 @@ import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, monthOptionsHTML, isoDateToDay, locToISODate } from './filter-ui.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts } from './filter-ui.js';
 import { modelToJSON, exportFilename } from '../src/export.js';
-import { fmtNum, fmtMs } from '../src/charts.js';
 import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
 const appRoot = document.getElementById('app-root');
@@ -28,7 +27,7 @@ let current = null; // modelo activo (filtrado o completo)
 let tz = null;
 let state = emptyFilterState();
 let rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
-let cacheOffer = null; // null | 'save' | 'saved' | 'error'
+let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
 
 // Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
 // re-renders porque vive fuera de #app-root; el texto va por textContent).
@@ -81,13 +80,14 @@ async function loadCached() {
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
   current = model;
-  cacheOffer = 'saved';
+  cacheOffer = 'loaded';
   return { ds, model, tz };
 }
 
 async function clearCached() {
   await cacheClear();
   cacheOffer = null;
+  updateCacheToast();
   inputApi.showCachedButtons(false);
 }
 
@@ -120,29 +120,60 @@ function navHTML(active) {
   </nav>`;
 }
 
-function cacheBannerHTML() {
+// Toast del guardado local: vive fuera de #app-root (sobrevive a los
+// re-renders) y flotante (no consume fold: el banner en línea empujaba los
+// datos más de media pantalla en móvil). La oferta 'save' es persistente
+// hasta responder; 'saved'/'loaded'/'error' son transitorios y reinician
+// el estado para que el próximo render no los reviva.
+const cacheToast = document.createElement('div');
+cacheToast.id = 'cache-toast';
+cacheToast.className = 'cache-toast';
+cacheToast.setAttribute('role', 'status');
+cacheToast.hidden = true;
+document.body.appendChild(cacheToast);
+let cacheTimer = 0;
+
+function updateCacheToast() {
+  clearTimeout(cacheTimer);
   if (cacheOffer === 'save') {
-    return `<div class="cache-banner" role="status">
-      <p>¿Guardar en este dispositivo? Se escribe tu historial completo (fechas, artistas, canciones) en claro en el disco, hasta que lo borres.</p>
+    cacheToast.innerHTML = `<p>¿Guardar en este dispositivo? Se escribe tu historial completo (fechas, artistas, canciones) en claro en el disco, hasta que lo borres.</p>
       <div class="cache-actions">
-        <button type="button" class="btn btn-secondary" data-cache="save">Guardar</button>
-        <button type="button" class="btn btn-link" data-cache="dismiss">No por ahora</button>
-      </div>
-    </div>`;
+        <button type="button" class="btn btn-primary" data-cache="save">Guardar</button>
+        <button type="button" class="btn btn-link btn-quiet" data-cache="dismiss">No por ahora</button>
+      </div>`;
+    cacheToast.hidden = false;
+    return;
   }
-  if (cacheOffer === 'saved') {
-    return `<div class="cache-banner" role="status">
-      <p>Datos guardados en este dispositivo.</p>
-      <button type="button" class="btn btn-link" data-cache="clear">Borrar datos guardados</button>
-    </div>`;
+  if (cacheOffer === 'saved') cacheToast.innerHTML = `<p>Datos guardados en este dispositivo.</p>`;
+  else if (cacheOffer === 'loaded') cacheToast.innerHTML = `<p>Mostrando los datos guardados en este dispositivo.</p>`;
+  else if (cacheOffer === 'error') cacheToast.innerHTML = `<p>No se pudo guardar en este dispositivo (cuota o navegador). Podés seguir sin guardar.</p>`;
+  else {
+    cacheToast.hidden = true;
+    return;
   }
-  if (cacheOffer === 'error') {
-    return `<div class="cache-banner" role="status">
-      <p>No se pudo guardar en este dispositivo (cuota o navegador). Podés seguir sin guardar.</p>
-    </div>`;
-  }
-  return '';
+  cacheToast.hidden = false;
+  cacheTimer = setTimeout(() => { cacheOffer = null; cacheToast.hidden = true; }, 4000);
 }
+
+// Delegación única: los botones del toast se re-crean con cada estado.
+cacheToast.addEventListener('click', async (e) => {
+  const btn = e.target.closest?.('[data-cache]');
+  if (!btn) return;
+  if (btn.dataset.cache === 'save') {
+    const ok = await cacheSave(ds);
+    if (ok) {
+      cacheOffer = 'saved';
+      cachePersist(); // best-effort: pedir al SO que no evicte la caché
+    } else {
+      // Si falló y había caché previa, borrarla: datos viejos engañarían.
+      await cacheClear();
+      cacheOffer = 'error';
+    }
+  } else {
+    cacheOffer = null; // No por ahora
+  }
+  updateCacheToast();
+});
 
 function render() {
   if (!current) return;
@@ -151,7 +182,8 @@ function render() {
   // para que navegar no pegue un salto brusco (el bug se veía al tocar una
   // sección con el nav deslizado a la derecha).
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
-  appRoot.innerHTML = cacheBannerHTML() + navHTML(name) + filterBarHTML(model, state, current.totals) + `<div id="view-root">${renderView(name, current, id, { years: state.years })}</div>`;
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${renderView(name, current, id, { years: state.years })}</div>`;
+  updateCacheToast();
   const nav = appRoot.querySelector('.app-nav');
   if (nav) {
     nav.scrollLeft = navX;
@@ -163,8 +195,8 @@ function render() {
     // movimiento cuando ya está visible; nunca scrollea la página).
     nav.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
-  // Header y footer solo en la vista app: en inicio el footer repite el
-  // aviso de privacidad de la tarjeta verde y las acciones no aplican.
+  // Header actions y footer solo en la vista app: en inicio el footer repite
+  // el aviso de privacidad de la tarjeta verde y las acciones no aplican.
   headerActions?.removeAttribute('hidden');
   siteFooter?.removeAttribute('hidden');
   wireFilters();
@@ -172,8 +204,8 @@ function render() {
 }
 
 // Cambio de filtro: re-agrega y actualiza SOLO la vista + los dinámicos de la
-// barra (presets, meses, fechas, chips, resumen). La barra persiste: no se
-// pierde el foco ni el estado del <details> de avanzados.
+// barra (presets, meses, fechas, chips, fila de Limpiar). La barra persiste: no
+// se pierde el foco ni el estado del <details> de avanzados.
 function applyAndRenderView() {
   refreshModel();
   const [name, id] = parseHash();
@@ -196,21 +228,24 @@ function updateFilterDynamics() {
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', String(active));
   });
-  const month = document.getElementById('filter-month');
-  if (month) month.innerHTML = monthOptionsHTML(model, state);
+  // Los shortcuts de año/mes reflejan el rango vigente (sync inverso): match
+  // exacto → el valor, rango arbitrario → "Personalizado", sin rango →
+  // placeholder. Nunca hay dos verdades sobre el período activo.
+  syncRangeShortcuts(bar.querySelector('[data-filter="year"]'), document.getElementById('filter-month'), state.range);
+  bar.querySelectorAll('[data-dow]').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(state.dows?.has(Number(btn.dataset.dow)) ?? false));
+  });
+  bar.querySelectorAll('[data-block]').forEach((btn) => {
+    const b = BLOCKS.find((x) => x.id === Number(btn.dataset.block));
+    const on = state.hours != null && b.hours.every((h) => state.hours.has(h));
+    btn.setAttribute('aria-pressed', String(on));
+  });
   const from = bar.querySelector('[data-filter="from"]');
   if (from) from.value = state.range ? locToISODate(state.range.from) : '';
   const to = bar.querySelector('[data-filter="to"]');
   if (to) to.value = state.range ? locToISODate(state.range.to) : '';
   const chips = document.getElementById('filter-chips');
   if (chips) chips.innerHTML = chipsHTML(model, state);
-  const summary = document.getElementById('filter-summary');
-  if (summary) summary.textContent = `${fmtNum(current.totals.records)} reproducciones · ${fmtMs(current.totals.ms)}`;
-  const clear = document.getElementById('filter-clear');
-  if (clear) {
-    if (isFilterActive(state)) clear.removeAttribute('disabled');
-    else clear.setAttribute('disabled', '');
-  }
 }
 
 function wireFilters() {
@@ -238,21 +273,16 @@ function wireFilters() {
   appRoot.querySelectorAll('[data-filter="year"]').forEach((sel) => {
     sel.addEventListener('change', () => {
       const v = sel.value;
-      state.years = v ? new Set([Number(v)]) : null;
-      if (v) state.months = null;
+      if (!v) return;
+      state.range = rangeFromYear(Number(v));
       applyAndRenderView();
     });
   });
   appRoot.querySelectorAll('[data-filter="month"]').forEach((sel) => {
     sel.addEventListener('change', () => {
       const v = sel.value;
-      if (v) {
-        const mi = Number(v);
-        state.months = new Set([mi]);
-        state.years = new Set([Math.floor(mi / 100)]);
-      } else {
-        state.months = null;
-      }
+      if (!v) return;
+      state.range = rangeFromMonth(Number(v));
       applyAndRenderView();
     });
   });
@@ -278,22 +308,24 @@ function wireFilters() {
   if (fromInput) fromInput.addEventListener('change', onDate);
   if (toInput) toInput.addEventListener('change', onDate);
 
-  appRoot.querySelectorAll('[data-dow]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      const d = Number(cb.dataset.dow);
+  appRoot.querySelectorAll('[data-dow]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const d = Number(btn.dataset.dow);
+      const wasOn = state.dows?.has(d) ?? false;
       if (!state.dows) state.dows = new Set();
-      if (cb.checked) state.dows.add(d);
+      if (!wasOn) state.dows.add(d);
       else state.dows.delete(d);
       if (state.dows.size === 7 || state.dows.size === 0) state.dows = null;
       applyAndRenderView();
     });
   });
 
-  appRoot.querySelectorAll('[data-block]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      const b = BLOCKS.find((x) => x.id === Number(cb.dataset.block));
+  appRoot.querySelectorAll('[data-block]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const b = BLOCKS.find((x) => x.id === Number(btn.dataset.block));
+      const wasOn = state.hours != null && b.hours.every((h) => state.hours.has(h));
       if (!state.hours) state.hours = new Set();
-      if (cb.checked) b.hours.forEach((h) => state.hours.add(h));
+      if (!wasOn) b.hours.forEach((h) => state.hours.add(h));
       else b.hours.forEach((h) => state.hours.delete(h));
       if (state.hours.size === 24 || state.hours.size === 0) state.hours = null;
       applyAndRenderView();
@@ -307,35 +339,6 @@ function wireFilters() {
       if (k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
       state[k] = sel.value === '' ? null : sel.value === 'yes';
       applyAndRenderView();
-    });
-  });
-
-  appRoot.querySelectorAll('[data-action="clear"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state = emptyFilterState();
-      applyAndRenderView();
-    });
-  });
-
-  appRoot.querySelectorAll('[data-cache]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const a = btn.dataset.cache;
-      if (a === 'save') {
-        const ok = await cacheSave(ds);
-        if (ok) {
-          cacheOffer = 'saved';
-          cachePersist(); // best-effort: pedir al SO que no evicte la caché
-        } else {
-          // Si falló y había caché previa, borrarla: datos viejos engañarían.
-          await cacheClear();
-          cacheOffer = 'error';
-        }
-      } else if (a === 'dismiss') {
-        cacheOffer = null;
-      } else if (a === 'clear') {
-        await clearCached();
-      }
-      render();
     });
   });
 }
@@ -483,18 +486,26 @@ window.addEventListener('hashchange', () => {
   }
 });
 
-// Chips para quitar filtros activos. Delegado una sola vez: #filter-chips se
-// re-renderiza en cada cambio (los listeners directos morirían al primero).
-// El foco va al resumen (tabindex -1).
+// Chips para quitar filtros activos + "Borrar todo". Delegado una sola vez:
+// #filter-chips se re-renderiza en cada cambio (los listeners directos morirían
+// al primero). El foco va a la fila de chips (tabindex -1).
 appRoot.addEventListener('click', (e) => {
+  const clearBtn = e.target.closest?.('[data-action="clear"]');
+  if (clearBtn && appRoot.contains(clearBtn)) {
+    state = emptyFilterState();
+    applyAndRenderView();
+    document.getElementById('filter-chips')?.focus();
+    return;
+  }
   const btn = e.target.closest?.('[data-unset]');
   if (!btn || !appRoot.contains(btn)) return;
   const k = btn.dataset.unset;
   if (k !== 'artistId' && k !== 'trackId' && k !== 'albumId' && k !== 'years' &&
-    k !== 'months' && k !== 'range' && k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
+    k !== 'months' && k !== 'range' && k !== 'skip' && k !== 'shuffle' && k !== 'offline' &&
+    k !== 'dows' && k !== 'hours') return;
   state[k] = null;
   applyAndRenderView();
-  document.getElementById('filter-summary')?.focus();
+  document.getElementById('filter-chips')?.focus();
 });
 
 // Títulos de gráficos en táctil: el <title> del SVG no se muestra al toque.
