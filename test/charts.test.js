@@ -1,7 +1,16 @@
 // test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, lineChart, stackedBar, HEAT } from '../src/charts.js';
+import { makeScale, lineChart, stackedBar, HEAT, fmtNum } from '../src/charts.js';
+
+test('fmtNum: agrupa los miles también en 4 cifras (es-ES las omite)', () => {
+  assert.equal(fmtNum(2538), '2.538');
+  assert.equal(fmtNum(95608), '95.608');
+  assert.equal(fmtNum(999), '999');
+  assert.equal(fmtNum(1000), '1.000');
+  assert.equal(fmtNum(0), '0');
+  assert.equal(fmtNum(-2538), '-2.538');
+});
 
 test('makeScale: discreta de 6 niveles, nivel 0 solo para v<=0', () => {
   const scale = makeScale(100);

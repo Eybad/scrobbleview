@@ -39,8 +39,12 @@ export function esc(s) {
     .replaceAll("'", '&#39;');
 }
 
+// Agrupación manual de miles: el locale es-ES omite el separador en números
+// de 4 cifras (CLDR minimumGroupingDigits=2) y en un dashboard estadístico
+// eso rompe el escaneo visual (2538 vs 95.608 se leen distinto). El punto
+// es el separador correcto en es-ES; determinista e independiente de ICU.
 export function fmtNum(n) {
-  return Math.round(n).toLocaleString('es-ES');
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 export function fmtMs(ms) {
