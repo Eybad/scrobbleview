@@ -5,7 +5,7 @@
 // Los gráficos son componentes SVG puros de src/charts.js.
 
 import {
-  barChart, lineChart, heatmap, heatmapTable, donut, sparkline,
+  barChart, lineChart, heatmap, heatmapTable, donut, sparkline, hbarChart,
   calendarGrid, listeningClock, stackedBar,
   esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
 } from '../src/charts.js';
@@ -45,11 +45,12 @@ function monthLabel(mi) {
 // debe pasar por esc() o entityLink() ANTES de entrar en `rows`.
 // El scroll horizontal vive en .table-scroll (solo la tabla scrollea; el h2 de
 // la card queda fijo). Sin tabindex: el scroll sigue al foco de los enlaces.
-function table(headers, rows, cls = '', colClasses = []) {
+// `rowAttrs(r, i)` emite atributos por <tr> (ej. la barra proporcional).
+function table(headers, rows, cls = '', colClasses = [], rowAttrs = null) {
   const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
   const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
   return `<div class="table-scroll"><table class="${cls}"><thead><tr>${headers.map(th).join('')}</tr></thead>
-    <tbody>${rows.map((r) => `<tr>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
+    <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones' }) {
@@ -65,11 +66,17 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
       ? `<a class="cell-link" href="${link(r)}" title="${esc(full)}">${inner}</a>`
       : `<span class="cell-link" title="${esc(full)}">${inner}</span>`;
   };
+  // Barra proporcional al máximo visible (rows[0] tras el orden desc): el
+  // largo compara de un vistazo sin leer los números.
+  const max = rows.length > 0 ? rows[0].value : 0;
   return table(['#', 'Nombre', valueLabel], rows.map((r, i) => [
     String(i + 1),
     cell(r),
     valueFmt(r.value)
-  ]), '', ['c', '', 'n']);
+  ]), '', ['c', '', 'n'], (r, i) => {
+    const w = max > 0 ? ((rows[i].value / max) * 100).toFixed(1) : '0';
+    return ` style="--bar-w:${w}%"`;
+  });
 }
 
 // El title revela el nombre truncado por ellipsis (en táctil no hay tooltip:
@@ -82,11 +89,35 @@ function sortedMonths(map) {
   return [...map.keys()].sort((a, b) => a - b);
 }
 
+function nextMonth(mi) {
+  const y = Math.floor(mi / 100);
+  const m = mi % 100;
+  return m === 12 ? (y + 1) * 100 + 1 : mi + 1;
+}
+
+// Rellena los meses huecos entre el primero y el último (índices YYYYMM):
+// sin esto, lineChart espaciaba los puntos por posición del dato y la línea
+// mentía (dos puntos consecutivos en el eje aunque distaran un año).
+function fillMonths(keys) {
+  if (keys.length === 0) return [];
+  const out = [];
+  let mi = keys[0];
+  for (const k of keys) {
+    while (mi < k) {
+      out.push(mi);
+      mi = nextMonth(mi);
+    }
+    out.push(k);
+    mi = nextMonth(k);
+  }
+  return out;
+}
+
 function monthlySeries(monthMap, key) {
   // monthMap: Map<monthIndex, Map<entityId, value>> → [{label, y}]
-  return sortedMonths(monthMap).map((mi) => ({
+  return fillMonths(sortedMonths(monthMap)).map((mi) => ({
     label: monthLabel(mi),
-    y: monthMap.get(mi).get(key) ?? 0
+    y: monthMap.get(mi)?.get(key) ?? 0
   }));
 }
 
@@ -203,16 +234,15 @@ export function dashboard(model) {
     caption: 'Tiempo escuchado por hora y día (ms)'
   });
 
-  const monthly = sortedMonths(model.monthly).map((mi) => ({
+  const monthly = fillMonths(sortedMonths(model.monthly)).map((mi) => ({
     label: monthLabel(mi),
-    y: model.monthly.get(mi).ms
+    y: model.monthly.get(mi)?.ms ?? 0
   }));
   const evolution = lineChart({ points: monthly, format: fmtMs });
 
-  const dist = donut({
-    segments: t.msDist.map((b) => ({ label: b.label, value: b.count })),
-    format: fmtNum,
-    centerLabel: fmtNum(t.records)
+  const dist = hbarChart({
+    rows: t.msDist.map((b) => ({ label: b.label, value: b.count })),
+    format: fmtNum
   });
 
   const rankings = `<div id="rank-card">${rankCardHTML(model, {})}</div>`;
@@ -394,7 +424,7 @@ export function albumView(model, ak) {
     .sort((x, y) => y.plays - x.plays || y.ms - x.ms)
     .map((tr) => ({ name: tr.name, value: tr.plays, id: tr.tk }));
   const evolution = lineChart({
-    points: sortedMonths(model.monthly).map((mi) => {
+    points: fillMonths(sortedMonths(model.monthly)).map((mi) => {
       let ms = 0;
       for (const tk of al.tracks) ms += model.monthlyTrackMs.get(mi)?.get(tk) ?? 0;
       return { label: monthLabel(mi), y: ms };

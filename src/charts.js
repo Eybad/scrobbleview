@@ -30,6 +30,9 @@ export const PALETTE = ['#4cc9f0', '#f72585', '#ffd166', '#06d6a0', '#9b5de5', '
 export const ACCENT = '#1db954';
 export const HEAT = ['#1a1e26', '#123524', '#14532d', '#15803d', '#22c55e', '#4ade80'];
 
+// Espejo de --border (css/style.css): color de las guías de referencia.
+const GRID = '#2a2f3a';
+
 export function esc(s) {
   return String(s)
     .replaceAll('&', '&amp;')
@@ -130,12 +133,20 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
 export function lineChart({ points, width = 640, height = 200, format = fmtNum, accent = ACCENT, area = true }) {
   const n = points.length;
   if (n === 0) return '';
-  const pad = { l: 8, r: 8, t: 10, b: 18 };
+  const pad = { l: 8, r: 8, t: 16, b: 18 };
   const plotW = width - pad.l - pad.r;
   const plotH = height - pad.t - pad.b;
   const xs = points.map((_, i) => (n === 1 ? pad.l + plotW / 2 : pad.l + (i / (n - 1)) * plotW));
   const maxY = Math.max(...points.map((p) => p.y), 1);
   const ys = points.map((p) => pad.t + plotH - (p.y / maxY) * plotH);
+  // Guías de referencia a 1, 2/3 y 1/3 del máximo + el máximo rotulado:
+  // sin escala, la línea flotaba sin ancla y el lector no podía estimar
+  // valores intermedios.
+  const grid = [1, 2 / 3, 1 / 3].map((f) => {
+    const y = pad.t + plotH - f * plotH;
+    return `<line x1="${pad.l}" x2="${width - pad.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${GRID}" stroke-width="1"/>`;
+  }).join('');
+  const maxLabel = `<text x="${pad.l}" y="${pad.t - 4}" text-anchor="start" class="chart-max" font-size="11">${esc(format(maxY))}</text>`;
   const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
   const areaPath = `${line} L${xs[n - 1].toFixed(1)},${(pad.t + plotH).toFixed(1)} L${xs[0].toFixed(1)},${(pad.t + plotH).toFixed(1)} Z`;
   const dots = points.map((p, i) => {
@@ -179,6 +190,7 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   }).join('');
   const aria = `Gráfico de líneas: ${points.map((p, i) => `${p.label ?? i}: ${format(p.y)}`).join(', ')}`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">
+    ${grid}${maxLabel}
     ${area ? `<path d="${areaPath}" fill="${accent}" opacity="0.15"/>` : ''}
     <path d="${line}" fill="none" stroke="${accent}" stroke-width="2"/>
     ${dots}${labels}
@@ -276,6 +288,27 @@ export function donut({ segments, size = 180, format = fmtNum, centerLabel = '',
     </svg>
     <ul class="legend">${legend}</ul>
   </div>`;
+}
+
+// ---------- hbarChart (barras horizontales HTML) ----------
+
+// Barras horizontales en HTML puro, misma gramática visual que las filas de
+// rankings (pista + relleno proporcional al máximo de la lista). El texto es
+// legible por sí solo (valor y porcentaje visibles): no necesita role="img".
+export function hbarChart({ rows, format = fmtNum, accent = ACCENT }) {
+  if (rows.length === 0) return '';
+  const max = Math.max(...rows.map((r) => r.value), 1);
+  const total = rows.reduce((a, r) => a + r.value, 0);
+  const items = rows.map((r) => {
+    const w = (r.value / max) * 100;
+    const pct = total > 0 ? (r.value / total) * 100 : 0;
+    return `<li class="hbar-row">
+      <span class="hbar-label">${esc(String(r.label))}</span>
+      <span class="hbar-track"><span class="hbar-fill" style="width:${w.toFixed(1)}%;background:${accent}"></span></span>
+      <span class="hbar-value">${format(r.value)} · ${fmtPct(pct / 100)}</span>
+    </li>`;
+  }).join('');
+  return `<ul class="hbar">${items}</ul>`;
 }
 
 // ---------- sparkline ----------

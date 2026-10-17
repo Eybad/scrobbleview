@@ -705,6 +705,48 @@ td a:hover {
   text-decoration: underline;
 }
 
+/* Barras horizontales (hbarChart): pista + relleno proporcional al máximo. */
+.hbar {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) 0;
+  font-size: var(--fs-sm);
+}
+
+.hbar-label {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hbar-track {
+  background: var(--surface-2);
+  border-radius: 3px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.hbar-value {
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .chart,
 .sparkline,
 .calendar,
@@ -727,6 +769,14 @@ td a:hover {
   overflow-x: auto;
   max-width: 100%;
   scrollbar-gutter: stable;
+  /* Sombra de corte como .table-scroll: señaliza que hay más contenido
+     a los costados cuando la grilla desborda. */
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent),
+    linear-gradient(to left, var(--surface) 30%, transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 3em 100%;
+  background-attachment: local, scroll;
 }
 
 .chart-scroll--heat svg,
@@ -767,6 +817,13 @@ td a:hover {
 .table-fallback table td:first-child {
   position: static;
   box-shadow: none;
+}
+
+/* Barra proporcional en las filas de rankings: el largo compara de un
+   vistazo; translúcida para no competir con el texto. La celda # sticky
+   mantiene su fondo opaco: la barra arranca tras el ordinal. */
+.table-scroll table tr[style*="--bar-w"] {
+  background: linear-gradient(90deg, var(--accent-soft) var(--bar-w), transparent var(--bar-w));
 }
 
 /* Alineación por semántica de columna (no por posición): texto a la
@@ -815,7 +872,8 @@ td a:hover {
 }
 
 .chart-label,
-.chart-value {
+.chart-value,
+.chart-max {
   fill: var(--text-muted);
   font-family: var(--font-ui);
 }

@@ -69,6 +69,19 @@ test('dashboard: rankings con álbumes/métrica/topN/buscador + tablas', async (
   assert.ok(html.includes('→'), 'la racha trae fechas de inicio → fin');
 });
 
+test('dashboard: la evolución mensual rellena los meses sin datos', async () => {
+  const model = await model2y();
+  const dash = renderView('dashboard', model);
+  assert.ok(dash.includes('jul 2023: 0 ms'), 'mes hueco entre jun 2023 y jun 2024 en cero');
+});
+
+test('rankings: barra proporcional translúcida por fila', async () => {
+  const model = await demoModel();
+  const html = rankCardHTML(model, { tab: 'artists', metric: 'plays' });
+  assert.ok(html.includes('--bar-w:100.0%'), 'el primero ocupa el ancho completo');
+  assert.ok(/--bar-w:\d+(?:\.\d+)?%/.test(html), 'filas proporcionales al máximo');
+});
+
 test('meta de vistas: sin zona horaria, archivos en plural y bytes humanizados', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);

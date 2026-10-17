@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { esc, barChart, lineChart, donut, sparkline, calendarGrid, heatmap, heatmapTable, listeningClock, stackedBar } from '../src/charts.js';
+import { esc, barChart, lineChart, donut, sparkline, calendarGrid, heatmap, heatmapTable, listeningClock, stackedBar, hbarChart } from '../src/charts.js';
 
 // Payloads que rompen HTML si llegan sin escapar.
 const XSS = '<img src=x onerror=alert(1)>';
@@ -34,6 +34,12 @@ test('xss: donut escapa el texto de sus segmentos', () => {
   assert.ok(!d.includes("onfocus='"), 'donut: sin atributo inyectado');
   assert.ok(d.includes('&lt;img'));
   assert.ok(d.includes('&#39;'), 'donut: centerLabel escapado');
+});
+
+test('xss: hbarChart escapa los rótulos', () => {
+  const html = hbarChart({ rows: [{ label: XSS, value: 1 }] });
+  assert.ok(!html.includes('<img'), 'hbar: sin tag inyectado');
+  assert.ok(html.includes('&lt;img'), 'hbar: rótulo escapado');
 });
 
 test('xss: los rótulos de un chart con payload no inyectan HTML ejecutable', () => {

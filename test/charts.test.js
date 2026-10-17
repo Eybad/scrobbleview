@@ -1,7 +1,20 @@
 // test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, lineChart, stackedBar, HEAT, fmtNum, fmtBytes } from '../src/charts.js';
+import { makeScale, lineChart, stackedBar, HEAT, fmtNum, fmtBytes, hbarChart } from '../src/charts.js';
+
+test('lineChart: 3 guías horizontales y el máximo rotulado', () => {
+  const svg = lineChart({ points: [{ label: 'ene', y: 100 }, { label: 'feb', y: 50 }] });
+  assert.equal((svg.match(/<line /g) || []).length, 3, '3 guías de referencia');
+  assert.ok(svg.includes('>100<'), 'el valor máximo va rotulado arriba');
+});
+
+test('hbarChart: barras horizontales proporcionales con porcentaje', () => {
+  const html = hbarChart({ rows: [{ label: '30s-1m', value: 75 }, { label: '1-3m', value: 25 }] });
+  assert.ok(html.includes('width:100.0%'), 'el máximo llena la pista');
+  assert.ok(html.includes('width:33.3%'), 'proporcional al máximo, no al total');
+  assert.ok(html.includes('75%') && html.includes('25%'), 'porcentaje del total visible');
+});
 
 test('fmtBytes: unidad alineada a la escala (KB para ~10^6, MB para ~10^9)', () => {
   assert.equal(fmtBytes(500), '500 B');
