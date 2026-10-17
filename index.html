@@ -31,11 +31,6 @@
     <section id="view-home" class="view" aria-labelledby="home-title">
       <h1 id="home-title" class="visually-hidden">Cargá tus datos de Spotify</h1>
 
-      <aside class="privacy-note" role="note">
-        <strong>Privacidad:</strong> tus archivos se procesan 100% en este dispositivo.
-        Nunca se suben a ningún servidor. Podés desconectarte de internet y sigue funcionando.
-      </aside>
-
       <div id="drop-zone" class="drop-zone" tabindex="0" role="button"
            aria-label="Cargar archivos de historial de Spotify. Arrastrá los archivos o presioná Enter para elegirlos.">
         <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
@@ -46,12 +41,17 @@
       </div>
 
       <div class="actions">
-        <button type="button" id="btn-demo" class="btn btn-secondary">Probar con datos de ejemplo</button>
         <button type="button" id="btn-cached" class="btn btn-secondary" hidden>Cargar datos guardados</button>
-        <button type="button" id="btn-cached-clear" class="btn btn-link" hidden>Borrar datos guardados</button>
+        <button type="button" id="btn-demo" class="btn btn-secondary">Probar con datos de ejemplo</button>
+        <button type="button" id="btn-cached-clear" class="btn btn-link btn-danger" hidden>Borrar datos guardados</button>
       </div>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <p class="privacy-note" role="note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <strong>Privacidad:</strong> tus archivos se procesan 100% en este dispositivo. Nunca se suben a ningún servidor; podés desconectarte de internet y sigue funcionando.
+      </p>
     </section>
 
     <section id="view-app" class="view" aria-labelledby="app-title" hidden>

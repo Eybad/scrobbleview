@@ -20,6 +20,13 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
 
   let busy = false;
 
+  // En táctil no existe el gesto de arrastrar: el texto lo dice sin rodeos.
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    zone.querySelector('.drop-zone-title').textContent = 'Tocá para seleccionar tus archivos';
+    zone.querySelector('.drop-zone-hint').hidden = true;
+    zone.setAttribute('aria-label', 'Cargar archivos de historial de Spotify. Tocá para elegirlos.');
+  }
+
   function setStatus(msg, kind = '') {
     status.textContent = msg;
     status.className = `status ${kind}`.trim();
@@ -118,7 +125,14 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   return {
     setStatus,
     showCachedButtons(hasCache) {
-      if (btnCached) btnCached.hidden = !hasCache;
+      zone.classList.toggle('is-secondary', hasCache);
+      if (btnCached) {
+        btnCached.hidden = !hasCache;
+        // Con caché, continuar es el camino más probable: el sólido se lo
+        // lleva esa acción y la drop zone pasa a secundaria.
+        btnCached.classList.toggle('btn-primary', hasCache);
+        btnCached.classList.toggle('btn-secondary', !hasCache);
+      }
       if (btnCachedClear) btnCachedClear.hidden = !hasCache;
     }
   };

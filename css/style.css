@@ -21,6 +21,11 @@
   --accent-soft: rgba(29, 185, 84, 0.14);
   --accent-border: rgba(29, 185, 84, 0.4);
 
+  /* Rojo de destrucción: solo acciones que borran datos del usuario
+     (5.4:1 sobre el fondo, apto para texto sm). */
+  --danger: #e35d6a;
+  --danger-soft: rgba(227, 93, 106, 0.14);
+
   /* Escala secuencial espejo de HEAT (src/charts.js); mantener sincronizadas. */
   --heat-0: #1a1e26;
   --heat-1: #123524;
@@ -209,14 +214,24 @@ main.container {
   margin: var(--sp-4) auto 0;
 }
 
+/* Aviso de privacidad: compacto y callado — es una garantía, no una alerta;
+   el color de acento queda reservado para lo interactivo. */
 .privacy-note {
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-  border-left: 4px solid var(--accent);
-  border-radius: var(--radius);
-  padding: var(--sp-4);
-  margin-bottom: var(--sp-6);
+  margin: var(--sp-5) 0 0;
+  color: var(--text-muted);
   font-size: var(--fs-sm);
+  text-align: center;
+}
+
+.privacy-note svg {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: var(--sp-1);
+}
+
+.privacy-note strong {
+  font-weight: 600;
 }
 
 .drop-zone {
@@ -263,6 +278,13 @@ main.container {
   opacity: 0.72;
   border-color: var(--accent);
   border-style: solid;
+}
+
+/* Con caché disponible, "Cargar datos guardados" es el camino principal
+   (botón sólido) y la drop zone se demora a secundaria. */
+.drop-zone.is-secondary {
+  padding: var(--sp-8) var(--sp-6);
+  box-shadow: none;
 }
 
 .drop-zone-title {
@@ -370,6 +392,16 @@ main.container {
 .btn-link.btn-quiet:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--text);
+}
+
+/* Variante destructiva de .btn-link: borrar datos guardados destruye
+   trabajo del usuario; el rojo lo señala sin convertirlo en botón sólido. */
+.btn-danger {
+  color: var(--danger);
+}
+
+.btn-link.btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
 }
 
 .cache-actions {
