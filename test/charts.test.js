@@ -1,7 +1,15 @@
 // test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, lineChart, stackedBar, HEAT, fmtNum } from '../src/charts.js';
+import { makeScale, lineChart, stackedBar, HEAT, fmtNum, fmtBytes } from '../src/charts.js';
+
+test('fmtBytes: unidad alineada a la escala (KB para ~10^6, MB para ~10^9)', () => {
+  assert.equal(fmtBytes(500), '500 B');
+  assert.equal(fmtBytes(1024), '1 KB');
+  assert.equal(fmtBytes(1015150), '991,4 KB');
+  assert.equal(fmtBytes(73197279), '69,8 MB');
+  assert.equal(fmtBytes(1073741824), '1 GB');
+});
 
 test('fmtNum: agrupa los miles también en 4 cifras (es-ES las omite)', () => {
   assert.equal(fmtNum(2538), '2.538');

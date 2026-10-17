@@ -64,9 +64,12 @@ export function fmtPct(x) {
 }
 
 // Múltiplos binarios (1024), la convención de los gestores de archivos.
+// La base 'B' en el índice 0 alinea la escala con el contador de divisiones:
+// sin ella, 1 división (valor en KB) se etiquetaba 'MB' y 73 MB se mostraba
+// como 69,8 GB (regresión visible en el meta del dashboard).
 export function fmtBytes(n) {
   if (n < 1024) return `${Math.round(n)} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = n;
   let unitIndex = 0;
   while (value >= 1024 && unitIndex < units.length - 1) {
