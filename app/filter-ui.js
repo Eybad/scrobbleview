@@ -6,7 +6,7 @@
 // álbum) se aplican desde las fichas, no desde la barra.
 
 import { RANGE_PRESETS } from '../src/filters.js';
-import { esc, MONTHS_SHORT } from '../src/charts.js';
+import { esc, MONTHS_SHORT, fmtNum, fmtMs } from '../src/charts.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 
 export const BLOCKS = [
@@ -41,6 +41,24 @@ export function isoDateToDay(s) {
   return Number.isFinite(day) ? day : null;
 }
 
+// Normaliza el par Desde/Hasta al editar una fecha: si el rango queda
+// invertido, colapsa al día editado (patrón de los date range pickers de
+// Polaris). Devuelve días epoch; null = sin fecha en ese lado.
+export function normalizeRangeDays(fromDay, toDay, edited) {
+  if (fromDay != null && toDay != null) {
+    if (edited === 'from' && fromDay > toDay) return { fromDay, toDay: fromDay };
+    if (edited === 'to' && toDay < fromDay) return { fromDay: toDay, toDay };
+  }
+  return { fromDay, toDay };
+}
+
+// Anuncio para lectores de pantalla tras cada re-agregado (región role="status"
+// en main.js): los KPIs cambian visualmente, pero una región viva necesita el
+// texto explícito (WCAG 4.1.3).
+export function filterStatusMessage(totals) {
+  return `${fmtNum(totals.records)} reproducciones · ${fmtMs(totals.ms)} escuchadas`;
+}
+
 // Rango completo de un año/mes en epoch-local seconds. Los dropdowns de
 // año/mes son shortcuts que poblan Desde/Hasta: un solo mecanismo de rango,
 // sin filtros temporales operando en paralelo.
@@ -56,6 +74,14 @@ export function rangeFromMonth(ym) {
   const fromDay = Math.floor(Date.UTC(y, m - 1, 1) / 86400000);
   const toDay = Math.floor(Date.UTC(y, m, 1) / 86400000) - 1;
   return { from: fromDay * 86400, to: toDay * 86400 + 86399 };
+}
+
+// Período inmediato anterior de igual largo (para comparar % en los KPIs).
+// Con rango de un solo día el anterior es el día previo; sin rango activo no
+// hay "anterior" definido y la comparación no se muestra.
+export function previousRange(range) {
+  const len = range.to - range.from + 1;
+  return { from: range.from - len, to: range.from - 1 };
 }
 
 // Detecta si el rango es exactamente un año o un mes completo (etiqueta corta
@@ -204,6 +230,10 @@ export function filterBarHTML(model, state) {
 
   const fromISO = state.range ? locToISODate(state.range.from) : '';
   const toISO = state.range ? locToISODate(state.range.to) : '';
+  // Guards min/max (Carbon): el date picker no ofrece fechas que el dataset
+  // no cubre; el valor manual fuera de rango lo recorta normalizeRangeDays.
+  const minISO = model.meta.firstTs != null ? locToISODate(model.meta.firstTs) : null;
+  const maxISO = model.meta.lastTs != null ? locToISODate(model.meta.lastTs) : null;
 
   // Sin resumen de conteos en el pie: los KPIs de la vista ya reflejan el
   // filtrado (la vista entera se re-agrega), sería duplicación. "Borrar todo"
@@ -214,8 +244,8 @@ export function filterBarHTML(model, state) {
     <details class="filter-advanced">
       <summary><svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>Fechas y filtros avanzados</summary>
       <div class="filter-row filter-dates">
-        <label class="field">Desde <input type="date" data-filter="from" value="${fromISO}"></label>
-        <label class="field">Hasta <input type="date" data-filter="to" value="${toISO}"></label>
+        <label class="field">Desde <input type="date" data-filter="from" value="${fromISO}"${minISO ? ` min="${minISO}"` : ''}></label>
+        <label class="field">Hasta <input type="date" data-filter="to" value="${toISO}"${maxISO ? ` max="${maxISO}"` : ''}></label>
       </div>
       <div class="filter-row">
         <label class="field">Año <select data-filter="year" aria-label="Año">${yearOpts}</select></label>

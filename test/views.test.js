@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 
 import { renderView } from '../app/views.js';
 import { receiptText } from '../app/views.js';
-import { rankCardHTML } from '../app/views.js';
-import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut } from '../app/filter-ui.js';
+import { rankCardHTML, emptyFiltersHTML, listenerArchetype } from '../app/views.js';
+import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange } from '../app/filter-ui.js';
 import { readFile } from 'node:fs/promises';
 import { emptyFilterState } from '../src/filters.js';
 import { analyze } from '../src/analyze.js';
@@ -134,6 +134,18 @@ test('album: canciones, fechas y botón de filtro', async () => {
   assert.ok(html.includes('Canciones del álbum'), 'lista de canciones');
   assert.ok(html.includes('Primera escucha') && html.includes('Última escucha'), 'fechas');
   assert.ok(html.includes(`data-filter-entity="album:${ak}"`), 'botón de filtro por entidad');
+});
+
+test('album: el enlace al artista usa la parte alta de ak', async () => {
+  // ak = ar*2^32 + al: el residuo es el id del álbum, NO el artista.
+  const json = JSON.stringify([
+    { ts: '2024-06-01T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'A', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Á1', spotify_track_uri: 'spotify:track:1' },
+    { ts: '2024-06-02T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'B', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Á2', spotify_track_uri: 'spotify:track:2' }
+  ]);
+  const model = await analyze(memoryBytes('ak.json', json), { tz: UTC, now: 1704067200 });
+  const ak2 = 4294967296 + 2; // artista 1 (X), álbum 2 (Á2)
+  const html = renderView('album', model, ak2);
+  assert.ok(html.includes('href="#/artist/1"'), 'enlace al artista X (ar=1)');
 });
 
 test('calendar: último año desplegado, anteriores en details', async () => {
@@ -305,4 +317,133 @@ test('contraste: muted sobre surface-2 cumple WCAG AA (≥ 4.5:1)', async () => 
   const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
   assert.ok(ratio >= 4.5, `contraste ${ratio.toFixed(2)}:1 ≥ 4.5:1 (botones quiet y texto del toast)`);
   assert.ok(css.includes('.btn-link.btn-quiet:hover'), 'el hover del descarte gana la cascada (no hereda el accent de btn-link)');
+});
+
+test('css: el hover de filas no aplica en táctil ni tapa la barra', async () => {
+  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  const mq = css.indexOf('@media (hover: hover)');
+  assert.ok(mq >= 0, 'media query (hover: hover) presente');
+  assert.ok(css.indexOf('tbody tr:hover td') > mq, 'hover genérico de fila dentro de la media query');
+  assert.ok(css.indexOf('tr:hover td:first-child') > mq, 'sync de celda sticky dentro de la media query');
+  const sel = 'tr[style*="--bar-w"]:hover td:not(:first-child)';
+  assert.ok(css.includes(sel), 'regla de hover para filas con barra');
+  const block = css.slice(css.indexOf(sel));
+  const body = block.slice(block.indexOf('{') + 1, block.indexOf('}'));
+  assert.ok(body.includes('background: transparent'), 'tds transparentes en hover: el gradiente del tr sigue visible');
+});
+
+test('filter-ui: rango invertido colapsa al día editado', () => {
+  assert.deepEqual(normalizeRangeDays(200, 100, 'from'), { fromDay: 200, toDay: 200 }, 'Desde > Hasta: gana el editado');
+  assert.deepEqual(normalizeRangeDays(200, 100, 'to'), { fromDay: 100, toDay: 100 }, 'Hasta < Desde: gana el editado');
+  assert.deepEqual(normalizeRangeDays(100, 200, 'from'), { fromDay: 100, toDay: 200 }, 'rango válido pasa intacto');
+  assert.deepEqual(normalizeRangeDays(null, 200, 'to'), { fromDay: null, toDay: 200 }, 'lado vacío no se inventa');
+  assert.deepEqual(normalizeRangeDays(100, null, 'from'), { fromDay: 100, toDay: null }, 'lado vacío no se inventa');
+  assert.deepEqual(normalizeRangeDays(null, null, 'from'), { fromDay: null, toDay: null }, 'todo vacío pasa');
+});
+
+test('filter-ui: el announcer resume el resultado del filtrado', () => {
+  const msg = filterStatusMessage({ records: 2538, ms: 5.5 * 3600000 });
+  assert.ok(msg.includes('2.538'), 'conteo con separador de miles');
+  assert.ok(msg.includes('5h 30m'), 'tiempo humanizado');
+});
+
+test('filter-ui: min/max de los date inputs acotados al dataset', async () => {
+  const model = await demoModel();
+  const bar = filterBarHTML(model, emptyFilterState());
+  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
+  assert.ok(details.includes(`min="${locToISODate(model.meta.firstTs)}"`), 'Desde acotado al primer ts');
+  assert.ok(details.includes(`max="${locToISODate(model.meta.lastTs)}"`), 'Hasta acotado al último ts');
+});
+
+test('empty state: mensaje y botón de limpiar cuando el filtro no matchea nada', () => {
+  const html = emptyFiltersHTML();
+  assert.ok(html.includes('Ningún resultado'), 'mensaje claro');
+  assert.ok(html.includes('data-action="clear"'), 'botón que limpia (delegación existente)');
+});
+
+test('tablas: caption visualmente oculto para lectores de pantalla', async () => {
+  const model = await demoModel();
+  const html = renderView('dashboard', model);
+  const captions = (html.match(/<caption class="visually-hidden">/g) || []).length;
+  assert.ok(captions >= 5, `${captions} captions en el dashboard (obsesión, rachas, salto, primera, última, rankings)`);
+  const sessions = renderView('sessions', model);
+  assert.ok(sessions.includes('<caption class="visually-hidden">Sesiones más largas</caption>'), 'caption de sesiones');
+});
+
+test('chart-scroll: regiones focables con nombre (scroll sin controles adentro)', async () => {
+  const model = await demoModel();
+  const dash = renderView('dashboard', model);
+  assert.ok(dash.includes('class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label='), 'heatmap del dashboard');
+  const artist = renderView('artist', model, model.artists.top.byPlays[0].id);
+  assert.ok(artist.includes('class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label='), 'reloj del artista');
+  const wrapped = renderView('wrapped', model);
+  assert.ok(wrapped.includes('class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label='), 'reloj de wrapped');
+  const cal = renderView('calendar', model);
+  assert.ok(cal.includes('class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label='), 'calendario');
+});
+
+test('dashboard: leyenda de la escala del heatmap', async () => {
+  const model = await demoModel();
+  const dash = renderView('dashboard', model);
+  assert.ok(dash.includes('class="heat-legend"'), 'leyenda bajo el heatmap');
+  assert.ok(dash.includes('sin actividad'), 'nivel cero rotulado');
+});
+
+test('filter-ui: previousRange devuelve el período inmediato anterior de igual largo', () => {
+  const r = { from: 100 * 86400, to: 106 * 86400 + 86399 };
+  const p = previousRange(r);
+  assert.equal(p.from, 93 * 86400, 'mismo largo hacia atrás');
+  assert.equal(p.to, 99 * 86400 + 86399, 'termina el día antes del rango');
+});
+
+test('dashboard: comparación contra el período anterior en KPIs', async () => {
+  const model = await demoModel();
+  const html = renderView('dashboard', model, null, { prev: { records: 100, ms: 3600000 } });
+  assert.ok(html.includes('vs período anterior'), 'delta visible');
+  const empty = renderView('dashboard', model, null, { prev: { records: 0, ms: 0 } });
+  assert.ok(empty.includes('anterior sin datos'), 'previo vacío no divide por cero');
+  const none = renderView('dashboard', model);
+  assert.ok(!none.includes('vs período anterior'), 'sin prev no hay comparación');
+});
+
+test('dashboard: card de récords', async () => {
+  const model = await demoModel();
+  const html = renderView('dashboard', model);
+  for (const s of ['Récords', 'Día más intenso', 'Mes más intenso', 'Sesión más larga', 'Maratón']) {
+    assert.ok(html.includes(s), `récord: ${s}`);
+  }
+});
+
+test('wrapped: milestones de primera vez', async () => {
+  const model = await demoModel();
+  const html = renderView('wrapped', model);
+  assert.ok(html.includes('Primera escucha'), 'primera escucha general');
+  assert.ok(html.includes('Primera vez con'), 'primera vez con artista/canción del año');
+});
+
+test('wrapped: arquetipo de oyente', async () => {
+  const model = await demoModel();
+  const a = listenerArchetype(model);
+  assert.ok(a && a.label.length > 0, 'label no vacío');
+  assert.ok(a.detail.includes('%'), 'detalle con porcentajes');
+  assert.ok(renderView('wrapped', model).includes('Perfil de escucha'), 'visible en wrapped');
+  assert.equal(listenerArchetype({ totals: { records: 0 } }), null, 'sin datos no hay arquetipo');
+});
+
+test('rankings: sparkline de evolución mensual por fila', async () => {
+  const model = await demoModel();
+  const html = rankCardHTML(model, { tab: 'artists', metric: 'plays' });
+  assert.ok(html.includes('class="sparkline"'), 'sparkline por fila de artistas');
+  assert.ok(html.includes('Tendencia'), 'columna de tendencia');
+  const tracks = rankCardHTML(model, { tab: 'tracks', metric: 'ms' });
+  assert.ok(tracks.includes('class="sparkline"'), 'sparkline de canciones por tiempo');
+  const albums = rankCardHTML(model, { tab: 'albums', metric: 'plays' });
+  assert.ok(albums.includes('class="sparkline"'), 'álbumes suman la evolución de sus canciones');
+});
+
+test('calendario: los días filtran al tocar (selector de rango)', async () => {
+  const model = await demoModel();
+  const html = renderView('calendar', model);
+  assert.ok(html.includes('data-day='), 'celdas del calendario interactivas');
+  assert.ok(html.includes('tocá un día'), 'hint de interacción visible');
 });

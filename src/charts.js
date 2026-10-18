@@ -30,6 +30,11 @@ export const PALETTE = ['#4cc9f0', '#f72585', '#ffd166', '#06d6a0', '#9b5de5', '
 export const ACCENT = '#1db954';
 export const HEAT = ['#1a1e26', '#123524', '#14532d', '#15803d', '#22c55e', '#4ade80'];
 
+// Color de "sin datos" (día fuera del rango cubierto por la fuente), distinto
+// del nivel 0 de la escala (cero actividad dentro del rango). Espejo de
+// --surface-2 (css/style.css): los charts no leen variables CSS.
+export const NO_DATA = '#1e222b';
+
 // Espejo de --border (css/style.css): color de las guías de referencia.
 const GRID = '#2a2f3a';
 
@@ -188,7 +193,12 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
     return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="${anchor}" class="chart-label" font-size="${fs}">${esc(String(p.label))}</text>`;
   }).join('');
-  const aria = `Gráfico de líneas: ${points.map((p, i) => `${p.label ?? i}: ${format(p.y)}`).join(', ')}`;
+  // Resumen para lectores de pantalla: rango, máximo y último. Enumerar todos
+  // los puntos (una evolución mensual multi-año) hacía el aria-label inusable.
+  const nameOf = (p, i) => (p.label != null ? String(p.label) : `punto ${i + 1}`);
+  let maxIdx = 0;
+  for (let i = 1; i < n; i++) if (points[i].y > points[maxIdx].y) maxIdx = i;
+  const aria = `Gráfico de líneas de ${nameOf(points[0], 0)} a ${nameOf(points[n - 1], n - 1)}; máximo ${nameOf(points[maxIdx], maxIdx)}: ${format(points[maxIdx].y)}; último: ${format(points[n - 1].y)}`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">
     ${grid}${maxLabel}
     ${area ? `<path d="${areaPath}" fill="${accent}" opacity="0.15"/>` : ''}
@@ -322,12 +332,17 @@ export function sparkline({ points, width = 120, height = 32, accent = ACCENT })
   const xs = points.map((_, i) => (n === 1 ? width / 2 : (i / (n - 1)) * width));
   const ys = points.map((v) => height - 2 - ((v - min) / span) * (height - 4));
   const line = points.map((_, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" class="sparkline" aria-hidden="true"><path d="${line}" fill="none" stroke="${accent}" stroke-width="1.5"/></svg>`;
+  // Trazo fino + uniones redondeadas: las puntas miter de los picos agudos
+  // sobresalen hasta recortarse en el borde del viewBox (efecto "línea
+  // cortada"). preserveAspectRatio="none" + non-scaling-stroke: el CSS fija
+  // el alto (sparkline compacta en tablas) y el trazo queda uniforme en
+  // pantalla en vez de escalar con el ancho de columna.
+  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" class="sparkline" aria-hidden="true"><path d="${line}" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
 // ---------- calendarGrid (año × día, estilo GitHub) ----------
 
-export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.date}: ${d.value}`, cellSize = 11, gap = 2 }) {
+export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.date}: ${d.value}`, cellSize = 11, gap = 2, dataRange = null, interactive = false }) {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const startDow = (new Date(Date.UTC(year, 0, 1)).getUTCDay() + 6) % 7; // lunes=0
   const daysInYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
@@ -352,7 +367,16 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
     const x = 34 + col * (cellSize + gap);
     const y = gridTop + dow * (cellSize + gap);
     const v = byDate.get(iso)?.value ?? 0;
-    cells.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${colorScale(v)}" rx="2"><title>${esc(cellTitle({ date: iso, value: v }))}</title></rect>`);
+    // Fuera del rango de datos = "sin datos" (NO_DATA); dentro del rango sin
+    // valor = cero actividad (nivel 0 de la escala). Sin esta distinción el
+    // calendario pintaba de "vacío" años enteros que la fuente no cubre.
+    const day = Math.floor(Date.UTC(year, 0, 1 + doy) / 86400000);
+    const outOfData = dataRange != null && (day < dataRange.from || day > dataRange.to);
+    const fill = outOfData ? NO_DATA : colorScale(v);
+    const title = outOfData ? `${iso}: sin datos` : cellTitle({ date: iso, value: v });
+    // Modo selector (main.js delega el click): data-day = día epoch del cell.
+    const attrs = interactive ? ` data-day="${day}"` : '';
+    cells.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${fill}" rx="2"${attrs}><title>${esc(title)}</title></rect>`);
   }
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Calendario de actividad ${esc(String(year))}" class="chart calendar">${monthLabels.join('')}${cells.join('')}</svg>`;
 }
@@ -414,4 +438,17 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
       }).join('')}</ul>`
     : '';
   return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${height}" role="img" class="chart" aria-label="Barras apiladas">${rows}</svg>${legend}</div>`;
+}
+
+// ---------- heatLegend ----------
+
+// Leyenda de la escala secuencial: el swatch de nivel 0 (sin actividad) va
+// separado de la rampa 1..5 (menos → más). Sin ella, un heatmap no permite
+// decodificar color → valor (el calendario de GitHub la trae por eso).
+export function heatLegend({ palette = HEAT, zeroLabel = 'sin actividad', minLabel = 'menos', maxLabel = 'más' } = {}) {
+  const ramp = palette.slice(1).map((c) => `<span class="heat-swatch" style="background:${c}"></span>`).join('');
+  return `<div class="heat-legend">
+    <span class="heat-legend-item"><span class="heat-swatch" style="background:${palette[0]}"></span>${esc(zeroLabel)}</span>
+    <span class="heat-legend-item">${esc(minLabel)}${ramp}${esc(maxLabel)}</span>
+  </div>`;
 }

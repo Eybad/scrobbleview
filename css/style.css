@@ -617,6 +617,9 @@ main.container {
   overflow-x: auto;
   max-width: 100%;
   scrollbar-gutter: stable;
+  /* F110 (2.4.11): la primera columna es sticky y puede tapar el 100% del
+     elemento con foco al scrollear; el padding de scroll lo deja visible. */
+  scroll-padding-left: 3em;
   /* Sin padding lateral a propósito: con sangrado, `left` del sticky queda
      a merced de padding-box vs content-box (huecos o 2da columna tapada
      según navegador). Sin padding, `left: 0` es exacto siempre. */
@@ -693,8 +696,12 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
-tbody tr:hover td {
-  background: var(--surface-2);
+/* Hover de fila solo con puntero real: en táctil el :hover queda pegado
+   tras el toque (sticky hover) y pintaba la fila tocada sin motivo. */
+@media (hover: hover) {
+  tbody tr:hover td {
+    background: var(--surface-2);
+  }
 }
 
 td a {
@@ -757,6 +764,13 @@ td a:hover {
   display: block;
 }
 
+/* El sparkline de rankings comprime su alto (el SVG se estira al caja):
+   pico menos dramático y fila más densa. El trazo no se deforma porque
+   lleva vector-effect="non-scaling-stroke". */
+.sparkline {
+  height: 32px;
+}
+
 .stacked-wrap {
   display: flex;
   flex-direction: column;
@@ -808,8 +822,10 @@ td a:hover {
 }
 
 /* Sincroniza el fondo opaco de la celda sticky al pasar el cursor por la fila. */
-.table-scroll table tbody tr:hover td:first-child {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .table-scroll table tbody tr:hover td:first-child {
+    background: var(--surface-2);
+  }
 }
 
 /* La tabla fallback (a11y/teclado) no fija columnas: es suplementaria del
@@ -825,6 +841,15 @@ td a:hover {
    mantiene su fondo opaco: la barra arranca tras el ordinal. */
 .table-scroll table tr[style*="--bar-w"] {
   background: linear-gradient(90deg, var(--accent-soft) var(--bar-w), transparent var(--bar-w));
+}
+
+/* Con puntero real, el hover genérico pinta los td opacos y taparía el
+   gradiente del tr: los td vuelven a transparente (el feedback lo dan la
+   celda # sticky y el subrayado del enlace). En táctil ninguno aplica. */
+@media (hover: hover) {
+  .table-scroll table tr[style*="--bar-w"]:hover td:not(:first-child) {
+    background: transparent;
+  }
 }
 
 /* Alineación por semántica de columna (no por posición): texto a la
@@ -930,6 +955,35 @@ td a:hover {
   margin-left: auto;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Leyenda de la escala secuencial (heatmaps, relojes, calendarios). */
+.heat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  align-items: center;
+  margin: var(--sp-2) 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.heat-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heat-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+/* Celdas del calendario en modo selector (data-day las vuelve clicables). */
+.calendar rect[data-day] {
+  cursor: pointer;
 }
 
 .table-fallback {

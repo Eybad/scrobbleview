@@ -11,9 +11,11 @@ import { derive } from '../src/aggregate/impl/derive.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
-import { renderView, rankCardHTML, receiptText } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts } from './filter-ui.js';
-import { modelToJSON, exportFilename } from '../src/export.js';
+import { renderView, rankCardHTML, receiptText, emptyFiltersHTML } from './views.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange } from './filter-ui.js';
+import { modelToTables, exportFilename } from '../src/export.js';
+import { toCSV } from '../src/export/csv.js';
+import { buildZip } from '../src/export/zip.js';
 import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
 const appRoot = document.getElementById('app-root');
@@ -36,9 +38,25 @@ const toast = document.createElement('div');
 toast.id = 'chart-toast';
 toast.className = 'toast';
 toast.setAttribute('role', 'status');
+toast.setAttribute('aria-atomic', 'true');
 toast.hidden = true;
 document.body.appendChild(toast);
 let toastTimer = 0;
+
+// Región viva del re-agregado por filtros (WCAG 4.1.3): los KPIs cambian
+// visualmente, pero un lector de pantalla necesita el anuncio explícito.
+// Persistente fuera de #app-root: sobrevive a los re-renders.
+const filterAnnouncer = document.createElement('p');
+filterAnnouncer.id = 'filter-status';
+filterAnnouncer.className = 'visually-hidden';
+filterAnnouncer.setAttribute('role', 'status');
+filterAnnouncer.setAttribute('aria-atomic', 'true');
+document.body.appendChild(filterAnnouncer);
+
+function announceFilters() {
+  if (!current) return;
+  filterAnnouncer.textContent = filterStatusMessage(current.totals);
+}
 
 function buildTz(dataset) {
   // min/max real de t: el dataset concatena fuentes en orden de archivo, así
@@ -103,6 +121,16 @@ function refreshModel() {
   current = aggregate(subset, { tz, now: model.meta.generatedAt });
 }
 
+// Totales del período inmediato anterior (comparación % en los KPIs del
+// dashboard). Solo con rango activo: sin rango no hay "anterior" definido.
+// Solo para la vista dashboard: las demás no muestran comparación.
+function prevTotals() {
+  if (!ds || !state.range) return null;
+  const prev = applyFilters(ds, { ...state, range: previousRange(state.range) }, tz, derived);
+  const prevModel = aggregate(filterDataset(ds, prev.indices), { tz, now: model.meta.generatedAt });
+  return prevModel.totals;
+}
+
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, '');
   const [name, id] = h.split('/');
@@ -130,6 +158,7 @@ const cacheToast = document.createElement('div');
 cacheToast.id = 'cache-toast';
 cacheToast.className = 'cache-toast';
 cacheToast.setAttribute('role', 'status');
+cacheToast.setAttribute('aria-atomic', 'true');
 cacheToast.hidden = true;
 document.body.appendChild(cacheToast);
 let cacheTimer = 0;
@@ -183,8 +212,11 @@ function render() {
   // para que navegar no pegue un salto brusco (el bug se veía al tocar una
   // sección con el nav deslizado a la derecha).
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${renderView(name, current, id, { years: state.years })}</div>`;
+  const isEmpty = isFilterActive(state) && current.totals.records === 0;
+  const viewCtx = { years: state.years, prev: name === 'dashboard' ? prevTotals() : null };
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx)}</div>`;
   updateCacheToast();
+  announceFilters();
   const nav = appRoot.querySelector('.app-nav');
   if (nav) {
     nav.scrollLeft = navX;
@@ -214,8 +246,13 @@ function applyAndRenderView() {
   refreshModel();
   const [name, id] = parseHash();
   const root = document.getElementById('view-root');
-  if (root) root.innerHTML = renderView(name, current, id, { years: state.years });
+  if (root) {
+    const isEmpty = isFilterActive(state) && current.totals.records === 0;
+    const viewCtx = { years: state.years, prev: name === 'dashboard' ? prevTotals() : null };
+    root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
+  }
   updateFilterDynamics();
+  announceFilters();
   wireView();
 }
 
@@ -291,26 +328,28 @@ function wireFilters() {
     });
   });
 
-  // Rango personalizado con fechas (from/to en época local).
+  // Rango personalizado con fechas (from/to en época local). `edited` dice qué
+  // input disparó el cambio: si el par queda invertido, colapsa al día editado.
   const fromInput = appRoot.querySelector('[data-filter="from"]');
   const toInput = appRoot.querySelector('[data-filter="to"]');
-  const onDate = () => {
+  const onDate = (edited) => {
     const f = fromInput ? isoDateToDay(fromInput.value) : null;
     const t = toInput ? isoDateToDay(toInput.value) : null;
     if (f == null && t == null) {
       state.range = null;
     } else {
+      const norm = normalizeRangeDays(f, t, edited);
       const first = model.meta.firstTs ?? 0;
       const lastTs = model.meta.lastTs ?? 0;
       state.range = {
-        from: f != null ? f * 86400 : first,
-        to: t != null ? t * 86400 + 86399 : lastTs
+        from: norm.fromDay != null ? norm.fromDay * 86400 : first,
+        to: norm.toDay != null ? norm.toDay * 86400 + 86399 : lastTs
       };
     }
     applyAndRenderView();
   };
-  if (fromInput) fromInput.addEventListener('change', onDate);
-  if (toInput) toInput.addEventListener('change', onDate);
+  if (fromInput) fromInput.addEventListener('change', () => onDate('from'));
+  if (toInput) toInput.addEventListener('change', () => onDate('to'));
 
   appRoot.querySelectorAll('[data-dow]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -440,16 +479,24 @@ function wireView() {
 siteFooter?.setAttribute('hidden', '');
 
 // Acciones del header: DOM estático fuera de #app-root, se cablean una vez.
-// Export descarga el modelo completo procesado como JSON (análisis externo)
-// por Blob + <a download>: sin red, CSP intacta.
-function exportModel() {
+// Export descarga un .zip con un CSV por tabla (análisis en Sheets/Excel de
+// Android): el JSON crudo colgaba los visores con decenas de MB. Blob +
+// <a download>: sin red, CSP intacta.
+async function exportModel() {
   if (!model) return;
-  const plain = modelToJSON(model, { now: Math.floor(Date.now() / 1000) });
-  const blob = new Blob([JSON.stringify(plain)], { type: 'application/json' });
+  const now = Math.floor(Date.now() / 1000);
+  const encoder = new TextEncoder();
+  const entries = modelToTables(model).map(({ name, headers, rows }) => ({
+    name: `${name}.csv`,
+    // BOM: sin él Excel asume ANSI y rompe los acentos.
+    bytes: encoder.encode(`\uFEFF${toCSV(headers, rows)}`)
+  }));
+  const zip = await buildZip(entries);
+  const blob = new Blob([zip], { type: 'application/zip' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = exportFilename(plain.exportedAt);
+  a.download = exportFilename(now).replace(/\.json$/, '.zip');
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -525,4 +572,25 @@ appRoot.addEventListener('click', (e) => {
   toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
+});
+
+// Selector de rango sobre el calendario: toque = ese día (queda anclado);
+// shift+click = rango desde el día anclado hasta el tocado. El rango activo
+// aparece como chip; "Quitar filtros" lo limpia. En táctil solo hay día
+// simple: los rangos largos quedan cubiertos por Desde/Hasta.
+let calAnchor = null;
+appRoot.addEventListener('click', (e) => {
+  const rect = e.target.closest?.('rect[data-day]');
+  if (!rect || !appRoot.contains(rect)) return;
+  const day = Number(rect.dataset.day);
+  if (!Number.isFinite(day)) return;
+  if (e.shiftKey && calAnchor != null) {
+    const [a, b] = calAnchor <= day ? [calAnchor, day] : [day, calAnchor];
+    state.range = { from: a * 86400, to: b * 86400 + 86399 };
+    calAnchor = null;
+  } else {
+    calAnchor = day;
+    state.range = { from: day * 86400, to: day * 86400 + 86399 };
+  }
+  applyAndRenderView();
 });

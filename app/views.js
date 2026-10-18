@@ -5,8 +5,8 @@
 // Los gráficos son componentes SVG puros de src/charts.js.
 
 import {
-  barChart, lineChart, heatmap, heatmapTable, donut, sparkline, hbarChart,
-  calendarGrid, listeningClock, stackedBar,
+  barChart, lineChart, heatmap, heatmapTable, hbarChart, sparkline,
+  calendarGrid, listeningClock, stackedBar, heatLegend, NO_DATA,
   esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
 } from '../src/charts.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
@@ -16,6 +16,9 @@ function card(title, body, cls = '', titleHtml = false) {
   return `<section class="card ${cls}">${h}${body}</section>`;
 }
 
+// `value` llega como HTML seguro (formatters numéricos o entityLink()):
+// todo string de dato debe ser escapado por el llamador ANTES de entrar
+// acá. `label` y `sub` se escapan en esta función.
 function kpis(items) {
   return `<dl class="kpis">${items.map((it) => `
     <div class="kpi"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`).join('')}</dl>`;
@@ -46,14 +49,18 @@ function monthLabel(mi) {
 // El scroll horizontal vive en .table-scroll (solo la tabla scrollea; el h2 de
 // la card queda fijo). Sin tabindex: el scroll sigue al foco de los enlaces.
 // `rowAttrs(r, i)` emite atributos por <tr> (ej. la barra proporcional).
-function table(headers, rows, cls = '', colClasses = [], rowAttrs = null) {
+// `caption` es para lectores de pantalla (visually-hidden): el h2 de la card
+// no viaja con la tabla al scrollear, así que la tabla sin caption queda
+// anónima fuera de contexto (WCAG H51/H63).
+function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '') {
   const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
   const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
-  return `<div class="table-scroll"><table class="${cls}"><thead><tr>${headers.map(th).join('')}</tr></thead>
+  const cap = caption ? `<caption class="visually-hidden">${esc(caption)}</caption>` : '';
+  return `<div class="table-scroll"><table class="${cls}">${cap}<thead><tr>${headers.map(th).join('')}</tr></thead>
     <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones' }) {
+function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones', caption = '', spark = null }) {
   // Con `sub` (ej. artista de un álbum) el nombre se apila en 2 líneas:
   // título como enlace, sub en gris secundario. El title del enlace lleva
   // el nombre completo "título — sub".
@@ -69,14 +76,20 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
   // Barra proporcional al máximo visible (rows[0] tras el orden desc): el
   // largo compara de un vistazo sin leer los números.
   const max = rows.length > 0 ? rows[0].value : 0;
-  return table(['#', 'Nombre', valueLabel], rows.map((r, i) => [
-    String(i + 1),
-    cell(r),
-    valueFmt(r.value)
-  ]), '', ['c', '', 'n'], (r, i) => {
+  const headers = spark ? ['#', 'Nombre', 'Tendencia', valueLabel] : ['#', 'Nombre', valueLabel];
+  const colCls = spark ? ['c', '', '', 'n'] : ['c', '', 'n'];
+  return table(headers, rows.map((r, i) => {
+    const base = [String(i + 1), cell(r)];
+    if (spark) {
+      const pts = spark(r, i);
+      base.push(pts.some((v) => v > 0) ? sparkline({ points: pts, width: 80, height: 24 }) : '');
+    }
+    base.push(valueFmt(r.value));
+    return base;
+  }), '', colCls, (r, i) => {
     const w = max > 0 ? ((rows[i].value / max) * 100).toFixed(1) : '0';
     return ` style="--bar-w:${w}%"`;
-  });
+  }, caption);
 }
 
 // El title revela el nombre truncado por ellipsis (en táctil no hay tooltip:
@@ -121,8 +134,80 @@ function monthlySeries(monthMap, key) {
   }));
 }
 
+// Serie mensual (solo valores) para la sparkline de una fila de ranking.
+// Los álbumes no tienen serie propia en el modelo: se suma la de sus
+// canciones (mismo camino que la evolución de albumView).
+function rowSeries(model, tab, metric, id) {
+  if (tab === 'albums') {
+    const al = model.albums.byId.get(id);
+    if (!al) return [];
+    const src = metric === 'ms' ? model.monthlyTrackMs : model.monthlyTrackPlays;
+    return fillMonths(sortedMonths(src)).map((mi) => {
+      let v = 0;
+      for (const tk of al.tracks) v += src.get(mi)?.get(tk) ?? 0;
+      return v;
+    });
+  }
+  const map = tab === 'artists'
+    ? (metric === 'ms' ? model.monthlyArtistMs : model.monthlyArtistPlays)
+    : (metric === 'ms' ? model.monthlyTrackMs : model.monthlyTrackPlays);
+  return monthlySeries(map, id).map((p) => p.y);
+}
+
 function pctOf(part, total) {
   return total > 0 ? fmtPct(part / total) : '—';
+}
+
+// Sub de KPI comparado contra el período anterior de igual largo. Sin datos
+// previos no hay división: se anuncia vacío en vez de inventar un %.
+function deltaSub(now, before) {
+  if (before <= 0) return 'anterior sin datos';
+  const pct = Math.round(((now - before) / before) * 100);
+  return `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs período anterior`;
+}
+
+// Entrada de mayor valor de un Map (first-wins en empates).
+function maxEntry(map, getVal) {
+  let best = null;
+  for (const entry of map.entries()) if (!best || getVal(entry[1]) > getVal(best[1])) best = entry;
+  return best;
+}
+
+// Récords personales del período: celdas listas para table() (que no escapa
+// rows), así que todo string de dato va por esc() o entityLink().
+function recordsRows(model) {
+  const rows = [];
+  const day = maxEntry(model.daily, (v) => v.ms);
+  if (day) rows.push(['Día más intenso', esc(fmtDay(day[0])), esc(fmtMs(day[1].ms))]);
+  const month = maxEntry(model.monthly, (v) => v.ms);
+  if (month) rows.push(['Mes más intenso', esc(monthLabel(month[0])), esc(fmtMs(month[1].ms))]);
+  const sess = model.tables.sessions.byDuration[0];
+  if (sess) rows.push(['Sesión más larga', esc(fmtLocal(sess.start)), esc(fmtMs(sess.duration * 1000))]);
+  const run = maxEntry(model.maxRun, (v) => v);
+  if (run) {
+    const tr = model.tracks.byId.get(run[0]);
+    rows.push(['Maratón de una canción', tr ? entityLink('track', run[0], tr.name) : '—', esc(`${fmtNum(run[1])} seguidas`)]);
+  }
+  return rows;
+}
+
+// Arquetipo de oyente: etiqueta derivada de skip rate, concentración (HHI),
+// repeticiones en sesión y franja dominante. Umbrales acotados a mano:
+// skip ≥ 35% = explora y descarta; HHI ≥ 0.08 ≈ artista top con ~28% del tiempo.
+export function listenerArchetype(model) {
+  const t = model.totals;
+  if (!t || t.records === 0) return null;
+  const skipRate = t.skipped / t.records;
+  const c = model.concentration.artists;
+  const repeatRate = model.intraSession.repeatedPlays / t.records;
+  let dom = 0;
+  model.blocks.forEach((b, i) => { if (b.plays > model.blocks[dom].plays) dom = i; });
+  const base = skipRate >= 0.35 ? 'Explorador' : c.hhi >= 0.08 ? 'Devoto' : 'Equilibrado';
+  const when = dom === 0 || dom === 3 ? 'nocturno' : dom === 1 ? 'matutino' : 'vespertino';
+  return {
+    label: `${base} ${when}`,
+    detail: `${fmtPct(skipRate)} de saltos · ${fmtPct(c.hhi)} de concentración · ${fmtPct(repeatRate)} de repeticiones`
+  };
 }
 
 // Tarjeta de rankings con controles (pestaña, métrica, top N, buscador).
@@ -163,6 +248,10 @@ export function rankCardHTML(model, opts = {}) {
 
   const tabBtn = (id, label) => `<button type="button" role="tab" aria-selected="${tab === id}" class="${tab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`;
   const metricBtn = (id, label) => `<button type="button" aria-pressed="${metric === id}" class="${metric === id ? 'active' : ''}" data-metric="${id}">${label}</button>`;
+  const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
+  const rankCaption = query
+    ? `Resultados de búsqueda en ${tabName}`
+    : `Ranking de ${tabName} por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`;
 
   return `
     <div class="rank-controls">
@@ -180,7 +269,13 @@ export function rankCardHTML(model, opts = {}) {
       </div>
     </div>
     <div role="tabpanel">${rows.length
-      ? rankTable(rows, { valueFmt, valueLabel, link: (r) => r.link })
+      ? rankTable(rows, {
+        valueFmt,
+        valueLabel,
+        link: (r) => r.link,
+        caption: rankCaption,
+        spark: (r) => rowSeries(model, tab, metric, r.id)
+      })
       : '<p class="empty">Sin resultados.</p>'}</div>`;
 }
 
@@ -201,8 +296,19 @@ function warningsNote(model) {
   return `<p class="warnings-note" role="note">Se ignoraron: ${esc(parts.join(', '))}.</p>`;
 }
 
-export function dashboard(model) {
+// Estado vacío POR FILTROS (distinto del vacío de datos): la vista no tiene
+// nada que mostrar hasta aflojar el filtro. El botón lo maneja la delegación
+// de data-action="clear" en main.js (los chips usan el mismo camino).
+export function emptyFiltersHTML() {
+  return `<section class="card"><h2>Sin resultados</h2>
+    <p class="empty">Ningún resultado coincide con los filtros activos.</p>
+    <p><button type="button" class="btn btn-secondary" data-action="clear">Quitar filtros</button></p>
+  </section>`;
+}
+
+export function dashboard(model, ctx = {}) {
   const t = model.totals;
+  const prev = ctx.prev ?? null;
   const range = model.meta.firstTs != null
     ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`
     : '—';
@@ -259,8 +365,8 @@ export function dashboard(model) {
       ${warningsNote(model)}
     </header>
     ${kpis([
-      { label: 'Reproducciones', value: fmtNum(t.records) },
-      { label: 'Tiempo escuchado', value: fmtMs(t.ms) },
+      { label: 'Reproducciones', value: fmtNum(t.records), sub: prev ? deltaSub(t.records, prev.records) : undefined },
+      { label: 'Tiempo escuchado', value: fmtMs(t.ms), sub: prev ? deltaSub(t.ms, prev.ms) : undefined },
       { label: 'Artistas', value: fmtNum(model.artists.byId.size) },
       { label: 'Canciones', value: fmtNum(model.tracks.byId.size) },
       { label: 'Álbumes', value: fmtNum(model.albums.byId.size) },
@@ -268,39 +374,40 @@ export function dashboard(model) {
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate }
     ])}
+    ${card('Récords', table(['Récord', 'Cuándo', 'Cuánto'], recordsRows(model), '', ['', '', 'n'], null, 'Récords personales del período'))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
       ${card('Evolución mensual', evolution)}
       ${card('Duración de reproducciones', dist)}
     </div>
-    ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat">${heat}</div>` + heatTable)}
+    ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
     ${card('Obsesión (plays por día activo)', table(['Canción', 'Intensidad', 'Reproducciones'], model.tables.obsession.slice(0, 10).map((o) => [
       entityLink('track', o.tk, o.name),
       o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
       fmtNum(o.plays)
-    ]), '', ['', 'n', 'n']))}
+    ]), '', ['', 'n', 'n'], null, 'Canciones más escuchadas por día activo'))}
     <div class="grid-2">
       ${card('Rachas (misma canción seguida)', table(['Canción', 'Racha'], model.tables.binge.slice(0, 10).map((b) => [
         entityLink('track', b.tk, b.track.name),
         fmtNum(b.run)
-      ]), '', ['', 'n']))}
+      ]), '', ['', 'n'], null, 'Canciones repetidas en racha'))}
       ${card('Mayor tasa de salto', table(['Nombre', 'Saltadas'], [...model.tables.skipRate.artists.slice(0, 5).map((a) => [
         entityLink('artist', a.id, a.name),
         fmtPct(a.skips / a.plays)
       ]), ...model.tables.skipRate.tracks.slice(0, 5).map((tr) => [
         entityLink('track', tr.tk, tr.name),
         fmtPct(tr.skips / tr.plays)
-      ])], '', ['', 'n']))}
+      ])], '', ['', 'n'], null, 'Artistas y canciones con mayor tasa de salto'))}
     </div>
     <div class="grid-2">
       ${card('Primera canción del día', table(['Canción', 'Días'], model.tables.dayFirst.slice(0, 10).map((d) => [
         entityLink('track', d.tk, d.track.name),
         fmtNum(d.count)
-      ]), '', ['', 'n']))}
+      ]), '', ['', 'n'], null, 'Canción con la que arranca cada día'))}
       ${card('Última canción del día', table(['Canción', 'Días'], model.tables.dayLast.slice(0, 10).map((d) => [
         entityLink('track', d.tk, d.track.name),
         fmtNum(d.count)
-      ]), '', ['', 'n']))}
+      ]), '', ['', 'n'], null, 'Canción con la que cierra cada día'))}
     </div>
     ${kpis([
       { label: 'Con shuffle', value: fmtNum(t.shuffle), sub: shuffleRate },
@@ -361,16 +468,16 @@ export function artistView(model, ar) {
     ])}
     <div class="grid-2">
       ${card('Evolución mensual', evolution)}
-      ${card('Tus canciones de este artista', rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: tr.plays, id: tr.tk })), { link: (r) => `#/track/${r.id}` }))}
+      ${card('Tus canciones de este artista', rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: tr.plays, id: tr.tk })), { link: (r) => `#/track/${r.id}`, caption: 'Canciones del artista por reproducciones' }))}
     </div>
     <div class="grid-2">
-      ${card('Tu semana con este artista', `<div class="chart-scroll chart-scroll--clock">${listeningClock({
+      ${card('Tu semana con este artista', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Reloj de escucha del artista">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxPlays),
         cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      })}</div>`)}
+      })}</div>` + heatLegend())}
       ${card('Álbumes de este artista', albumRows.length
-        ? rankTable(albumRows, { link: (r) => `#/album/${r.id}` })
+        ? rankTable(albumRows, { link: (r) => `#/album/${r.id}`, caption: 'Álbumes del artista por reproducciones' })
         : '<p class="empty">Sin álbumes registrados.</p>')}
     </div>
     ${card('Transiciones', transitions.length
@@ -378,7 +485,7 @@ export function artistView(model, ar) {
           x.from === ar ? `<strong>${esc(x.fromName)}</strong>` : entityLink('artist', x.from, x.fromName),
           x.to === ar ? `<strong>${esc(x.toName)}</strong>` : entityLink('artist', x.to, x.toName),
           fmtNum(x.count)
-        ]), '', ['', '', 'n'])
+        ]), '', ['', '', 'n'], null, 'Transiciones hacia y desde este artista')
       : '<p class="empty">Sin transiciones destacadas.</p>')}`;
 }
 
@@ -417,7 +524,8 @@ export function albumView(model, ak) {
   const al = model.albums.byId.get(ak);
   if (!al) return `<p class="empty">Álbum no encontrado.</p>`;
   const totalMs = model.totals.ms;
-  const ar = ak % 4294967296;
+  // ak = ar*2^32 + al: la parte alta es el artista (el residuo es el id del álbum).
+  const ar = Math.floor(ak / 4294967296);
   const songRows = [...al.tracks]
     .map((tk) => model.tracks.byId.get(tk))
     .filter(Boolean)
@@ -450,7 +558,7 @@ export function albumView(model, ak) {
     <div class="grid-2">
       ${card('Evolución mensual', evolution)}
       ${card('Canciones del álbum', songRows.length
-        ? rankTable(songRows, { link: (r) => `#/track/${r.id}` })
+        ? rankTable(songRows, { link: (r) => `#/track/${r.id}`, caption: 'Canciones del álbum por reproducciones' })
         : '<p class="empty">Sin canciones registradas.</p>')}
     </div>`;
 }
@@ -486,8 +594,8 @@ export function sessionsView(model) {
       { label: 'Reproducciones repetidas', value: fmtNum(model.intraSession.repeatedPlays) }
     ])}
     <div class="grid-2">
-      ${card('Sesiones más largas', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur), '', ['', 'n', 'n', 'n']))}
-      ${card('Sesiones con más reproducciones', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['', 'n', 'n', 'n']))}
+      ${card('Sesiones más largas', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur), '', ['', 'n', 'n', 'n'], null, 'Sesiones más largas'))}
+      ${card('Sesiones con más reproducciones', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
     </div>
     <div class="grid-2">
       ${card('Sesiones por franja', barChart({ data: blocks, showValue: true }))}
@@ -513,21 +621,21 @@ export function discoveryView(model) {
     </header>
     ${card('Canciones nuevas por mes', line)}
     <div class="grid-2">
-      ${card('Meses con más descubrimientos', table(['Mes', 'Nuevas', 'Reproducciones'], abs.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays)]), '', ['', 'n', 'n']))}
-      ${card('Meses con mayor proporción de nuevas', table(['Mes', 'Nuevas', 'Reproducciones', 'Proporción'], rel.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['', 'n', 'n', 'n']))}
+      ${card('Meses con más descubrimientos', table(['Mes', 'Nuevas', 'Reproducciones'], abs.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays)]), '', ['', 'n', 'n'], null, 'Meses con más descubrimientos'))}
+      ${card('Meses con mayor proporción de nuevas', table(['Mes', 'Nuevas', 'Reproducciones', 'Proporción'], rel.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
     </div>
     <div class="grid-2">
       ${card('Constancia (artistas de todos los meses)', table(['Artista', 'Meses', 'Cobertura'], model.tables.constancy.slice(0, 10).map((a) => [
         entityLink('artist', a.id, a.name),
         fmtNum(a.months.size),
         fmtPct(a.coverage)
-      ]), '', ['', 'n', 'n']))}
+      ]), '', ['', 'n', 'n'], null, 'Artistas presentes en todos los meses del rango'))}
       ${card('Longevidad (años activos)', table(['Artista', 'Años', 'Meses', 'Días'], model.tables.longevity.slice(0, 10).map((a) => [
         entityLink('artist', a.id, a.name),
         fmtNum(a.years.size),
         fmtNum(a.months.size),
         fmtNum(a.days.size)
-      ]), '', ['', 'n', 'n', 'n']))}
+      ]), '', ['', 'n', 'n', 'n'], null, 'Artistas con más años activos'))}
     </div>`;
 }
 
@@ -559,7 +667,7 @@ export function yearlyView(model) {
     <header class="view-header">
       <h1>Comparación anual</h1>
     </header>
-    ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Saltadas', 'Racha'], rows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n']))}
+    ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Saltadas', 'Racha'], rows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n'], null, 'Comparación año a año'))}
     ${card('Franjas por año', stacked)}`;
 }
 
@@ -578,24 +686,32 @@ export function calendarView(model, year) {
   const maxMs = Math.max(...days.map((d) => d.value), 1);
   const zeroInYear = model.zeroDays.filter((d) => civilFromDays(d).y === year).length;
   const totalDays = days.length;
+  const dataRange = model.meta.firstTs != null
+    ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
+    : null;
 
   return `
     <header class="view-header">
       <p><a href="#/calendar">← Todos los años</a></p>
       <h1>Calendario ${esc(String(year))}</h1>
-      <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin escuchar</p>
+      <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin escuchar · tocá un día para filtrar (shift+click = rango)</p>
     </header>
-    ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal">${calendarGrid({
+    ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(year))}">${calendarGrid({
       days,
       year,
       colorScale: makeScale(maxMs),
-      cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`
-    })}</div>`)}
+      cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`,
+      dataRange,
+      interactive: true
+    })}</div>` + heatLegend())}
 `;
 }
 
 export function calendarIndexView(model) {
   const years = [...model.yearly.keys()].sort((a, b) => b - a);
+  const dataRange = model.meta.firstTs != null
+    ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
+    : null;
   const yearGrid = (y) => {
     const days = [...model.daily.entries()]
       .filter(([d]) => civilFromDays(d).y === y)
@@ -608,20 +724,22 @@ export function calendarIndexView(model) {
     return calendarGrid({
       days, year: y,
       colorScale: makeScale(maxMs),
-      cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`
-    });
+      cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`,
+      dataRange,
+      interactive: true
+    }) + heatLegend();
   };
   const [last, ...prev] = years;
   return `
     <header class="view-header">
       <h1>Calendario</h1>
-      <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin escuchar en total</p>
+      <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin escuchar en total · tocá un día para filtrar (shift+click = rango)</p>
     </header>
-    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal">${yearGrid(last)}</div>`, '', true) : ''}
+    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${yearGrid(last)}</div>`, '', true) : ''}
     ${prev.map((y) => `
       <details class="card calendar-year">
         <summary><a href="#/calendar/${esc(String(y))}">${esc(String(y))}</a></summary>
-        <div class="chart-scroll chart-scroll--cal">${yearGrid(y)}</div>
+        <div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(y))}">${yearGrid(y)}</div>
       </details>`).join('')}`;
 }
 
@@ -630,6 +748,7 @@ export function wrappedView(model, id, ctx) {
   const topArtist = model.artists.top.byMs[0];
   const topTrack = model.tracks.top.byMs[0];
   const c = model.concentration.artists;
+  const archetype = listenerArchetype(model);
   const onlyYear = ctx?.years && ctx.years.size === 1 ? [...ctx.years][0] : null;
   const title = onlyYear != null ? `Tu ${onlyYear} en resumen` : 'Tu año en resumen';
 
@@ -662,16 +781,22 @@ export function wrappedView(model, id, ctx) {
       { label: 'Tiempo total', value: fmtMs(t.ms) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—' },
       { label: 'Concentración (HHI)', value: c.hhi.toFixed(3) },
-      { label: 'Artistas efectivos', value: c.effective.toFixed(1) }
+      { label: 'Artistas efectivos', value: c.effective.toFixed(1) },
+      ...(archetype ? [{ label: 'Perfil de escucha', value: archetype.label, sub: archetype.detail }] : [])
     ])}
     <div class="grid-2">
       ${topArtist ? card(`Sprint de ${topArtist.name}`, sprintChart) : ''}
-      ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock">${listeningClock({
+      ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Tu semana típica">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxPlays),
         cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      })}</div>`)}
+      })}</div>` + heatLegend())}
     </div>
+    ${card('Así empezó', `<ul class="receipt">
+      <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstTs))}</span></li>
+      ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
+      ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
+    </ul>`)}
     ${card('Recibo', `<ul class="receipt">
       <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>
       <li><span>Artistas distintos</span><span>${fmtNum(model.artists.byId.size)}</span></li>
@@ -710,7 +835,7 @@ export function receiptText(model) {
 }
 
 export const VIEWS = {
-  dashboard: (model) => dashboard(model),
+  dashboard: (model, id, ctx) => dashboard(model, ctx),
   artist: (model, id) => artistView(model, Number(id)),
   track: (model, id) => trackView(model, Number(id)),
   album: (model, id) => albumView(model, Number(id)),

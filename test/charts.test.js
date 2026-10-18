@@ -1,7 +1,16 @@
 // test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, lineChart, stackedBar, HEAT, fmtNum, fmtBytes, hbarChart } from '../src/charts.js';
+import { makeScale, lineChart, stackedBar, HEAT, fmtNum, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
+
+test('sparkline: trazo fino uniforme y bajo (los picos no dominan la fila)', () => {
+  const svg = sparkline({ points: [1, 5, 2, 8, 3] });
+  assert.ok(svg.includes('preserveAspectRatio="none"'), 'se estira al alto del CSS sin letterbox (sin espacio muerto)');
+  assert.ok(svg.includes('vector-effect="non-scaling-stroke"'), 'trazo uniforme en pantalla: el estirado no lo engorda');
+  assert.ok(svg.includes('stroke-width="1.5"'), '1.5px de pantalla: fino y visible');
+  assert.ok(svg.includes('stroke-linejoin="round"'), 'picos redondeados: sin puntas miter que se recortan en el borde');
+  assert.ok(svg.includes('stroke-linecap="round"'), 'extremos redondeados');
+});
 
 test('lineChart: 3 guías horizontales y el máximo rotulado', () => {
   const svg = lineChart({ points: [{ label: 'ene', y: 100 }, { label: 'feb', y: 50 }] });
@@ -93,4 +102,46 @@ test('stackedBar: segmentLabels en titles + leyenda', () => {
   // Sin segmentLabels sigue funcionando como antes.
   const plain = stackedBar({ series: [{ label: '2024', values: [2, 1], total: 3 }] });
   assert.ok(!plain.includes('<ul class="legend">'), 'sin labels no hay leyenda');
+});
+
+test('heatLegend: swatch de nivel cero + rampa 1..5 con extremos rotulados', () => {
+  const html = heatLegend({});
+  assert.ok(html.includes(HEAT[0]), 'nivel cero presente');
+  for (const c of HEAT.slice(1)) assert.ok(html.includes(c), `nivel ${c} presente`);
+  assert.ok(html.includes('sin actividad'), 'etiqueta del nivel cero');
+  assert.ok(html.includes('menos') && html.includes('más'), 'extremos de la rampa');
+});
+
+test('lineChart: aria resumido (rango, máximo y último, sin enumerar puntos)', () => {
+  const points = Array.from({ length: 30 }, (_, i) => ({ label: `m${i}`, y: i }));
+  const html = lineChart({ points });
+  const aria = html.match(/aria-label="([^"]*)"/)[1];
+  assert.ok(aria.includes('m0'), 'primera etiqueta en el resumen');
+  assert.ok(aria.includes('m29'), 'última etiqueta en el resumen');
+  assert.ok(aria.includes('máximo'), 'máximo identificado');
+  assert.ok(!aria.includes('m5:'), 'no enumera los puntos intermedios');
+});
+
+test('calendarGrid: días fuera del rango de datos se distinguen de cero', () => {
+  // 2024-06-15 = día 19889; el rango cubre el 15 y el 16. El 15 tiene datos
+  // (satura la escala), el 16 está dentro del rango sin datos (nivel 0) y el
+  // resto del año está fuera del rango (sin datos, color propio).
+  const days = [{ date: '2024-06-15', value: 5000 }];
+  const html = calendarGrid({
+    days, year: 2024,
+    colorScale: makeScale(5000),
+    dataRange: { from: 19889, to: 19890 }
+  });
+  assert.ok(html.includes(NO_DATA), 'color de sin datos presente');
+  assert.ok(html.includes('sin datos'), 'title de sin datos');
+  assert.ok(html.includes(`fill="${HEAT[0]}"`), 'cero dentro del rango usa el nivel 0');
+  assert.ok(html.includes(`fill="${HEAT[5]}"`), 'el día con datos satura la escala');
+});
+
+test('calendarGrid: modo interactivo marca los días con data-day', () => {
+  const days = [{ date: '2024-06-15', value: 5000 }];
+  const html = calendarGrid({ days, year: 2024, colorScale: makeScale(5000), interactive: true });
+  assert.ok(html.includes('data-day="19889"'), 'cada celda lleva su día epoch');
+  const plain = calendarGrid({ days, year: 2024, colorScale: makeScale(5000) });
+  assert.ok(!plain.includes('data-day'), 'sin interactive el calendario es solo lectura');
 });
