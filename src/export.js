@@ -1,9 +1,13 @@
-// src/export.js — modelo procesado → JSON plano (solo análisis externo)
+// src/export.js — modelo procesado → JSON plano (backup) y tablas CSV (análisis)
 //
 // Seam puro: modelToJSON(model, { now }) → objeto sin Map/Set/typed arrays,
 // listo para JSON.stringify. Exporta el modelo COMPLETO (ignora filtros).
 // Las claves de Map numéricas se serializan como strings de objeto (igual
 // que JSON haría de todos modos); los Set salen como arrays ordenados.
+// modelToTables(model) aplana los maps a filas relacionales para el export
+// de análisis (un CSV por tabla, clave foránea artist_id en tracks/albums).
+
+import { civilFromDays } from './aggregate/impl/derive.js';
 
 export const EXPORT_FORMAT = 'scrobbleview-export';
 export const EXPORT_VERSION = 1;
@@ -47,4 +51,47 @@ export function exportFilename(exportedAt) {
   const d = new Date(exportedAt * 1000);
   const p = (n, w = 2) => String(n).padStart(w, '0');
   return `scrobbleview-${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}.json`;
+}
+
+// epoch-local (s) → 'YYYY-MM-DD HH:MM': legible en Sheets/Excel sin fórmulas.
+function locISO(loc) {
+  const c = civilFromDays(Math.floor(loc / 86400));
+  const sec = ((loc % 86400) + 86400) % 86400;
+  const p = (n) => String(n).padStart(2, '0');
+  return `${c.y}-${p(c.m)}-${p(c.d)} ${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}`;
+}
+
+const TRACK_KEY_ARTIST = 4294967296; // 2^32: tk = tr*2^32 + ar
+
+export function modelToTables(model) {
+  const tables = [];
+  const artists = [...model.artists.byId.entries()].sort((a, b) => a[0] - b[0]);
+  tables.push({
+    name: 'artists',
+    headers: ['id', 'name', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts'],
+    rows: artists.map(([id, a]) => [id, a.name, a.plays, a.ms, a.skips, a.days.size, locISO(a.firstTs), locISO(a.lastTs)])
+  });
+  const tracks = [...model.tracks.byId.entries()].sort((a, b) => a[0] - b[0]);
+  tables.push({
+    name: 'tracks',
+    headers: ['id', 'artist_id', 'name', 'artist', 'album_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts'],
+    rows: tracks.map(([tk, t]) => [tk, tk % TRACK_KEY_ARTIST, t.name, t.artist, t.ak, t.plays, t.ms, t.skips, t.days.size, locISO(t.firstTs), locISO(t.lastTs)])
+  });
+  const albums = [...model.albums.byId.entries()].sort((a, b) => a[0] - b[0]);
+  tables.push({
+    name: 'albums',
+    headers: ['id', 'artist_id', 'name', 'artist', 'plays', 'ms', 'tracks', 'days', 'first_ts', 'last_ts'],
+    rows: albums.map(([ak, al]) => [ak, Math.floor(ak / TRACK_KEY_ARTIST), al.name, al.artist, al.plays, al.ms, al.tracks.size, al.days.size, locISO(al.firstTs), locISO(al.lastTs)])
+  });
+  tables.push({
+    name: 'sessions',
+    headers: ['start', 'duration_s', 'plays', 'ms'],
+    rows: model.sessions.map((s) => [locISO(s.start), s.duration, s.plays, s.ms])
+  });
+  tables.push({
+    name: 'monthly',
+    headers: ['month', 'plays', 'ms'],
+    rows: [...model.monthly.entries()].sort((a, b) => a[0] - b[0]).map(([mi, v]) => [mi, v.plays, v.ms])
+  });
+  return tables;
 }
