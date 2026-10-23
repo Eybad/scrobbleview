@@ -11,7 +11,7 @@ import { derive } from '../src/aggregate/impl/derive.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
-import { renderView, rankCardHTML, receiptText, emptyFiltersHTML } from './views.js';
+import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText } from './views.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, metricFromParams, advancedFilterCount } from './filter-ui.js';
 import { modelToTables, exportFilename } from '../src/export.js';
 import { toCSV } from '../src/export/csv.js';
@@ -21,16 +21,53 @@ import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, is
 const appRoot = document.getElementById('app-root');
 const headerActions = document.getElementById('header-actions');
 const siteFooter = document.querySelector('.site-footer');
+const footerMeta = document.getElementById('footer-meta');
 const tagline = document.querySelector('.tagline');
 
+const LIMITS_STORAGE_KEY = 'scrobbleview:tableLimits';
+const VALID_LIMITS = new Set([10, 25, 50, 100]);
+
+function loadStoredLimits() {
+  const map = new Map();
+  let rankTopN = 10;
+  try {
+    const raw = localStorage.getItem(LIMITS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          const num = Number(v);
+          if (!VALID_LIMITS.has(num)) continue;
+          if (k === '__rank__') rankTopN = num;
+          else map.set(k, num);
+        }
+      }
+    }
+  } catch {
+    // localStorage may be disabled or unavailable in private contexts.
+  }
+  return { map, rankTopN };
+}
+
+function saveStoredLimits() {
+  try {
+    const obj = { __rank__: rankUI.topN };
+    for (const [k, v] of tableLimits.entries()) obj[k] = v;
+    localStorage.setItem(LIMITS_STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    // Ignore storage quota or security errors.
+  }
+}
+
+const initialLimits = loadStoredLimits();
 let ds = null;
 let derived = null;
 let model = null; // modelo completo (sin filtros)
 let current = null; // modelo activo (filtrado o completo)
 let tz = null;
 let state = emptyFilterState();
-let rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
-const tableLimits = new Map();
+let rankUI = { tab: 'artists', metric: 'plays', topN: initialLimits.rankTopN, query: '' };
+const tableLimits = initialLimits.map;
 let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
 let advState = null;
 
@@ -88,7 +125,7 @@ async function analyze(sources, { onProgress }) {
   derived = derive(ds, tz);
   model = aggregate(ds, { tz, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
-  rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
+  rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
   current = model;
   applyHashParams();
   cacheOffer = cacheAvailable() ? 'save' : null;
@@ -104,7 +141,7 @@ async function loadCached() {
   derived = derive(ds, tz);
   model = aggregate(ds, { tz, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
-  rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
+  rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
   current = model;
   applyHashParams();
   cacheOffer = 'loaded';
@@ -279,6 +316,10 @@ function render() {
   // botón "Cargar archivos" la restaura).
   headerActions?.removeAttribute('hidden');
   siteFooter?.removeAttribute('hidden');
+  if (footerMeta && model) {
+    footerMeta.textContent = footerMetaText(model);
+    footerMeta.hidden = false;
+  }
   tagline?.setAttribute('hidden', '');
   wireFilters();
   wireView();
@@ -488,7 +529,10 @@ function wireRankCard() {
   });
   const sel = card.querySelector('[data-topn]');
   if (sel) sel.addEventListener('change', () => {
-    rankUI.topN = Number(sel.value);
+    const nextTopN = Number(sel.value);
+    if (!VALID_LIMITS.has(nextTopN)) return;
+    rankUI.topN = nextTopN;
+    saveStoredLimits();
     updateRankCard('[data-topn]');
   });
   // Flechas del tablist (APG, activación automática): la selección sigue al
@@ -533,8 +577,9 @@ function wireView() {
     sel.addEventListener('change', () => {
       const key = sel.dataset.tableLimit;
       const limit = Number(sel.value);
-      if (!key || !Number.isFinite(limit)) return;
+      if (!key || !VALID_LIMITS.has(limit)) return;
       tableLimits.set(key, limit);
+      saveStoredLimits();
       applyAndRenderView(`select[data-table-limit="${key}"]`);
     });
   });

@@ -250,6 +250,13 @@ main.container {
   margin: 0;
 }
 
+.site-footer .footer-meta {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: var(--sp-1);
+}
+
 .view {
   width: 100%;
 }
@@ -516,6 +523,95 @@ main.container {
   .drop-zone {
     padding: var(--sp-8) var(--sp-4);
   }
+
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .kpis > .kpi:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .kpi {
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .kpi dd {
+    font-size: clamp(1.15rem, 4.5vw, 1.4rem);
+  }
+
+  .kpi.kpi-text dd {
+    font-size: var(--fs-md);
+  }
+
+  .records-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .records-grid > .record-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .record-item {
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .record-value {
+    font-size: var(--fs-md);
+  }
+
+  .filter-presets {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .filter-presets button[data-preset] {
+    justify-content: center;
+    padding-inline: var(--sp-1);
+  }
+
+  .tabs.metric-global {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tabs.metric-global button {
+    justify-content: center;
+  }
+
+  .table-scroll table.rank-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .table-scroll table.rank-table th.col-trend,
+  .table-scroll table.rank-table td.col-trend {
+    display: none;
+  }
+
+  .table-scroll table.rank-table .cell-spark-mobile {
+    display: block;
+  }
+
+  .table-scroll table.rank-table th:first-child,
+  .table-scroll table.rank-table td:first-child {
+    width: 2.25rem;
+  }
+
+  .table-scroll table.rank-table th.col-metric,
+  .table-scroll table.rank-table td.col-metric {
+    width: 6.75rem;
+  }
+
+  .table-scroll table.rank-table td .cell-name,
+  .table-scroll table.rank-table td .cell-sub {
+    max-width: 100%;
+  }
 }
 
 /* Navegación: UNA fila deslizante con las 6 secciones (nada oculto tras
@@ -589,6 +685,10 @@ main.container {
   margin-bottom: var(--sp-6);
 }
 
+.view-header--compact {
+  margin-bottom: var(--sp-3);
+}
+
 .view-header h1 {
   font-size: var(--fs-h1);
   line-height: 1.2;
@@ -603,25 +703,23 @@ main.container {
   overflow-wrap: break-word;
 }
 
-.view-meta-sub {
-  font-size: var(--fs-xs);
-  margin-top: var(--sp-1);
-}
-
-.warnings-note {
-  color: var(--text-muted);
+.view-range {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
   font-size: var(--fs-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: var(--sp-2) var(--sp-3);
-  margin: var(--sp-3) 0 0;
 }
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
   gap: var(--sp-3);
   margin: 0 0 var(--sp-6);
 }
@@ -659,11 +757,14 @@ main.container {
 
 .records-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--sp-3);
 }
 
 .record-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
@@ -673,26 +774,48 @@ main.container {
 }
 
 .record-label {
+  display: block;
   color: var(--text-muted);
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin: 0 0 var(--sp-1);
+  margin: 0 0 2px;
 }
 
 .record-value {
+  display: block;
   font-size: var(--fs-lg);
   font-weight: 700;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   margin: 0;
   overflow-wrap: break-word;
 }
 
 .record-sub {
+  display: block;
   color: var(--text-muted);
   font-size: var(--fs-xs);
   margin: var(--sp-1) 0 0;
   overflow-wrap: break-word;
+}
+
+.record-sub .cell-link {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.record-sub .cell-name,
+.record-sub .cell-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-sub .cell-sub {
+  color: var(--text-muted);
 }
 
 .kpi-sub {
@@ -737,6 +860,24 @@ main.container {
   background-attachment: local, scroll;
 }
 
+.table-scroll--tall {
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 2.5rem;
+}
+
+.table-scroll--tall thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+
+.table-scroll--tall thead th:first-child {
+  z-index: 3;
+}
+
 .card h2 {
   font-size: var(--fs-lg);
   margin-bottom: var(--sp-4);
@@ -744,26 +885,29 @@ main.container {
 
 .card-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   margin-bottom: var(--sp-4);
 }
 
 .card-head h2 {
   margin-bottom: 0;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .card-head select[data-table-limit] {
+  flex: 0 0 auto;
   font: inherit;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   padding: var(--sp-1) var(--sp-2);
-  min-height: 36px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-2);
-  color: var(--text-muted);
+  color: var(--text);
 }
 
 .card-head select[data-table-limit]:hover {
@@ -1042,6 +1186,22 @@ td a:hover {
   font-size: var(--fs-xs);
 }
 
+.cell-metric-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cell-spark-mobile {
+  display: none;
+}
+
+.cell-spark-mobile .sparkline {
+  width: 68px;
+  height: 18px;
+}
+
 .chart-label,
 .chart-value,
 .chart-max {
@@ -1123,6 +1283,7 @@ td a:hover {
   width: 10px;
   height: 10px;
   border-radius: 2px;
+  border: 1px solid var(--border);
   flex: 0 0 auto;
 }
 
@@ -1286,6 +1447,7 @@ td a:hover {
 }
 
 .filter-bar select {
+  width: 100%;
   font: inherit;
   font-size: var(--fs-sm);
   padding: var(--sp-1) var(--sp-2);

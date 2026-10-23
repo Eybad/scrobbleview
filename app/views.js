@@ -23,11 +23,17 @@ function limitSelect(key, currentLimit, label) {
 }
 
 function cardWithLimit(title, key, limit, body, cls = '') {
-  return `<section class="card ${cls}"><div class="card-head"><h2>${esc(title)}</h2>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${body}</section>`;
+  const content = limit >= 25
+    ? body.replace('class="table-scroll"', 'class="table-scroll table-scroll--tall"')
+    : body;
+  return `<section class="card ${cls}"><div class="card-head"><h2>${esc(title)}</h2>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${content}</section>`;
 }
 
 function resolveLimit(ctx, key, fallback = 10) {
-  return ctx?.tableLimits?.[key] ?? fallback;
+  const store = ctx?.limits ?? ctx?.tableLimits;
+  if (!store) return fallback;
+  const val = store instanceof Map ? store.get(key) : store[key];
+  return Number.isFinite(val) && val > 0 ? val : fallback;
 }
 
 // `value` llega como HTML seguro (formatters numéricos o entityLink()):
@@ -127,15 +133,16 @@ function calendarTable(days, year, byMs = true) {
 // `caption` es para lectores de pantalla (visually-hidden): el h2 de la card
 // no viaja con la tabla al scrollear, así que la tabla sin caption queda
 // anónima fuera de contexto (WCAG H51/H63).
-function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '') {
+function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '', scrollCls = '') {
   const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
   const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
   const cap = caption ? `<caption class="visually-hidden">${esc(caption)}</caption>` : '';
-  return `<div class="table-scroll"><table class="${cls}">${cap}<thead><tr>${headers.map(th).join('')}</tr></thead>
+  const wrapCls = scrollCls ? `table-scroll ${scrollCls}` : 'table-scroll';
+  return `<div class="${wrapCls}"><table class="${cls}">${cap}<thead><tr>${headers.map(th).join('')}</tr></thead>
     <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones', caption = '', spark = null }) {
+function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones', caption = '', spark = null, tall = false }) {
   // Con `sub` (ej. artista de un álbum) el nombre se apila en 2 líneas:
   // título como enlace, sub en gris secundario. El title del enlace lleva
   // el nombre completo "título — sub".
@@ -143,7 +150,7 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
     const full = r.sub ? `${r.name} — ${r.sub}` : r.name;
     const inner = r.sub
       ? `<span class="cell-name">${esc(r.name)}</span><span class="cell-sub">${esc(r.sub)}</span>`
-      : esc(r.name);
+      : `<span class="cell-name">${esc(r.name)}</span>`;
     return link
       ? `<a class="cell-link" href="${link(r)}" title="${esc(full)}">${inner}</a>`
       : `<span class="cell-link" title="${esc(full)}">${inner}</span>`;
@@ -152,19 +159,26 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
   // largo compara de un vistazo sin leer los números.
   const max = rows.length > 0 ? rows[0].value : 0;
   const headers = spark ? ['#', 'Nombre', 'Tendencia', valueLabel] : ['#', 'Nombre', valueLabel];
-  const colCls = spark ? ['c', '', '', 'n'] : ['c', '', 'n'];
+  const colCls = spark ? ['c', '', 'col-trend', 'n col-metric'] : ['c', '', 'n col-metric'];
   return table(headers, rows.map((r, i) => {
     const base = [String(i + 1), cell(r)];
+    const formattedVal = valueFmt(r.value);
     if (spark) {
       const pts = spark(r, i);
-      base.push(pts.some((v) => v > 0) ? sparkline({ points: pts, width: 80, height: 24 }) : '');
+      const hasPts = pts.some((v) => v > 0);
+      base.push(hasPts ? sparkline({ points: pts, width: 80, height: 24 }) : '');
+      const mobileSpark = hasPts
+        ? `<span class="cell-spark-mobile">${sparkline({ points: pts, width: 68, height: 18 })}</span>`
+        : '';
+      base.push(`<div class="cell-metric-stack"><span class="cell-metric-val">${formattedVal}</span>${mobileSpark}</div>`);
+    } else {
+      base.push(formattedVal);
     }
-    base.push(valueFmt(r.value));
     return base;
-  }), '', colCls, (r, i) => {
+  }), 'rank-table', colCls, (r, i) => {
     const w = max > 0 ? ((rows[i].value / max) * 100).toFixed(1) : '0';
     return ` style="--bar-w:${w}%"`;
-  }, caption);
+  }, caption, tall ? 'table-scroll--tall' : '');
 }
 
 // El title revela el nombre truncado por ellipsis (en táctil no hay tooltip:
@@ -317,9 +331,9 @@ function recordsGridHTML(model) {
   tiles.push({
     label: 'Días con escucha',
     val: esc(`${fmtNum(model.daily.size)} días`),
-    meta: esc(`${fmtNum(model.zeroDays)} días sin actividad`)
+    meta: esc(`${fmtNum(model.zeroDays.length)} días sin actividad`)
   });
-  return `<div class="records-grid">${tiles.map((t) => `<div class="record-tile"><span class="record-label">${esc(t.label)}</span><span class="record-val">${t.val}</span><span class="record-meta">${t.meta}</span></div>`).join('')}</div>`;
+  return `<div class="records-grid">${tiles.map((t) => `<div class="record-item"><span class="record-label">${esc(t.label)}</span><span class="record-value">${t.val}</span><span class="record-sub">${t.meta}</span></div>`).join('')}</div>`;
 }
 
 // Arquetipo de oyente: etiqueta derivada de skip rate, concentración (HHI),
@@ -408,26 +422,37 @@ export function rankCardHTML(model, opts = {}) {
         valueLabel,
         link: (r) => r.link,
         caption: rankCaption,
-        spark: (r) => rowSeries(model, tab, metric, r.id)
+        spark: (r) => rowSeries(model, tab, metric, r.id),
+        tall: topN >= 25
       })
       : '<p class="empty">Sin resultados.</p>'}</div>`;
 }
 
 const WARNING_LABELS = {
-  EPISODE: 'episodios de podcast',
-  NO_TS: 'eventos sin fecha',
-  BAD_TS: 'eventos con fecha inválida',
-  NO_TRACK: 'eventos sin canción',
-  BAD_MS: 'eventos con duración inválida'
+  EPISODE: ['episodio de podcast', 'episodios de podcast'],
+  NO_TS: ['evento sin fecha', 'eventos sin fecha'],
+  BAD_TS: ['evento con fecha inválida', 'eventos con fecha inválida'],
+  NO_TRACK: ['evento sin canción', 'eventos sin canción'],
+  BAD_MS: ['evento con duración inválida', 'eventos con duración inválida']
 };
 
-function warningsNote(model) {
+export function footerMetaText(model) {
+  const sourcesCount = model.meta.sources.length;
+  const filesLabel = sourcesCount === 1 ? 'archivo' : 'archivos';
+  const parts = [`${fmtNum(sourcesCount)} ${filesLabel}`, fmtBytes(model.meta.bytesRead)];
   const w = model.meta.warnings;
-  if (!w || w.length === 0) return '';
-  const byCode = new Map();
-  for (const x of w) byCode.set(x.code, (byCode.get(x.code) || 0) + 1);
-  const parts = [...byCode.entries()].map(([code, n]) => `${n} ${WARNING_LABELS[code] ?? code}`);
-  return `<p class="warnings-note" role="note">Se ignoraron: ${esc(parts.join(', '))}.</p>`;
+  if (w && w.length > 0) {
+    const byCode = new Map();
+    for (const x of w) byCode.set(x.code, (byCode.get(x.code) || 0) + 1);
+    const warnItems = [...byCode.entries()].map(([code, n]) => {
+      const labels = WARNING_LABELS[code];
+      const label = labels ? (n === 1 ? labels[0] : labels[1]) : code;
+      return `${fmtNum(n)} ${label}`;
+    });
+    const ignoredWord = w.length === 1 ? 'ignorado' : 'ignorados';
+    parts.push(`${warnItems.join(', ')} ${ignoredWord}`);
+  }
+  return parts.join(' · ');
 }
 
 // Estado vacío POR FILTROS (distinto del vacío de datos): la vista no tiene
@@ -448,7 +473,6 @@ export function dashboard(model, ctx = {}) {
   const range = model.meta.firstTs != null
     ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`
     : '—';
-  const filesLabel = model.meta.sources.length === 1 ? 'archivo' : 'archivos';
 
   const heatCells = [];
   let maxVal = 0;
@@ -488,7 +512,7 @@ export function dashboard(model, ctx = {}) {
     format: fmtNum
   });
 
-  const rankings = `<div id="rank-card">${rankCardHTML(model, { metric: ctx.metric ?? 'plays' })}</div>`;
+  const rankings = `<div id="rank-card">${rankCardHTML(model, { ...ctx.rankUI, metric: ctx.metric ?? ctx.rankUI?.metric ?? 'plays' })}</div>`;
 
   const skipRate = t.records > 0 ? fmtPct(t.skipped / t.records) : '—';
   const shuffleRate = t.records > 0 ? fmtPct(t.shuffle / t.records) : '—';
@@ -505,11 +529,9 @@ export function dashboard(model, ctx = {}) {
   const lastLimit = resolveLimit(ctx, 'dash-last', 10);
 
   return `
-    <header class="view-header">
-      <h1>Tu resumen</h1>
-      <p class="view-meta">${esc(range)}</p>
-      <p class="view-meta view-meta-sub">${fmtNum(model.meta.sources.length)} ${filesLabel} · ${fmtBytes(model.meta.bytesRead)}</p>
-      ${warningsNote(model)}
+    <header class="view-header view-header--compact">
+      <h1 class="visually-hidden">Resumen</h1>
+      <p class="view-meta view-range">${esc(range)}</p>
     </header>
     ${kpis([
       { label: 'Reproducciones', value: fmtNum(t.records), sub: prev ? deltaSub(t.records, prev.records) : undefined },
@@ -1171,17 +1193,22 @@ export function habitsView(model, ctx = {}) {
     pctOf(p.count, t.records)
   ]);
 
-  const oneHitRows = (model.tables.oneHitWonders ?? []).slice(0, oneHitLimit).map((x) => [
-    entityLink('artist', x.id, x.name),
-    x.topTrackTk ? trackSubLink(x.topTrackTk, x.topTrackName, x.name) : esc(x.topTrackName),
-    fmtPct(x.share),
-    `${fmtNum(x.topTrackPlays)} / ${fmtNum(x.plays)}`
-  ]);
+  const oneHitRows = (model.tables.oneHitWonders ?? []).slice(0, oneHitLimit).map((x) => {
+    const topTk = x.topTrack?.tk ?? x.topTrackTk;
+    const topName = x.topTrack?.name ?? x.topTrackName ?? '';
+    const topPlays = x.topTrack?.plays ?? x.topTrackPlays ?? 0;
+    return [
+      entityLink('artist', x.id, x.name),
+      topTk ? trackSubLink(topTk, topName, x.name) : esc(topName),
+      fmtPct(x.share),
+      `${fmtNum(topPlays)} / ${fmtNum(x.plays)}`
+    ];
+  });
 
   const deepRows = (model.tables.deepCatalog ?? []).slice(0, deepLimit).map((x) => [
     entityLink('artist', x.id, x.name),
-    fmtNum(x.trackCount),
-    fmtNum(x.albumCount),
+    fmtNum(x.trackCount ?? x.tracks?.size ?? 0),
+    fmtNum(x.albumCount ?? x.albums?.size ?? 0),
     fmtNum(x.plays),
     fmtMs(x.ms)
   ]);
@@ -1284,7 +1311,7 @@ export function wrappedView(model, id, ctx) {
   }
 
   const heroHTML = archetype
-    ? `<section class="card hero-archetype"><span class="eyebrow">Perfil de escucha</span><h2>${esc(archetype.label)}</h2><p class="hero-detail">${esc(archetype.detail)}</p></section>`
+    ? `<section class="card hero-archetype"><p class="hero-eyebrow">Perfil de escucha</p><h2 class="hero-title">${esc(archetype.label)}</h2><p class="hero-detail">${esc(archetype.detail)}</p></section>`
     : '';
 
   return `

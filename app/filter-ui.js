@@ -336,7 +336,7 @@ export function filterBarHTML(model, state, opts = {}) {
         <label class="field">Desde <input type="date" name="filter-from" autocomplete="off" data-filter="from" value="${fromISO}"${minISO ? ` min="${minISO}"` : ''}></label>
         <label class="field">Hasta <input type="date" name="filter-to" autocomplete="off" data-filter="to" value="${toISO}"${maxISO ? ` max="${maxISO}"` : ''}></label>
       </div>
-      <div class="filter-row">
+      <div class="filter-row filter-dates">
         <label class="field">Año <select name="filter-year" autocomplete="off" data-filter="year" aria-label="Año">${yearOpts}</select></label>
         <label class="field">Mes <select name="filter-month" autocomplete="off" data-filter="month" aria-label="Mes" id="filter-month">${monthOpts}</select></label>
       </div>

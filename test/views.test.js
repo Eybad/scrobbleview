@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import { renderView } from '../app/views.js';
 import { receiptText } from '../app/views.js';
-import { rankCardHTML, emptyFiltersHTML, listenerArchetype } from '../app/views.js';
+import { rankCardHTML, emptyFiltersHTML, listenerArchetype, footerMetaText } from '../app/views.js';
 import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, metricFromParams, advancedFilterCount } from '../app/filter-ui.js';
 import { readFile } from 'node:fs/promises';
 import { emptyFilterState } from '../src/filters.js';
@@ -82,22 +82,38 @@ test('rankings: barra proporcional translúcida por fila', async () => {
   assert.ok(/--bar-w:\d+(?:\.\d+)?%/.test(html), 'filas proporcionales al máximo');
 });
 
-test('meta de vistas: sin zona horaria, archivos en plural y bytes humanizados', async () => {
+test('meta de vistas: rango destacado en dashboard y metadatos de carga en footer', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);
-  const firstMeta = dash.match(/view-meta">([^<]*)</)[1];
-  assert.ok(!firstMeta.includes('·'), 'primera línea: solo el rango de fechas');
-  assert.ok(dash.includes('view-meta-sub">1 archivo'), 'archivos y bytes en segunda línea más chica');
-  assert.ok(dash.includes('1 archivo ·'), 'singular con una sola fuente');
-  assert.ok(!dash.includes('zona '), 'sin "zona <tzId>" en el meta del dashboard');
-  assert.ok(!dash.includes('archivo(s)'), 'sin archivo(s)');
-  assert.ok(/[\d.,]+ (B|KB|MB|GB)</.test(dash), 'bytes humanizados con unidad');
-  assert.ok(!dash.includes(' bytes<'), 'sin bytes crudos');
-  const two = await analyze([
+  assert.ok(!dash.includes('>Tu resumen<'), 'sin título visible redundante "Tu resumen"');
+  assert.ok(dash.includes('<h1 class="visually-hidden">Resumen</h1>'), 'h1 accesible conservado');
+  const firstMeta = dash.match(/view-range">([^<]*)</)[1];
+  assert.ok(firstMeta.includes('→') && !firstMeta.includes('·'), 'primera línea: solo el rango de fechas con hora y minuto');
+  assert.ok(!dash.includes('archivos ·') && !dash.includes('Se ignoraron:'), 'metadatos de archivos y warnings retirados del encabezado de Resumen');
+
+  const meta1 = footerMetaText(model);
+  assert.ok(meta1.startsWith('1 archivo · '), 'singular con una sola fuente en footer');
+  assert.ok(!meta1.includes('zona '), 'sin zona horaria');
+  assert.ok(!meta1.includes('archivo(s)'), 'sin archivo(s)');
+  assert.ok(/[\d.,]+ (B|KB|MB|GB)/.test(meta1), 'bytes humanizados con unidad');
+
+  const twoWithWarnings = await analyze([
     memoryBytes('a.json', json2y()),
-    memoryBytes('b.json', json2y())
+    memoryBytes('b.json', JSON.stringify([
+      { ts: '2024-06-01T14:00:00Z', ms_played: 60000, episode_name: 'Ep 1', spotify_episode_uri: 'spotify:episode:1' },
+      { ts: '2024-06-02T14:00:00Z', ms_played: 60000, episode_name: 'Ep 2', spotify_episode_uri: 'spotify:episode:2' }
+    ]))
   ], { tz: UTC, now: 1704067200 });
-  assert.ok(renderView('dashboard', two).includes('2 archivos ·'), 'plural con dos fuentes');
+  const meta2 = footerMetaText(twoWithWarnings);
+  assert.ok(meta2.includes('2 archivos · '), 'plural con dos fuentes');
+  assert.ok(meta2.includes(' · 2 episodios de podcast ignorados'), 'warnings integrados con punto medio en el footer');
+
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const footerIdx = html.indexOf('<footer class="site-footer"');
+  const footerHtml = html.slice(footerIdx);
+  assert.ok(footerHtml.includes('id="footer-meta"'), 'bloque compacto de metadatos presente en el footer');
+  assert.ok(footerHtml.indexOf('id="footer-meta"') < footerHtml.indexOf('Tus datos se procesan localmente'), 'metadatos justo encima del aviso de privacidad');
+
   const wrapped = renderView('wrapped', model);
   assert.ok(wrapped.includes('view-meta">generado '), 'el meta de wrapped empieza en "generado" (sin tz)');
 });
@@ -498,12 +514,17 @@ test('dashboard: comparación contra el período anterior en KPIs', async () => 
   assert.ok(!none.includes('vs período anterior'), 'sin prev no hay comparación');
 });
 
-test('dashboard: card de récords', async () => {
+test('dashboard: card de récords sin NaN y con clases alineadas al CSS', async () => {
   const model = await demoModel();
   const html = renderView('dashboard', model);
   for (const s of ['Récords', 'Día más intenso', 'Mes más intenso', 'Sesión más larga', 'Maratón']) {
     assert.ok(html.includes(s), `récord: ${s}`);
   }
+  assert.ok(!html.includes('NaN'), 'sin NaN en días sin actividad ni en récords');
+  assert.ok(html.includes('class="record-item"'), 'usa .record-item definido en style.css');
+  assert.ok(html.includes('class="record-value"'), 'usa .record-value definido en style.css');
+  assert.ok(html.includes('class="record-sub"'), 'usa .record-sub definido en style.css');
+  assert.ok(!html.includes('class="record-tile"'), 'sin clase huérfana .record-tile');
 });
 
 test('wrapped: milestones de primera vez', async () => {
@@ -759,4 +780,55 @@ test('detail views (artist, track, album): firstTrack, active months, clockMs, s
   const albumHtml = renderView('album', model, ak, { metric: 'ms' });
   assert.ok(albumHtml.includes('data-table-limit="album-tracks"'));
   assert.ok(albumHtml.includes('class="sparkline"'));
+});
+
+test('table limits: resolveLimit reads ctx.limits Map, slices DOM rows, enables tall scroll at >=25, and preserves rankUI', async () => {
+  const model = await demoModel();
+  const limits = new Map([
+    ['dash-skip-trk', 25],
+    ['habits-deep', 50]
+  ]);
+  const dash = renderView('dashboard', model, null, {
+    metric: 'ms',
+    limits,
+    rankUI: { tab: 'tracks', metric: 'ms', topN: 25, query: '' }
+  });
+  const skipSection = dash.slice(dash.indexOf('data-table-limit="dash-skip-trk"'));
+  assert.ok(skipSection.slice(0, 300).includes('<option value="25" selected>Top 25</option>'), 'dash-skip-trk reflects limit 25 from Map');
+  assert.ok(skipSection.slice(0, 600).includes('table-scroll--tall'), 'tall scroll enabled when limit >= 25');
+
+  const obsSection = dash.slice(dash.indexOf('data-table-limit="dash-obsession"'), dash.indexOf('data-table-limit="dash-binge"'));
+  assert.ok(!obsSection.includes('table-scroll--tall'), 'default Top 10 does not enable tall scroll');
+
+  assert.ok(dash.includes('id="rank-tab-tracks" aria-selected="true"'), 'dashboard preserves rankUI.tab');
+  assert.ok(dash.includes('<option value="25" selected>Top 25</option>'), 'dashboard preserves rankUI.topN');
+
+  const habits = renderView('habits', model, null, { limits });
+  const deepSection = habits.slice(habits.indexOf('data-table-limit="habits-deep"'));
+  assert.ok(deepSection.slice(0, 300).includes('<option value="50" selected>Top 50</option>'), 'habits-deep reflects limit 50 from Map');
+  const deepTbody = deepSection.slice(deepSection.indexOf('<tbody>'), deepSection.indexOf('</tbody>'));
+  const renderedRows = (deepTbody.match(/<tr/g) || []).length;
+  assert.ok(renderedRows > 10 && renderedRows <= 50, `DOM renders active slice (${renderedRows} rows)`);
+});
+
+test('mobile rankings (Option 1B), filter-dates alignment, habits NaN/undefined guard, and wrapped hero classes', async () => {
+  const model = await demoModel();
+
+  const rankHtml = rankCardHTML(model, { tab: 'artists', metric: 'ms' });
+  assert.ok(rankHtml.includes('class="col-trend"'), 'desktop trend column marked with col-trend');
+  assert.ok(rankHtml.includes('class="cell-metric-stack"'), 'metric cell stacks value + mobile sparkline (Option 1B)');
+  assert.ok(rankHtml.includes('class="cell-spark-mobile"'), 'mobile sparkline wrapper present');
+  assert.ok(rankHtml.includes('<span class="cell-name">'), 'artist names wrapped in .cell-name for ellipsis truncation');
+
+  const bar = filterBarHTML(model, emptyFilterState());
+  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
+  assert.equal((details.match(/class="filter-row filter-dates"/g) || []).length, 2, 'both Desde/Hasta and Año/Mes use 2-col filter-dates grid');
+
+  const habits = renderView('habits', model);
+  assert.ok(!habits.includes('NaN'), 'habits view has no NaN values');
+  assert.ok(!habits.includes('undefined'), 'habits view has no undefined values');
+
+  const wrapped = renderView('wrapped', model);
+  assert.ok(wrapped.includes('class="hero-eyebrow"'), 'wrapped hero uses .hero-eyebrow from style.css');
+  assert.ok(wrapped.includes('class="hero-title"'), 'wrapped hero uses .hero-title from style.css');
 });
