@@ -819,7 +819,8 @@ main.container {
 }
 
 .table-scroll--tall {
-  max-height: 26rem;
+  max-height: 40rem;
+  padding-bottom: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-top: 2.5rem;

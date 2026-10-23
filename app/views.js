@@ -560,56 +560,64 @@ export function dashboard(model, ctx = {}) {
     </div>
     ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
     <div class="grid-2">
-      ${cardWithLimit('Obsesión (reproducciones por día activo)', 'dash-obsession', obsLimit, table(['Canción', 'Intensidad', 'Días', 'Reproducciones', 'Tiempo'], model.tables.obsession.slice(0, obsLimit).map((o) => [
+      ${cardWithLimit('Obsesión (reproducciones por día activo)', 'dash-obsession', obsLimit, table(['#', 'Canción', 'Intensidad', 'Días', 'Reproducciones', 'Tiempo'], model.tables.obsession.slice(0, obsLimit).map((o, i) => [
+        String(i + 1),
         trackSubLink(o.tk, o.name, o.artist),
         o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
         fmtNum(o.days.size),
         fmtNum(o.plays),
         fmtMs(o.ms)
-      ]), '', ['', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'))}
-      ${cardWithLimit('Rachas (misma canción seguida)', 'dash-binge', bingeLimit, table(['Canción', 'Racha', 'Reproducciones'], model.tables.binge.slice(0, bingeLimit).map((b) => [
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'))}
+      ${cardWithLimit('Rachas (misma canción seguida)', 'dash-binge', bingeLimit, table(['#', 'Canción', 'Racha', 'Reproducciones'], model.tables.binge.slice(0, bingeLimit).map((b, i) => [
+        String(i + 1),
         trackSubLink(b.tk, b.track.name, b.track.artist),
         fmtNum(b.run),
         fmtNum(b.track.plays)
-      ]), '', ['', 'n', 'n'], null, 'Canciones repetidas en racha'))}
+      ]), '', ['c', '', 'n', 'n'], null, 'Canciones repetidas en racha'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Mayor tasa de salto — Artistas', 'dash-skip-art', skipArtLimit, table(['Artista', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.artists.slice(0, skipArtLimit).map((a) => [
+      ${cardWithLimit('Mayor tasa de salto — Artistas', 'dash-skip-art', skipArtLimit, table(['#', 'Artista', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.artists.slice(0, skipArtLimit).map((a, i) => [
+        String(i + 1),
         entityLink('artist', a.id, a.name),
         fmtNum(a.skips),
         fmtNum(a.plays),
         fmtPct(a.skips / a.plays)
-      ]), '', ['', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto'))}
-      ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['Canción', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr) => [
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto'))}
+      ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['#', 'Canción', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr, i) => [
+        String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
         fmtNum(tr.skips),
         fmtNum(tr.plays),
         fmtPct(tr.skips / tr.plays)
-      ]), '', ['', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto'))}
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['Artista', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a) => [
+      ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['#', 'Artista', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a, i) => [
+        String(i + 1),
         entityLink('artist', a.id, a.name),
         fmtNum(a.skips),
         fmtNum(a.plays),
         fmtPct(a.skips / a.plays)
-      ]), '', ['', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto'))}
-      ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['Canción', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr) => [
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto'))}
+      ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['#', 'Canción', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr, i) => [
+        String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
         fmtNum(tr.skips),
         fmtNum(tr.plays),
         fmtPct(tr.skips / tr.plays)
-      ]), '', ['', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto'))}
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d) => [
+      ${cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['#', 'Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d, i) => [
+        String(i + 1),
         trackSubLink(d.tk, d.track.name, d.track.artist),
         fmtNum(d.count)
-      ]), '', ['', 'n'], null, 'Canción con la que arranca cada día'))}
-      ${cardWithLimit('Última canción del día', 'dash-last', lastLimit, table(['Canción', 'Días'], model.tables.dayLast.slice(0, lastLimit).map((d) => [
+      ]), '', ['c', '', 'n'], null, 'Canción con la que arranca cada día'))}
+      ${cardWithLimit('Última canción del día', 'dash-last', lastLimit, table(['#', 'Canción', 'Días'], model.tables.dayLast.slice(0, lastLimit).map((d, i) => [
+        String(i + 1),
         trackSubLink(d.tk, d.track.name, d.track.artist),
         fmtNum(d.count)
-      ]), '', ['', 'n'], null, 'Canción con la que cierra cada día'))}
+      ]), '', ['c', '', 'n'], null, 'Canción con la que cierra cada día'))}
     </div>`;
 }
 
@@ -706,11 +714,12 @@ export function artistView(model, ar, ctx = {}) {
         : '<p class="empty">Sin álbumes registrados.</p>')}
     </div>
     ${cardWithLimit('Transiciones', 'artist-trans', transLimit, transitions.length
-      ? table(['De', 'A', 'Veces'], transitions.map((x) => [
+      ? table(['#', 'De', 'A', 'Veces'], transitions.map((x, i) => [
+          String(i + 1),
           x.from === ar ? `<strong>${esc(x.fromName)}</strong>` : entityLink('artist', x.from, x.fromName),
           x.to === ar ? `<strong>${esc(x.toName)}</strong>` : entityLink('artist', x.to, x.toName),
           fmtNum(x.count)
-        ]), '', ['', '', 'n'], null, 'Transiciones hacia y desde este artista')
+        ]), '', ['c', '', '', 'n'], null, 'Transiciones hacia y desde este artista')
       : '<p class="empty">Sin transiciones destacadas.</p>')}`;
 }
 
@@ -825,7 +834,8 @@ export function sessionsView(model, ctx = {}) {
     value: s.byWeekday.get(d) ?? 0
   }));
 
-  const sessRows = (list) => list.map((x) => [
+  const sessRows = (list) => list.map((x, i) => [
+    String(i + 1),
     fmtLocal(x.start),
     fmtMs(x.duration * 1000),
     fmtNum(x.plays),
@@ -847,8 +857,8 @@ export function sessionsView(model, ctx = {}) {
       { label: 'Reproducciones repetidas', value: fmtNum(model.intraSession.repeatedPlays) }
     ])}
     <div class="grid-2">
-      ${cardWithLimit('Sesiones más largas', 'sessions-dur', durLimit, table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur), '', ['', 'n', 'n', 'n'], null, 'Sesiones más largas'))}
-      ${cardWithLimit('Sesiones con más reproducciones', 'sessions-plays', playsLimit, table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
+      ${cardWithLimit('Sesiones más largas', 'sessions-dur', durLimit, table(['#', 'Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones más largas'))}
+      ${cardWithLimit('Sesiones con más reproducciones', 'sessions-plays', playsLimit, table(['#', 'Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
     </div>
     <div class="grid-2">
       ${card('Sesiones por franja', scrollChart(barChart({ data: blocks, showValue: true }), 'Sesiones por franja'))}
@@ -896,21 +906,23 @@ export function discoveryView(model, ctx = {}) {
     ])}
     ${card('Canciones nuevas por mes', scrollChart(line, 'Canciones nuevas por mes'))}
     <div class="grid-2">
-      ${cardWithLimit('Meses con más descubrimientos', 'disc-abs', absLimit, table(['Mes', 'Nuevas', 'Repetidas', 'Reproducciones'], abs.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays)]), '', ['', 'n', 'n', 'n'], null, 'Meses con más descubrimientos'))}
-      ${cardWithLimit('Meses con mayor proporción de nuevas', 'disc-rel', relLimit, table(['Mes', 'Nuevas', 'Repetidas', 'Reproducciones', 'Proporción'], rel.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['', 'n', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
+      ${cardWithLimit('Meses con más descubrimientos', 'disc-abs', absLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones'], abs.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays)]), '', ['c', '', 'n', 'n', 'n'], null, 'Meses con más descubrimientos'))}
+      ${cardWithLimit('Meses con mayor proporción de nuevas', 'disc-rel', relLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones', 'Proporción'], rel.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Constancia (artistas de todos los meses)', 'disc-constancy', constLimit, table(['Artista', 'Meses', 'Cobertura'], model.tables.constancy.slice(0, constLimit).map((a) => [
+      ${cardWithLimit('Constancia (artistas de todos los meses)', 'disc-constancy', constLimit, table(['#', 'Artista', 'Meses', 'Cobertura'], model.tables.constancy.slice(0, constLimit).map((a, i) => [
+        String(i + 1),
         entityLink('artist', a.id, a.name),
         fmtNum(a.months.size),
         fmtPct(a.coverage)
-      ]), '', ['', 'n', 'n'], null, 'Artistas presentes en todos los meses del rango'))}
-      ${cardWithLimit('Longevidad (años activos)', 'disc-longevity', longLimit, table(['Artista', 'Años', 'Meses', 'Días'], model.tables.longevity.slice(0, longLimit).map((a) => [
+      ]), '', ['c', '', 'n', 'n'], null, 'Artistas presentes en todos los meses del rango'))}
+      ${cardWithLimit('Longevidad (años activos)', 'disc-longevity', longLimit, table(['#', 'Artista', 'Años', 'Meses', 'Días'], model.tables.longevity.slice(0, longLimit).map((a, i) => [
+        String(i + 1),
         entityLink('artist', a.id, a.name),
         fmtNum(a.years.size),
         fmtNum(a.months.size),
         fmtNum(a.days.size)
-      ]), '', ['', 'n', 'n', 'n'], null, 'Artistas con más años activos'))}
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con más años activos'))}
     </div>`;
 }
 
@@ -1203,11 +1215,12 @@ export function habitsView(model, ctx = {}) {
     pctOf(p.count, t.records)
   ]);
 
-  const oneHitRows = (model.tables.oneHitWonders ?? []).slice(0, oneHitLimit).map((x) => {
+  const oneHitRows = (model.tables.oneHitWonders ?? []).slice(0, oneHitLimit).map((x, i) => {
     const topTk = x.topTrack?.tk ?? x.topTrackTk;
     const topName = x.topTrack?.name ?? x.topTrackName ?? '';
     const topPlays = x.topTrack?.plays ?? x.topTrackPlays ?? 0;
     return [
+      String(i + 1),
       entityLink('artist', x.id, x.name),
       topTk ? trackSubLink(topTk, topName, x.name) : esc(topName),
       fmtPct(x.share),
@@ -1215,7 +1228,8 @@ export function habitsView(model, ctx = {}) {
     ];
   });
 
-  const deepRows = (model.tables.deepCatalog ?? []).slice(0, deepLimit).map((x) => [
+  const deepRows = (model.tables.deepCatalog ?? []).slice(0, deepLimit).map((x, i) => [
+    String(i + 1),
     entityLink('artist', x.id, x.name),
     fmtNum(x.trackCount ?? x.tracks?.size ?? 0),
     fmtNum(x.albumCount ?? x.albums?.size ?? 0),
@@ -1223,14 +1237,16 @@ export function habitsView(model, ctx = {}) {
     fmtMs(x.ms)
   ]);
 
-  const forgArtRows = (model.tables.forgotten?.artists ?? []).slice(0, forgArtLimit).map((a) => [
+  const forgArtRows = (model.tables.forgotten?.artists ?? []).slice(0, forgArtLimit).map((a, i) => [
+    String(i + 1),
     entityLink('artist', a.id, a.name),
     fmtNum(a.plays),
     fmtMs(a.ms),
     esc(fmtLocal(a.lastTs))
   ]);
 
-  const forgTrkRows = (model.tables.forgotten?.tracks ?? []).slice(0, forgTrkLimit).map((tr) => [
+  const forgTrkRows = (model.tables.forgotten?.tracks ?? []).slice(0, forgTrkLimit).map((tr, i) => [
+    String(i + 1),
     trackSubLink(tr.tk, tr.name, tr.artist),
     fmtNum(tr.plays),
     fmtMs(tr.ms),
@@ -1268,18 +1284,18 @@ export function habitsView(model, ctx = {}) {
     </div>
     <div class="grid-2">
       ${cardWithLimit('One-hit wonders (≥80% en 1 canción)', 'habits-onehit', oneHitLimit, oneHitRows.length
-        ? table(['Artista', 'Canción dominante', 'Concentración', 'Reproducciones'], oneHitRows, '', ['', '', 'n', 'n'], null, 'Artistas cuyas reproducciones se concentran en una sola canción')
+        ? table(['#', 'Artista', 'Canción dominante', 'Concentración', 'Reproducciones'], oneHitRows, '', ['c', '', '', 'n', 'n'], null, 'Artistas cuyas reproducciones se concentran en una sola canción')
         : '<p class="empty">Sin artistas con ≥80% en una sola canción (mínimo 20 reproducciones).</p>')}
       ${cardWithLimit('Catálogo profundo (más canciones distintas)', 'habits-deep', deepLimit, deepRows.length
-        ? table(['Artista', 'Canciones', 'Álbumes', 'Reproducciones', 'Tiempo'], deepRows, '', ['', 'n', 'n', 'n', 'n'], null, 'Artistas con más canciones distintas escuchadas')
+        ? table(['#', 'Artista', 'Canciones', 'Álbumes', 'Reproducciones', 'Tiempo'], deepRows, '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con más canciones distintas escuchadas')
         : '<p class="empty">Sin datos.</p>')}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Artistas olvidados', 'habits-forg-art', forgArtLimit, forgArtRows.length
-        ? table(['Artista', 'Reproducciones', 'Tiempo', 'Última escucha'], forgArtRows, '', ['', 'n', 'n', ''], null, 'Artistas con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
+        ? table(['#', 'Artista', 'Reproducciones', 'Tiempo', 'Última escucha'], forgArtRows, '', ['c', '', 'n', 'n', ''], null, 'Artistas con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
         : '<p class="empty">Sin artistas con ≥15 reproducciones.</p>')}
       ${cardWithLimit('Canciones olvidadas', 'habits-forg-trk', forgTrkLimit, forgTrkRows.length
-        ? table(['Canción', 'Reproducciones', 'Tiempo', 'Última escucha'], forgTrkRows, '', ['', 'n', 'n', ''], null, 'Canciones con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
+        ? table(['#', 'Canción', 'Reproducciones', 'Tiempo', 'Última escucha'], forgTrkRows, '', ['c', '', 'n', 'n', ''], null, 'Canciones con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
         : '<p class="empty">Sin canciones con ≥15 reproducciones.</p>')}
     </div>`;
 }

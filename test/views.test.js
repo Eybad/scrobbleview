@@ -865,3 +865,68 @@ test('css polish: no left accent border on range/records/hero, full-width aligne
   const rankTable = blockOf('.table-scroll table.rank-table {');
   assert.ok(rankTable.includes('width: 100%') && rankTable.includes('table-layout: fixed'), 'rank-table uses fixed 100% width without horizontal overflow');
 });
+
+test('all Top 10/25/50/100 tables include # column and tall scroll fits at least 10 rows (>= 38rem)', async () => {
+  const baseModel = await demoModel();
+  const ar = baseModel.artists.top.byPlays[0].id;
+  const ak = [...baseModel.albums.byId.keys()][0];
+  const model = {
+    ...baseModel,
+    transitions: {
+      ...baseModel.transitions,
+      top: [{ from: ar, to: ar, fromName: 'A', toName: 'A', count: 5, repeat: true }]
+    },
+    tables: {
+      ...baseModel.tables,
+      obsession: [{ tk: 1, name: 'T', artist: 'A', intensity: 3.5, days: new Set([1, 2]), plays: 20, ms: 60000 }],
+      oneHitWonders: [{ id: ar, name: 'A', plays: 20, ms: 60000, share: 0.9, topTrack: { tk: 1, name: 'T', plays: 18 } }],
+      forgotten: {
+        artists: [{ id: ar, name: 'A', plays: 20, ms: 60000, lastTs: 1700000000 }],
+        tracks: [{ tk: 1, name: 'T', artist: 'A', plays: 20, ms: 60000, lastTs: 1700000000 }]
+      }
+    }
+  };
+  const viewsToCheck = [
+    ['dashboard', renderView('dashboard', model)],
+    ['artist', renderView('artist', model, ar)],
+    ['album', renderView('album', model, ak)],
+    ['sessions', renderView('sessions', model)],
+    ['discovery', renderView('discovery', model)],
+    ['habits', renderView('habits', model)]
+  ];
+
+  let totalTopTables = 0;
+  for (const [viewName, html] of viewsToCheck) {
+    const matches = [...html.matchAll(/data-(?:table-limit|topn)(?:="([^"]*)")?/g)];
+    for (const m of matches) {
+      const key = m[1] || 'rank-topn';
+      const afterSelect = html.slice(m.index);
+      const tableStart = afterSelect.indexOf('<table');
+      assert.ok(tableStart >= 0, `${viewName} (${key}) renders a <table>`);
+      const tableEnd = afterSelect.indexOf('</table>', tableStart);
+      const tableHtml = afterSelect.slice(tableStart, tableEnd);
+      assert.ok(
+        tableHtml.includes('<th scope="col" class="c">#</th>'),
+        `${viewName} (${key}) has # as centered first column header`
+      );
+      if (/<tbody><tr[\s>]/.test(tableHtml)) {
+        assert.ok(
+          tableHtml.includes('<td class="c">1</td>'),
+          `${viewName} (${key}) numbers rows starting at 1`
+        );
+      }
+      totalTopTables++;
+    }
+  }
+  assert.equal(totalTopTables, 25, 'all 25 Top 10/25/50/100 tables checked');
+
+  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  const tallIdx = css.indexOf('.table-scroll--tall {');
+  const tallBlock = css.slice(tallIdx, css.indexOf('}', tallIdx) + 1);
+  const maxH = tallBlock.match(/max-height:\s*(\d+(?:\.\d+)?)rem/);
+  assert.ok(maxH && Number(maxH[1]) >= 38, `tall scroll max-height (${maxH?.[1]}rem) fits at least 10 rows without cutting at 7`);
+  assert.ok(tallBlock.includes('padding-bottom: 0'), 'tall scroll removes bottom padding so 10-row height is exact');
+
+  const mainJs = await readFile(new URL('../app/main.js', import.meta.url), 'utf8');
+  assert.ok(mainJs.includes('function syncTallTables') && mainJs.includes('rows?.[9]'), 'main.js measures the 10th row (rows[9]) so tall scroll always shows 10 rows');
+});

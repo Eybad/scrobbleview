@@ -484,6 +484,18 @@ function wireFilters() {
 
 let searchTimer = 0;
 
+function syncTallTables(root) {
+  root.querySelectorAll('.table-scroll--tall').forEach((wrap) => {
+    const tenthRow = wrap.querySelector('tbody')?.rows?.[9];
+    if (tenthRow) {
+      const hBar = Math.max(0, wrap.offsetHeight - wrap.clientHeight);
+      wrap.style.maxHeight = `${tenthRow.offsetTop + tenthRow.offsetHeight + hBar}px`;
+    } else {
+      wrap.style.removeProperty('max-height');
+    }
+  });
+}
+
 function updateRankCard(focusSel = null) {
   const card = document.getElementById('rank-card');
   if (!card || !current) return;
@@ -492,6 +504,7 @@ function updateRankCard(focusSel = null) {
   card.innerHTML = rankCardHTML(current, rankUI);
   card.querySelectorAll('.tabs').forEach((t, i) => { t.scrollLeft = tabsX[i] ?? 0; });
   wireRankCard();
+  syncTallTables(card);
   // El re-render destruye el control activado: devolverle el foco (teclado).
   if (focusSel) card.querySelector(focusSel)?.focus();
 }
@@ -556,6 +569,7 @@ function wireRankCard() {
 
 function wireView() {
   wireRankCard();
+  syncTallTables(appRoot);
 
   appRoot.querySelectorAll('select[data-table-limit]').forEach((sel) => {
     sel.addEventListener('change', () => {
@@ -748,3 +762,5 @@ appRoot.addEventListener('click', (e) => {
   }
   applyAndRenderView();
 });
+
+window.addEventListener('resize', () => syncTallTables(appRoot), { passive: true });
