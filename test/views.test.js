@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { renderView } from '../app/views.js';
 import { receiptText } from '../app/views.js';
 import { rankCardHTML, emptyFiltersHTML, listenerArchetype } from '../app/views.js';
-import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState } from '../app/filter-ui.js';
+import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, metricFromParams, advancedFilterCount } from '../app/filter-ui.js';
 import { readFile } from 'node:fs/promises';
 import { emptyFilterState } from '../src/filters.js';
 import { analyze } from '../src/analyze.js';
@@ -613,4 +613,41 @@ test('traducciones: dashboard sin jerga y hint táctil del calendario', async ()
   const mq = css.indexOf('@media (pointer: coarse)');
   assert.ok(mq >= 0, 'media query (pointer: coarse) presente');
   assert.ok(css.indexOf('.hint-shift') > mq, '.hint-shift oculto dentro de la media query');
+});
+
+test('filter-ui: global metric switch, advanced filter badge, and m=ms serialization', async () => {
+  const model = await demoModel();
+  const state = emptyFilterState();
+  const barPlays = filterBarHTML(model, state, { metric: 'plays' });
+  assert.ok(barPlays.includes('data-global-metric="plays" aria-pressed="true"'));
+  assert.ok(barPlays.includes('data-global-metric="ms" aria-pressed="false"'));
+  const barMs = filterBarHTML(model, state, { metric: 'ms' });
+  assert.ok(barMs.includes('data-global-metric="ms" aria-pressed="true"'));
+
+  assert.equal(advancedFilterCount(state, model.meta.lastTs), 0);
+  state.dows = new Set([0, 1]);
+  state.skip = false;
+  assert.equal(advancedFilterCount(state, model.meta.lastTs), 2);
+  const barAdvanced = filterBarHTML(model, state);
+  assert.ok(barAdvanced.includes('id="filter-adv-badge">2<'));
+
+  assert.equal(filterParams(emptyFilterState(), 'ms'), '?m=ms');
+  assert.equal(metricFromParams('m=ms'), 'ms');
+  assert.equal(metricFromParams(''), 'plays');
+  assert.equal(metricFromParams('m=invalid'), 'plays');
+});
+
+test('rankings and css: Top 100 option, skip-link, base links, and no invalid --sp-5', async () => {
+  const model = await demoModel();
+  const rankHtml = rankCardHTML(model, { topN: 100 });
+  assert.ok(rankHtml.includes('<option value="100" selected>Top 100</option>'));
+
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('class="skip-link"'));
+  assert.ok(html.includes('id="main-content"'));
+
+  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  assert.ok(!css.includes('var(--sp-5)'));
+  assert.ok(css.includes('.skip-link'));
+  assert.ok(/^\s*a\s*\{/m.test(css));
 });

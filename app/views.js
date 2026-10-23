@@ -310,7 +310,7 @@ export function rankCardHTML(model, opts = {}) {
     rows = pool.map(rowOf)
       .filter((r) => (r.hay ?? r.name.toLowerCase()).includes(query))
       .sort((a, b) => b.value - a.value)
-      .slice(0, 25);
+      .slice(0, topN);
   } else {
     rows = source.map(rowOf).slice(0, topN);
   }
@@ -334,10 +334,10 @@ export function rankCardHTML(model, opts = {}) {
         <div class="tabs" role="group" aria-label="Métrica">
           ${metricBtn('plays', 'Por reproducciones')}${metricBtn('ms', 'Por tiempo')}
         </div>
-        <select data-topn aria-label="Cantidad">
-          ${[10, 25, 50].map((n) => `<option value="${n}" ${topN === n ? 'selected' : ''}>Top ${n}</option>`).join('')}
+        <select name="rank-topn" autocomplete="off" data-topn aria-label="Cantidad">
+          ${[10, 25, 50, 100].map((n) => `<option value="${n}" ${topN === n ? 'selected' : ''}>Top ${n}</option>`).join('')}
         </select>
-        <input type="search" data-search placeholder="Buscar…" aria-label="Buscar en rankings" value="${esc(opts.query ?? '')}">
+        <input type="search" name="rank-search" autocomplete="off" spellcheck="false" data-search placeholder="Buscar…" aria-label="Buscar en rankings" value="${esc(opts.query ?? '')}">
       </div>
     </div>
     <div role="tabpanel" id="rank-panel" tabindex="0" aria-labelledby="rank-tab-${tab}">${rows.length

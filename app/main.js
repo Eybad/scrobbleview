@@ -12,7 +12,7 @@ import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState } from './filter-ui.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, metricFromParams, advancedFilterCount } from './filter-ui.js';
 import { modelToTables, exportFilename } from '../src/export.js';
 import { toCSV } from '../src/export/csv.js';
 import { buildZip } from '../src/export/zip.js';
@@ -30,8 +30,9 @@ let current = null; // modelo activo (filtrado o completo)
 let tz = null;
 let state = emptyFilterState();
 let rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
+const tableLimits = new Map();
 let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
-let advState = null; // null = sin preferencia manual: abierto en desktop, cerrado en móvil
+let advState = null;
 
 // Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
 // re-renders porque vive fuera de #app-root; el texto va por textContent).
@@ -150,7 +151,7 @@ function parseHash() {
 // volver, los params del hash de esa entrada restauran sus filtros).
 function syncHash() {
   const [name, id] = parseHash();
-  const hash = `#/${name}${id != null ? `/${id}` : ''}${filterParams(state)}`;
+  const hash = `#/${name}${id != null ? `/${id}` : ''}${filterParams(state, rankUI.metric)}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
@@ -158,6 +159,7 @@ function syncHash() {
 // query ausente no toca nada: navegar sin params no resetea filtros.
 function applyHashParams() {
   const [, , query] = parseHash();
+  if (query) rankUI.metric = metricFromParams(query);
   const fromParams = paramsToFilterState(query);
   if (fromParams) {
     state = fromParams;
@@ -169,6 +171,8 @@ function navHTML(active) {
   const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
   return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
+    ${link('hours', 'Horarios', 'hours')}
+    ${link('habits', 'Hábitos', 'habits')}
     ${link('sessions', 'Sesiones', 'sessions')}
     ${link('discovery', 'Descubrimiento', 'discovery')}
     ${link('yearly', 'Años', 'yearly')}
@@ -233,6 +237,16 @@ cacheToast.addEventListener('click', async (e) => {
   updateCacheToast();
 });
 
+function buildViewContext(viewName) {
+  return {
+    years: state.years,
+    prev: viewName === 'dashboard' ? prevTotals() : null,
+    metric: rankUI.metric,
+    limits: tableLimits,
+    rankUI
+  };
+}
+
 function render() {
   if (!current) return;
   const [name, id] = parseHash();
@@ -241,15 +255,18 @@ function render() {
   // sección con el nav deslizado a la derecha).
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   const isEmpty = isFilterActive(state) && current.totals.records === 0;
-  const viewCtx = { years: state.years, prev: name === 'dashboard' ? prevTotals() : null };
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx)}</div>`;
+  const viewCtx = buildViewContext(name);
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state, { metric: rankUI.metric }) + `<div id="view-root">${isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx)}</div>`;
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
   if (nav) {
     nav.scrollLeft = navX;
     // Fade izquierdo solo con scroll real: en reposo atenuaría la 1ra sección.
-    const syncNavFade = () => nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
+    const syncNavFade = () => {
+      nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
+      nav.classList.toggle('is-end', nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2);
+    };
     syncNavFade();
     nav.addEventListener('scroll', syncNavFade, { passive: true });
     // La sección activa entra en vista solo si no se ve (nearest = sin
@@ -270,19 +287,20 @@ function render() {
 // Cambio de filtro: re-agrega y actualiza SOLO la vista + los dinámicos de la
 // barra (presets, meses, fechas, chips, fila de Limpiar). La barra persiste: no
 // se pierde el foco ni el estado del <details> de avanzados.
-function applyAndRenderView() {
+function applyAndRenderView(focusSelector = null) {
   refreshModel();
   const [name, id] = parseHash();
   const root = document.getElementById('view-root');
   if (root) {
     const isEmpty = isFilterActive(state) && current.totals.records === 0;
-    const viewCtx = { years: state.years, prev: name === 'dashboard' ? prevTotals() : null };
+    const viewCtx = buildViewContext(name);
     root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
   }
   updateFilterDynamics();
   announceFilters();
   syncHash();
   wireView();
+  if (focusSelector) appRoot.querySelector(focusSelector)?.focus();
 }
 
 // Sincroniza los controles de la barra con el estado (sin re-renderizarla).
@@ -298,6 +316,11 @@ function updateFilterDynamics() {
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', String(active));
   });
+  bar.querySelectorAll('[data-global-metric]').forEach((btn) => {
+    const isSelected = btn.dataset.globalMetric === rankUI.metric;
+    btn.classList.toggle('active', isSelected);
+    btn.setAttribute('aria-pressed', String(isSelected));
+  });
   // Los shortcuts de año/mes reflejan el rango vigente (sync inverso): match
   // exacto → el valor, rango arbitrario → "Personalizado", sin rango →
   // placeholder. Nunca hay dos verdades sobre el período activo.
@@ -310,6 +333,16 @@ function updateFilterDynamics() {
     const on = state.hours != null && b.hours.every((h) => state.hours.has(h));
     btn.setAttribute('aria-pressed', String(on));
   });
+  bar.querySelectorAll('[data-toggle3]').forEach((sel) => {
+    const key = sel.dataset.toggle3;
+    sel.value = state[key] === true ? 'yes' : state[key] === false ? 'no' : '';
+  });
+  const badge = document.getElementById('filter-adv-badge');
+  if (badge) {
+    const activeAdvCount = advancedFilterCount(state, last);
+    badge.textContent = String(activeAdvCount);
+    badge.hidden = activeAdvCount === 0;
+  }
   const from = bar.querySelector('[data-filter="from"]');
   if (from) from.value = state.range ? locToISODate(state.range.from) : '';
   const to = bar.querySelector('[data-filter="to"]');
@@ -319,14 +352,20 @@ function updateFilterDynamics() {
 }
 
 function wireFilters() {
-  // Avanzados: la preferencia manual sobrevive a los re-renders (cada montaje
-  // destruye el nodo); sin preferencia, abierto en desktop y cerrado en móvil.
-  // El listener va ANTES de setear open: el toggle programático también cuenta.
   const adv = appRoot.querySelector('.filter-advanced');
   if (adv) {
     adv.addEventListener('toggle', () => { advState = adv.open; });
-    adv.open = advState != null ? advState : window.matchMedia('(min-width: 700px)').matches;
+    adv.open = advState ?? false;
   }
+
+  appRoot.querySelectorAll('[data-global-metric]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nextMetric = btn.dataset.globalMetric;
+      if (nextMetric !== 'plays' && nextMetric !== 'ms') return;
+      rankUI.metric = nextMetric;
+      applyAndRenderView(`[data-global-metric="${nextMetric}"]`);
+    });
+  });
 
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -444,7 +483,7 @@ function wireRankCard() {
   card.querySelectorAll('[data-metric]').forEach((btn) => {
     btn.addEventListener('click', () => {
       rankUI.metric = btn.dataset.metric;
-      updateRankCard(`[data-metric="${rankUI.metric}"]`);
+      applyAndRenderView(`#rank-card [data-metric="${rankUI.metric}"]`);
     });
   });
   const sel = card.querySelector('[data-topn]');
@@ -489,6 +528,16 @@ function wireRankCard() {
 
 function wireView() {
   wireRankCard();
+
+  appRoot.querySelectorAll('select[data-table-limit]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const key = sel.dataset.tableLimit;
+      const limit = Number(sel.value);
+      if (!key || !Number.isFinite(limit)) return;
+      tableLimits.set(key, limit);
+      applyAndRenderView(`select[data-table-limit="${key}"]`);
+    });
+  });
 
   // Filtro cruzado por entidad desde las fichas (el foco va al chip creado).
   appRoot.querySelectorAll('[data-filter-entity]').forEach((btn) => {
@@ -594,6 +643,7 @@ window.addEventListener('hashchange', () => {
   const [name, , query] = parseHash();
   // Hash sin query = estado por defecto (entrada inicial o edición manual);
   // con query, los params SON el estado (Back/Forward restauran filtros).
+  rankUI.metric = metricFromParams(query);
   state = paramsToFilterState(query) ?? emptyFilterState();
   render();
   if (name !== lastView) {
@@ -629,7 +679,7 @@ appRoot.addEventListener('click', (e) => {
 appRoot.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[href^="#/"]');
   if (!a || !appRoot.contains(a)) return;
-  const f = filterParams(state);
+  const f = filterParams(state, rankUI.metric);
   if (!f) return;
   const base = a.getAttribute('href').split('?')[0];
   a.setAttribute('href', base + f);
