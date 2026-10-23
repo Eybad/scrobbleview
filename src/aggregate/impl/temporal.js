@@ -6,7 +6,7 @@
 
 import { trackKey, albumKey } from './groups.js';
 
-export function createTemporalAcc() {
+export function createTemporalAcc(minMs = 0) {
   const yearly = new Map(); // year -> ver abajo
   const monthly = new Map(); // monthIndex -> {plays, ms}
   const monthlyDiscovery = new Map(); // monthIndex -> {plays, new, rep, unknown}
@@ -126,8 +126,10 @@ export function createTemporalAcc() {
       const b = blocks[block];
       b.plays++;
       b.ms += ev.ms;
-      bump(b.artists, ev.ar, 1);
-      bump(b.tracks, tk, 1);
+      if (ev.ms >= minMs) {
+        bump(b.artists, ev.ar, 1);
+        bump(b.tracks, tk, 1);
+      }
 
       let d = daily.get(ev.day);
       if (!d) { d = { plays: 0, ms: 0, artists: new Map(), tracks: new Map() }; daily.set(ev.day, d); }
@@ -136,10 +138,12 @@ export function createTemporalAcc() {
       bump(d.artists, ev.ar, 1);
       bump(d.tracks, tk, 1);
 
-      const ht = hourTracks[ev.hour];
-      ht.set(tk, (ht.get(tk) || 0) + 1);
-      const htm = hourTracksMs[ev.hour];
-      htm.set(tk, (htm.get(tk) || 0) + ev.ms);
+      if (ev.ms >= minMs) {
+        const ht = hourTracks[ev.hour];
+        ht.set(tk, (ht.get(tk) || 0) + 1);
+        const htm = hourTracksMs[ev.hour];
+        htm.set(tk, (htm.get(tk) || 0) + ev.ms);
+      }
 
       if (!dayFirst.has(ev.day)) dayFirst.set(ev.day, tk);
       dayLast.set(ev.day, tk);

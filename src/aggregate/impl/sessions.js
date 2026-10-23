@@ -6,6 +6,7 @@
 // sessionsWithRepeats = sesiones con al menos una repetición).
 
 import { civilFromDays } from './derive.js';
+import { trackKey } from './groups.js';
 
 const SESSION_GAP_MINUTES = 30;
 
@@ -28,11 +29,12 @@ export function createSessionsAcc() {
 
   return {
     onEvent(ev) {
+      const tk = trackKey(ev.tr, ev.ar);
       if (!current) {
         current = {
           start: ev.loc, end: ev.loc, duration: 0, ms: ev.ms, plays: 1,
           artists: new Map([[ev.ar, 1]]),
-          tracks: new Map([[ev.tr, 1]])
+          tracks: new Map([[tk, 1]])
         };
         return;
       }
@@ -42,14 +44,14 @@ export function createSessionsAcc() {
         current = {
           start: ev.loc, end: ev.loc, duration: 0, ms: ev.ms, plays: 1,
           artists: new Map([[ev.ar, 1]]),
-          tracks: new Map([[ev.tr, 1]])
+          tracks: new Map([[tk, 1]])
         };
       } else {
         current.end = ev.loc;
         current.ms += ev.ms;
         current.plays++;
         current.artists.set(ev.ar, (current.artists.get(ev.ar) || 0) + 1);
-        current.tracks.set(ev.tr, (current.tracks.get(ev.tr) || 0) + 1);
+        current.tracks.set(tk, (current.tracks.get(tk) || 0) + 1);
       }
     },
 

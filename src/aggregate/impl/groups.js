@@ -70,7 +70,7 @@ export function createGroupsAcc(ds) {
           name: ds.dicts.tracks.get(ev.tr),
           artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
           plays: 0, ms: 0, skips: 0,
-          days: new Set(), years: new Set(),
+          days: new Set(), months: new Set(), years: new Set(),
           firstTs: ev.loc, lastTs: ev.loc
         };
         tracks.set(tk, t);
@@ -79,6 +79,7 @@ export function createGroupsAcc(ds) {
       t.ms += ev.ms;
       if (ev.isSkipped) t.skips++;
       t.days.add(ev.day);
+      t.months.add(Math.floor(ev.ymd / 100));
       t.years.add(year);
       t.lastTs = ev.loc;
 

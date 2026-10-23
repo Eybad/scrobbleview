@@ -160,6 +160,14 @@ test('intraSession: A,A,B en una sesión → 1 repetición', () => {
   const m = aggregate(ds, { tz: UTC });
   assert.equal(m.intraSession.sessionsWithRepeats, 1);
   assert.equal(m.intraSession.repeatedPlays, 1);
+
+  const sameTitleDiffArtist = buildDataset([
+    { t: D0, track: 'Intro', artist: 'X' },
+    { t: D0 + 60, track: 'Intro', artist: 'Y' }
+  ]);
+  const mDiff = aggregate(sameTitleDiffArtist, { tz: UTC });
+  assert.equal(mDiff.intraSession.sessionsWithRepeats, 0);
+  assert.equal(mDiff.intraSession.repeatedPlays, 0);
 });
 
 test('streak: días 1,2,3,5 → racha 3 (19723→19725)', () => {
@@ -333,6 +341,8 @@ test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clo
   assert.notEqual(album('Y', 'L').id, xl.id); // mismo nombre, otro artista → otro ak
 
   assert.equal(track('X', 'A1').ak, xl.id);
+  assert.equal(track('X', 'A1').months.size, 1);
+  assert.ok(track('X', 'A1').months.has(202401));
   assert.equal(track('X', 'S').ak, 0); // sin álbum
 
   const x = artist('X');
@@ -400,4 +410,20 @@ test('tables: cap 100, lowSkipRate, oneHitWonders, deepCatalog, forgotten, and a
   assert.equal(model.tables.deepCatalog[0].name, 'Deep');
   assert.equal(model.tables.deepCatalog[0].tracks.size, 5);
   assert.equal(model.tables.forgotten.artists[0].name, 'OneHit');
+});
+
+test('hourTracks and blocks top entities count only valid listens (ms >= minMs)', () => {
+  const ds = buildDataset([
+    { t: D0 + 3600, m: 2000, track: 'SkippedSong', artist: 'X' },
+    { t: D0 + 3610, m: 2000, track: 'SkippedSong', artist: 'X' },
+    { t: D0 + 3620, m: 2000, track: 'SkippedSong', artist: 'X' },
+    { t: D0 + 3700, m: 180000, track: 'RealSong', artist: 'Y' },
+    { t: D0 + 3900, m: 180000, track: 'RealSong', artist: 'Y' }
+  ]);
+  const model = aggregate(ds, { tz: UTC });
+  assert.equal(model.hour[1].plays, 5);
+  assert.equal(model.hourTracks[1].size, 1);
+  const [[topTk, topPlays]] = [...model.hourTracks[1].entries()];
+  assert.equal(model.tracks.byId.get(topTk).name, 'RealSong');
+  assert.equal(topPlays, 2);
 });
