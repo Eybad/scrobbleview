@@ -547,3 +547,70 @@ test('calendario: los días filtran al tocar (selector de rango)', async () => {
   assert.ok(html.includes('data-day='), 'celdas del calendario interactivas');
   assert.ok(html.includes('tocá un día'), 'hint de interacción visible');
 });
+
+test('traducciones: KPIs de umbral interpolados desde meta', async () => {
+  const model = await demoModel();
+  const html = renderView('dashboard', model);
+  assert.ok(html.includes('Reproducciones (+30 s)'), 'minMs default 30000 → +30 s');
+  assert.ok(html.includes('Cortadas (&lt;10 s)'), 'skipThresholdMs default 10000 → <10 s escapado');
+  const custom = { ...model, meta: { ...model.meta, minMs: 1500, skipThresholdMs: 500 } };
+  const htmlCustom = renderView('dashboard', custom);
+  assert.ok(htmlCustom.includes('Reproducciones (+1,5 s)'), 'sub-segundo con coma decimal');
+  assert.ok(htmlCustom.includes('Cortadas (&lt;500 ms)'), 'menos de 1 s en ms');
+});
+
+test('traducciones: chips y toggles de shuffle/offline en español', async () => {
+  const model = await demoModel();
+  const base = { artistId: null, trackId: null, albumId: null, range: null, years: null, months: null, hours: null, dows: null, skip: null, shuffle: null, offline: null };
+  const on = chipsHTML(model, { ...base, shuffle: true, offline: true });
+  assert.ok(on.includes('Solo aleatorio'), 'shuffle activo');
+  assert.ok(on.includes('Solo sin conexión'), 'offline activo');
+  const off = chipsHTML(model, { ...base, shuffle: false, offline: false });
+  assert.ok(off.includes('Sin aleatorio'), 'shuffle excluido');
+  assert.ok(off.includes('Con conexión'), 'offline excluido dice "Con conexión"');
+  const bar = filterBarHTML(model, emptyFilterState());
+  assert.ok(bar.includes('Aleatorio <select'), 'toggle de shuffle');
+  assert.ok(bar.includes('Sin conexión <select'), 'toggle de offline');
+});
+
+test('traducciones: razones de inicio/fin en español', async () => {
+  const model = await demoModel();
+  const html = renderView('sessions', model);
+  assert.ok(html.includes('Canción completa'), 'trackdone');
+  assert.ok(html.includes('Botón siguiente'), 'fwdbtn');
+  assert.ok(html.includes('Clic en pista'), 'clickrow');
+  assert.ok(html.includes('Control remoto'), 'remote');
+  assert.ok(html.includes('Cierre de sesión'), 'endplay/logout');
+  assert.ok(html.includes('Pausa de 30 min entre sesiones'), 'meta de sesiones sin "Gap"');
+  const unknown = { ...model, starts: new Map([['weird-code', 3]]) };
+  assert.ok(renderView('sessions', unknown).includes('weird-code'), 'código sin mapeo queda crudo');
+});
+
+test('traducciones: wrapped legible (concentración, evolución, resumen)', async () => {
+  const model = await demoModel();
+  const html = renderView('wrapped', model);
+  const eff = Math.max(1, Math.round(model.concentration.artists.effective));
+  const noun = eff === 1 ? 'artista base' : 'artistas base';
+  assert.ok(html.includes(`~${eff} ${noun}`), 'valor principal = efectivos redondeados');
+  assert.ok(html.includes(`Equivale a repartir tu tiempo en partes iguales entre ${eff}`), 'descripción corta');
+  const flat = html.replace(/\s+/g, ' ');
+  assert.match(flat, /Concentración \(HHI\)<\/dt><dd>[^<]*%/, 'HHI como porcentaje');
+  assert.ok(html.includes('Evolución de '), 'sprint → evolución del artista top');
+  assert.ok(html.includes('Copiar resumen en texto'), 'botón de copia');
+  assert.ok(!html.includes('Recibo') && !html.includes('Copiar recibo'), 'sin "Recibo"');
+  assert.ok(html.includes('Con aleatorio'), 'fila del recibo con término unificado');
+});
+
+test('traducciones: dashboard sin jerga y hint táctil del calendario', async () => {
+  const model = await demoModel();
+  const html = renderView('dashboard', model);
+  assert.ok(html.includes('Obsesión (reproducciones por día activo)'), 'sin "plays"');
+  assert.ok(html.includes('Tiempo escuchado por hora y día'), 'caption del heatmap');
+  assert.ok(!html.includes('(ms)'), 'caption sin unidad técnica');
+  const cal = renderView('calendar', model);
+  assert.ok(cal.includes('class="hint-shift"'), 'hint de shift+click marcado para CSS');
+  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  const mq = css.indexOf('@media (pointer: coarse)');
+  assert.ok(mq >= 0, 'media query (pointer: coarse) presente');
+  assert.ok(css.indexOf('.hint-shift') > mq, '.hint-shift oculto dentro de la media query');
+});
