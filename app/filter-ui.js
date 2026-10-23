@@ -215,9 +215,8 @@ export function advancedFilterCount(state, lastTs = 0) {
 // Solo lo que la UI puede producir: rango, días, franjas, toggles 3-estado y
 // entidad. years/months son paths muertos de la API pura: no se serializan.
 // Los valores (dígitos, coma, guión, yes/no) son URL-safe: sin encodeo.
-export function filterParams(state, metric = 'plays') {
+export function filterParams(state) {
   const parts = [];
-  if (metric === 'ms') parts.push('m=ms');
   if (state.range) parts.push(`r=${state.range.from}-${state.range.to}`);
   if (state.dows) parts.push(`d=${[...state.dows].sort((a, b) => a - b).join(',')}`);
   if (state.hours) parts.push(`h=${[...state.hours].sort((a, b) => a - b).join(',')}`);
@@ -228,12 +227,6 @@ export function filterParams(state, metric = 'plays') {
   if (state.trackId != null) parts.push(`tk=${state.trackId}`);
   if (state.albumId != null) parts.push(`al=${state.albumId}`);
   return parts.length ? `?${parts.join('&')}` : '';
-}
-
-export function metricFromParams(search) {
-  if (!search) return 'plays';
-  const params = new URLSearchParams(search);
-  return params.get('m') === 'ms' ? 'ms' : 'plays';
 }
 
 // Inversa: query → estado completo (cada filtro ausente vuelve como vacío:
@@ -273,8 +266,7 @@ export function paramsToFilterState(search) {
   return state;
 }
 
-export function filterBarHTML(model, state, opts = {}) {
-  const metric = opts.metric === 'ms' ? 'ms' : 'plays';
+export function filterBarHTML(model, state) {
   const years = [...model.yearly.keys()].sort((a, b) => a - b);
   const lastTs = model.meta.lastTs ?? 0;
   const activeAdvCount = advancedFilterCount(state, lastTs);
@@ -285,11 +277,6 @@ export function filterBarHTML(model, state, opts = {}) {
       : state.range != null && state.range.from === lastTs - p.days * 86400 && state.range.to === lastTs;
     return `<button type="button" data-preset="${p.id}" class="${active ? 'active' : ''}" aria-pressed="${active}">${p.label}</button>`;
   }).join('');
-
-  const metricSwitch = `<div class="tabs metric-global" role="group" aria-label="Métrica">
-    <button type="button" data-global-metric="plays" aria-pressed="${metric === 'plays'}" class="${metric === 'plays' ? 'active' : ''}">Reproducciones</button>
-    <button type="button" data-global-metric="ms" aria-pressed="${metric === 'ms'}" class="${metric === 'ms' ? 'active' : ''}">Tiempo</button>
-  </div>`;
 
   const yearOpts = `<option value="">Todos los años</option>` +
     years.map((y) => `<option value="${esc(String(y))}" ${state.years?.has(y) ? 'selected' : ''}>${esc(String(y))}</option>`).join('') +
@@ -328,7 +315,7 @@ export function filterBarHTML(model, state, opts = {}) {
   // filtrado (la vista entera se re-agrega), sería duplicación. "Borrar todo"
   // vive dentro de la fila de chips (chipsHTML): sin filtros la fila colapsa.
   return `<div class="filter-bar" id="filter-bar" role="group" aria-label="Filtros">
-    <div class="filter-row filter-top-row"><div class="filter-presets">${presets}</div>${metricSwitch}</div>
+    <div class="filter-row filter-presets">${presets}</div>
     <div class="filter-row" id="filter-chips" tabindex="-1">${chipsHTML(model, state)}</div>
     <details class="filter-advanced">
       <summary><svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>Fechas y filtros avanzados<span class="filter-badge" id="filter-adv-badge"${activeAdvCount > 0 ? '' : ' hidden'}>${activeAdvCount}</span></summary>

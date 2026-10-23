@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { renderView } from '../app/views.js';
 import { receiptText } from '../app/views.js';
 import { rankCardHTML, emptyFiltersHTML, listenerArchetype, footerMetaText } from '../app/views.js';
-import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, metricFromParams, advancedFilterCount } from '../app/filter-ui.js';
+import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, advancedFilterCount } from '../app/filter-ui.js';
 import { readFile } from 'node:fs/promises';
 import { emptyFilterState } from '../src/filters.js';
 import { analyze } from '../src/analyze.js';
@@ -360,7 +360,7 @@ test('filter-ui: rango invertido colapsa al día editado', () => {
 test('filter-ui: el announcer resume el resultado del filtrado', () => {
   const msg = filterStatusMessage({ records: 2538, ms: 5.5 * 3600000 });
   assert.ok(msg.includes('2.538'), 'conteo con separador de miles');
-  assert.ok(msg.includes('5h 30m'), 'tiempo humanizado');
+  assert.ok(msg.includes('5h 30 min'), 'tiempo humanizado');
 });
 
 test('filter-ui: min/max de los date inputs acotados al dataset', async () => {
@@ -569,15 +569,19 @@ test('calendario: los días filtran al tocar (selector de rango)', async () => {
   assert.ok(html.includes('tocá un día'), 'hint de interacción visible');
 });
 
-test('traducciones: KPIs de umbral interpolados desde meta', async () => {
+test('traducciones: KPIs de umbral con sub debajo del número y nombres naturales', async () => {
   const model = await demoModel();
   const html = renderView('dashboard', model);
-  assert.ok(html.includes('Reproducciones (+30 s)'), 'minMs default 30000 → +30 s');
-  assert.ok(html.includes('Cortadas (&lt;10 s)'), 'skipThresholdMs default 10000 → <10 s escapado');
+  assert.ok(html.includes('<dt>Escuchas válidas</dt>'), 'nombre natural para plays >= minMs');
+  assert.ok(html.includes(`<dd>${model.totals.playsSignificant.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">+30 s</span></dd>`), '+30 s debajo del número');
+  assert.ok(html.includes('<dt>Descartadas</dt>'), 'nombre natural para plays < skipThresholdMs');
+  assert.ok(html.includes(`<dd>${model.totals.playsSkipped.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">&lt;10 s</span></dd>`), '<10 s debajo del número');
+  assert.ok(html.includes('<dt>Completas</dt>') && html.includes('sin terminar</span>'), 'Completas con sin terminar debajo');
+  assert.ok(html.includes('<dt>En aleatorio</dt>'), 'En aleatorio en vez de Con aleatorio');
   const custom = { ...model, meta: { ...model.meta, minMs: 1500, skipThresholdMs: 500 } };
   const htmlCustom = renderView('dashboard', custom);
-  assert.ok(htmlCustom.includes('Reproducciones (+1,5 s)'), 'sub-segundo con coma decimal');
-  assert.ok(htmlCustom.includes('Cortadas (&lt;500 ms)'), 'menos de 1 s en ms');
+  assert.ok(htmlCustom.includes('<span class="kpi-sub">+1,5 s</span>'), 'sub-segundo con coma decimal debajo');
+  assert.ok(htmlCustom.includes('<span class="kpi-sub">&lt;500 ms</span>'), 'menos de 1 s en ms debajo');
 });
 
 test('traducciones: chips y toggles de shuffle/offline en español', async () => {
@@ -619,7 +623,8 @@ test('traducciones: wrapped legible (concentración, evolución, resumen)', asyn
   assert.ok(html.includes('Evolución de '), 'sprint → evolución del artista top');
   assert.ok(html.includes('Copiar resumen en texto'), 'botón de copia');
   assert.ok(!html.includes('Recibo') && !html.includes('Copiar recibo'), 'sin "Recibo"');
-  assert.ok(html.includes('Con aleatorio'), 'fila del recibo con término unificado');
+  assert.ok(html.includes('En aleatorio'), 'fila del recibo con término unificado');
+  assert.ok(html.includes('<li><span>Tiempo escuchado</span>'), 'resumen de wrapped incluye tiempo escuchado');
 });
 
 test('traducciones: dashboard sin jerga y hint táctil del calendario', async () => {
@@ -636,14 +641,15 @@ test('traducciones: dashboard sin jerga y hint táctil del calendario', async ()
   assert.ok(css.indexOf('.hint-shift') > mq, '.hint-shift oculto dentro de la media query');
 });
 
-test('filter-ui: global metric switch, advanced filter badge, and m=ms serialization', async () => {
+test('filter-ui: sin switch global de métrica (solo en rankings) y badge de filtros avanzados', async () => {
   const model = await demoModel();
   const state = emptyFilterState();
-  const barPlays = filterBarHTML(model, state, { metric: 'plays' });
-  assert.ok(barPlays.includes('data-global-metric="plays" aria-pressed="true"'));
-  assert.ok(barPlays.includes('data-global-metric="ms" aria-pressed="false"'));
-  const barMs = filterBarHTML(model, state, { metric: 'ms' });
-  assert.ok(barMs.includes('data-global-metric="ms" aria-pressed="true"'));
+  const bar = filterBarHTML(model, state);
+  assert.ok(!bar.includes('data-global-metric'), 'el switch de métrica se quitó de la barra principal');
+  assert.ok(!bar.includes('metric-global'), 'sin contenedor metric-global en la barra principal');
+
+  const rankHtml = rankCardHTML(model, { tab: 'artists', metric: 'plays' });
+  assert.ok(rankHtml.includes('data-metric="plays"') && rankHtml.includes('data-metric="ms"'), 'el switch de métrica vive solo en rankings');
 
   assert.equal(advancedFilterCount(state, model.meta.lastTs), 0);
   state.dows = new Set([0, 1]);
@@ -651,11 +657,6 @@ test('filter-ui: global metric switch, advanced filter badge, and m=ms serializa
   assert.equal(advancedFilterCount(state, model.meta.lastTs), 2);
   const barAdvanced = filterBarHTML(model, state);
   assert.ok(barAdvanced.includes('id="filter-adv-badge">2<'));
-
-  assert.equal(filterParams(emptyFilterState(), 'ms'), '?m=ms');
-  assert.equal(metricFromParams('m=ms'), 'ms');
-  assert.equal(metricFromParams(''), 'plays');
-  assert.equal(metricFromParams('m=invalid'), 'plays');
 });
 
 test('rankings and css: Top 100 option, skip-link, base links, and no invalid --sp-5', async () => {
@@ -723,7 +724,7 @@ test('sessions, discovery, yearly, and calendar enrichments and metric switching
   assert.ok(yearlyPlays.includes('Artista #1'));
   assert.ok(yearlyPlays.includes('Canción #1'));
   const yearlyMs = renderView('yearly', model, null, { metric: 'ms' });
-  assert.ok(yearlyMs.includes('2023 — Madrugada: 2m'));
+  assert.ok(yearlyMs.includes('2023 — Madrugada: 2 min'));
 
   const calIdx = renderView('calendar', model);
   const yearDetails = calIdx.slice(calIdx.indexOf('<details class="card calendar-year">'));
@@ -739,7 +740,7 @@ test('dashboard: unified KPIs, records grid, separated skip rate tables, and met
   const model = await demoModel();
   const dash = renderView('dashboard', model);
   assert.ok(dash.includes('Duración promedio'));
-  assert.ok(dash.includes('Completadas'));
+  assert.ok(dash.includes('Completas'));
   assert.ok(dash.includes('records-grid'));
   assert.ok(dash.includes('Mayor tasa de salto — Artistas'));
   assert.ok(dash.includes('Mayor tasa de salto — Canciones'));
@@ -756,30 +757,32 @@ test('wrapped: hero archetype card and unified receipt with share button', async
   const html = renderView('wrapped', model, null, { metric: 'ms' });
   assert.ok(html.includes('hero-archetype'));
   assert.ok(!html.includes('<h2>Compartir</h2>'), 'share button is unified into the summary card');
-  assert.ok(html.includes('Tiempo escuchado por hora y día'), 'wrapped clock switches to ms when metric=ms');
+  assert.ok(html.includes('Tiempo escuchado por hora y día'), 'wrapped clock uses ms');
 });
 
-test('detail views (artist, track, album): firstTrack, active months, clockMs, sparklines, and table limits', async () => {
+test('detail views (artist, track, album): firstTrack, active months, clockMs, sparklines, time stats, and table limits', async () => {
   const model = await demoModel();
   const ar = model.artists.top.byPlays[0].id;
-  const artistPlays = renderView('artist', model, ar, { metric: 'plays' });
-  assert.ok(artistPlays.includes('Primera canción'));
-  assert.ok(artistPlays.includes('Meses activos'));
-  assert.ok(artistPlays.includes('data-table-limit="artist-tracks"'));
-  assert.ok(artistPlays.includes('class="sparkline"'));
-
+  const artistHtml = renderView('artist', model, ar);
+  assert.ok(artistHtml.includes('Primera canción'));
+  assert.ok(artistHtml.includes('Meses activos'));
+  assert.ok(artistHtml.includes('data-table-limit="artist-tracks"'));
+  assert.ok(artistHtml.includes('class="sparkline"'));
+  assert.ok(artistHtml.includes('class="cell-metric-sub"'), 'canciones y álbumes en ficha de artista muestran también el tiempo escuchado');
   const artistMs = renderView('artist', model, ar, { metric: 'ms' });
   assert.ok(artistMs.includes('Tiempo escuchado por hora y día'));
 
   const tk = model.tracks.top.byPlays[0].tk;
-  const trackHtml = renderView('track', model, tk, { metric: 'plays' });
+  const trackHtml = renderView('track', model, tk);
   assert.ok(trackHtml.includes('Meses activos'));
   assert.ok(trackHtml.includes('Duración media'));
 
   const ak = [...model.albums.byId.keys()][0];
-  const albumHtml = renderView('album', model, ak, { metric: 'ms' });
+  const albumHtml = renderView('album', model, ak);
   assert.ok(albumHtml.includes('data-table-limit="album-tracks"'));
   assert.ok(albumHtml.includes('class="sparkline"'));
+  assert.ok(albumHtml.includes('reproducciones · '), 'encabezado de álbum muestra reproducciones y tiempo');
+  assert.ok(albumHtml.includes('class="cell-metric-sub"'), 'canciones del álbum muestran también el tiempo escuchado');
 });
 
 test('table limits: resolveLimit reads ctx.limits Map, slices DOM rows, enables tall scroll at >=25, and preserves rankUI', async () => {
@@ -831,4 +834,32 @@ test('mobile rankings (Option 1B), filter-dates alignment, habits NaN/undefined 
   const wrapped = renderView('wrapped', model);
   assert.ok(wrapped.includes('class="hero-eyebrow"'), 'wrapped hero uses .hero-eyebrow from style.css');
   assert.ok(wrapped.includes('class="hero-title"'), 'wrapped hero uses .hero-title from style.css');
+});
+
+test('css polish: no left accent border on range/records/hero, full-width aligned tabs, scrollbar spacing, and z-index 3 on sticky # corner', async () => {
+  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  const blockOf = (sel) => {
+    const idx = css.indexOf(sel);
+    assert.ok(idx >= 0, `selector ${sel} exists`);
+    return css.slice(idx, css.indexOf('}', idx) + 1);
+  };
+  assert.ok(!blockOf('.view-range {').includes('border-left'), '.view-range has no left accent border');
+  assert.ok(!blockOf('.record-item {').includes('border-left'), '.record-item has no left accent border');
+  assert.ok(!blockOf('.hero-archetype {').includes('border-left'), '.hero-archetype has no left accent border');
+
+  const tabsBtn = blockOf('.tabs button {');
+  assert.ok(tabsBtn.includes('flex: 1 1 0'), '.tabs button distributes full width equally');
+  assert.ok(tabsBtn.includes('justify-content: center'), '.tabs button centers its label');
+
+  const tableScroll = blockOf('.table-scroll {');
+  assert.ok(tableScroll.includes('var(--sp-3)'), '.table-scroll leaves bottom padding for scrollbar');
+  const chartScroll = blockOf('.chart-scroll {');
+  assert.ok(chartScroll.includes('padding-bottom: var(--sp-3)'), '.chart-scroll leaves bottom padding for scrollbar');
+
+  const stickyLeftIdx = css.indexOf('.table-scroll table th:first-child');
+  const tallCornerIdx = css.indexOf('.table-scroll--tall table thead th:first-child');
+  assert.ok(tallCornerIdx > stickyLeftIdx, 'sticky # corner z-index: 3 declared after sticky-left rule');
+
+  const rankTable = blockOf('.table-scroll table.rank-table {');
+  assert.ok(rankTable.includes('width: 100%') && rankTable.includes('table-layout: fixed'), 'rank-table uses fixed 100% width without horizontal overflow');
 });

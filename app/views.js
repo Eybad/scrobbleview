@@ -142,7 +142,7 @@ function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, captio
     <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reproducciones', caption = '', spark = null, tall = false }) {
+function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valueLabel = 'Reproducciones', caption = '', spark = null, tall = false }) {
   // Con `sub` (ej. artista de un álbum) el nombre se apila en 2 líneas:
   // título como enlace, sub en gris secundario. El title del enlace lleva
   // el nombre completo "título — sub".
@@ -163,6 +163,7 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
   return table(headers, rows.map((r, i) => {
     const base = [String(i + 1), cell(r)];
     const formattedVal = valueFmt(r.value);
+    const subSpan = subValue ? `<span class="cell-metric-sub">${esc(subValue(r))}</span>` : '';
     if (spark) {
       const pts = spark(r, i);
       const hasPts = pts.some((v) => v > 0);
@@ -170,7 +171,9 @@ function rankTable(rows, { valueFmt = fmtNum, link = null, valueLabel = 'Reprodu
       const mobileSpark = hasPts
         ? `<span class="cell-spark-mobile">${sparkline({ points: pts, width: 68, height: 18 })}</span>`
         : '';
-      base.push(`<div class="cell-metric-stack"><span class="cell-metric-val">${formattedVal}</span>${mobileSpark}</div>`);
+      base.push(`<div class="cell-metric-stack"><span class="cell-metric-val">${formattedVal}</span>${subSpan}${mobileSpark}</div>`);
+    } else if (subSpan) {
+      base.push(`<div class="cell-metric-stack"><span class="cell-metric-val">${formattedVal}</span>${subSpan}</div>`);
     } else {
       base.push(formattedVal);
     }
@@ -512,7 +515,7 @@ export function dashboard(model, ctx = {}) {
     format: fmtNum
   });
 
-  const rankings = `<div id="rank-card">${rankCardHTML(model, { ...ctx.rankUI, metric: ctx.metric ?? ctx.rankUI?.metric ?? 'plays' })}</div>`;
+  const rankings = `<div id="rank-card">${rankCardHTML(model, ctx.rankUI)}</div>`;
 
   const skipRate = t.records > 0 ? fmtPct(t.skipped / t.records) : '—';
   const shuffleRate = t.records > 0 ? fmtPct(t.shuffle / t.records) : '—';
@@ -542,12 +545,12 @@ export function dashboard(model, ctx = {}) {
       { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
       { label: 'Duración promedio', value: fmtMs(avgDuration), sub: `mediana ${fmtMs(t.medianMs)}` },
-      { label: 'Completadas', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} interrumpidas` },
+      { label: 'Completas', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} sin terminar` },
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
-      { label: 'Con aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
+      { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
       { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },
-      { label: `Reproducciones (+${thresholdLabel(model.meta.minMs)})`, value: fmtNum(t.playsSignificant) },
-      { label: `Cortadas (<${thresholdLabel(model.meta.skipThresholdMs)})`, value: fmtNum(t.playsSkipped) }
+      { label: 'Escuchas válidas', value: fmtNum(t.playsSignificant), sub: `+${thresholdLabel(model.meta.minMs)}` },
+      { label: 'Descartadas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` }
     ])}
     ${card('Récords', recordsGridHTML(model))}
     ${card('Rankings', rankings)}
@@ -640,7 +643,7 @@ export function artistView(model, ar, ctx = {}) {
     .filter(Boolean)
     .sort((x, y) => (byMs ? y.ms - x.ms || y.plays - x.plays : y.plays - x.plays || y.ms - x.ms))
     .slice(0, albumsLimit)
-    .map((al) => ({ name: al.name, value: byMs ? al.ms : al.plays, id: al.id }));
+    .map((al) => ({ name: al.name, value: byMs ? al.ms : al.plays, plays: al.plays, ms: al.ms, id: al.id }));
 
   const clockSrc = byMs && a.clockMs ? a.clockMs : a.clock;
   const clockCells = [];
@@ -676,8 +679,9 @@ export function artistView(model, ar, ctx = {}) {
     ])}
     <div class="grid-2">
       ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
-      ${cardWithLimit('Tus canciones de este artista', 'artist-tracks', tracksLimit, rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk })), {
+      ${cardWithLimit('Tus canciones de este artista', 'artist-tracks', tracksLimit, rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk })), {
         valueFmt: valFmt,
+        subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
         valueLabel: valLabel,
         link: (r) => `#/track/${r.id}`,
         caption: `Canciones del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
@@ -693,6 +697,7 @@ export function artistView(model, ar, ctx = {}) {
       ${cardWithLimit('Álbumes de este artista', 'artist-albums', albumsLimit, albumRows.length
         ? rankTable(albumRows, {
           valueFmt: valFmt,
+          subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
           valueLabel: valLabel,
           link: (r) => `#/album/${r.id}`,
           caption: `Álbumes del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
@@ -759,7 +764,7 @@ export function albumView(model, ak, ctx = {}) {
     .filter(Boolean)
     .sort((x, y) => (byMs ? y.ms - x.ms || y.plays - x.plays : y.plays - x.plays || y.ms - x.ms))
     .slice(0, tracksLimit)
-    .map((tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk }));
+    .map((tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk }));
   const monthTrackMap = evoByMs ? model.monthlyTrackMs : model.monthlyTrackPlays;
   const evolution = lineChart({
     points: fillMonths(sortedMonths(model.monthly)).map((mi) => {
@@ -773,7 +778,7 @@ export function albumView(model, ak, ctx = {}) {
     <header class="view-header">
       <p><a href="#/dashboard">← Volver al resumen</a></p>
       <h1>${esc(al.name)}</h1>
-      <p class="view-meta">${entityLink('artist', ar, al.artist)}</p>
+      <p class="view-meta">${entityLink('artist', ar, al.artist)} · ${fmtNum(al.plays)} reproducciones · ${fmtMs(al.ms)} · ${pctOf(al.ms, totalMs)} del total</p>
       <p><button type="button" class="btn btn-secondary" data-filter-entity="album:${ak}">Filtrar todo por este álbum</button></p>
     </header>
     ${kpis([
@@ -790,6 +795,7 @@ export function albumView(model, ak, ctx = {}) {
       ${cardWithLimit('Canciones del álbum', 'album-tracks', tracksLimit, songRows.length
         ? rankTable(songRows, {
           valueFmt: valFmt,
+          subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
           valueLabel: valLabel,
           link: (r) => `#/track/${r.id}`,
           caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
@@ -1124,12 +1130,12 @@ export function hoursView(model, ctx = {}) {
       <p class="view-meta">Distribución por hora (00–23h), día de la semana y franja horaria</p>
     </header>
     ${kpis([
-      { label: 'Hora pico', value: `${String(peakHour).padStart(2, '0')}:00`, sub: valFmt(byMs ? model.hour[peakHour].ms : model.hour[peakHour].plays) },
-      { label: 'Hora valle', value: `${String(valleyHour).padStart(2, '0')}:00`, sub: valFmt(byMs ? model.hour[valleyHour].ms : model.hour[valleyHour].plays) },
-      { label: 'Día más activo', value: esc(DOW_LONG[peakDow]), sub: valFmt(byMs ? model.weekday[peakDow].ms : model.weekday[peakDow].plays), text: true },
-      { label: 'Franja dominante', value: esc(blockNames[peakBlock].split(' ')[0]), sub: pctOf(byMs ? model.blocks[peakBlock].ms : model.blocks[peakBlock].plays, totalVal), text: true },
-      { label: 'Fin de semana', value: pctOf(weekendVal, totalVal), sub: `${valFmt(weekendVal)} sáb+dom` },
-      { label: 'Lunes a viernes', value: pctOf(weekdayVal, totalVal), sub: `${valFmt(weekdayVal)} lun–vie` }
+      { label: 'Hora pico', value: `${String(peakHour).padStart(2, '0')}:00`, sub: `${fmtNum(model.hour[peakHour].plays)} rep. · ${fmtMs(model.hour[peakHour].ms)}` },
+      { label: 'Hora valle', value: `${String(valleyHour).padStart(2, '0')}:00`, sub: `${fmtNum(model.hour[valleyHour].plays)} rep. · ${fmtMs(model.hour[valleyHour].ms)}` },
+      { label: 'Día más activo', value: esc(DOW_LONG[peakDow]), sub: `${fmtNum(model.weekday[peakDow].plays)} rep. · ${fmtMs(model.weekday[peakDow].ms)}`, text: true },
+      { label: 'Franja dominante', value: esc(blockNames[peakBlock].split(' ')[0]), sub: `${pctOf(byMs ? model.blocks[peakBlock].ms : model.blocks[peakBlock].plays, totalVal)} · ${fmtMs(model.blocks[peakBlock].ms)}`, text: true },
+      { label: 'Fin de semana', value: pctOf(weekendVal, totalVal), sub: `${fmtNum(model.weekday[5].plays + model.weekday[6].plays)} rep. · ${fmtMs(model.weekday[5].ms + model.weekday[6].ms)}` },
+      { label: 'Lunes a viernes', value: pctOf(weekdayVal, totalVal), sub: `${fmtNum(model.totals.records - (model.weekday[5].plays + model.weekday[6].plays))} rep. · ${fmtMs(model.totals.ms - (model.weekday[5].ms + model.weekday[6].ms))}` }
     ])}
     <div class="grid-2">
       ${card(`Actividad por hora del día (${valLabel.toLowerCase()})`, scrollChart(hourChart, 'Actividad por hora del día'))}
@@ -1345,12 +1351,13 @@ export function wrappedView(model, id, ctx) {
       </ul>`)}
       ${card('Resumen', `<ul class="receipt">
         <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>
+        <li><span>Tiempo escuchado</span><span>${fmtMs(t.ms)}</span></li>
         <li><span>Artistas distintos</span><span>${fmtNum(model.artists.byId.size)}</span></li>
         <li><span>Canciones distintas</span><span>${fmtNum(model.tracks.byId.size)}</span></li>
         <li><span>Álbumes distintos</span><span>${fmtNum(model.albums.byId.size)}</span></li>
         <li><span>Sesiones de escucha</span><span>${fmtNum(model.sessionsStats.count)}</span></li>
         <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.records)})</span></li>
-        <li><span>Con aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
+        <li><span>En aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
         <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.records)})</span></li>
         <li><span>Repetidas dentro de sesión</span><span>${fmtNum(model.intraSession.repeatedPlays)}</span></li>
         <li><span>Mismo artista seguido</span><span>${fmtNum(model.transitions.auto)}</span></li>

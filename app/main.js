@@ -12,7 +12,7 @@ import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, metricFromParams, advancedFilterCount } from './filter-ui.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
 import { modelToTables, exportFilename } from '../src/export.js';
 import { toCSV } from '../src/export/csv.js';
 import { buildZip } from '../src/export/zip.js';
@@ -188,7 +188,7 @@ function parseHash() {
 // volver, los params del hash de esa entrada restauran sus filtros).
 function syncHash() {
   const [name, id] = parseHash();
-  const hash = `#/${name}${id != null ? `/${id}` : ''}${filterParams(state, rankUI.metric)}`;
+  const hash = `#/${name}${id != null ? `/${id}` : ''}${filterParams(state)}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
@@ -196,7 +196,6 @@ function syncHash() {
 // query ausente no toca nada: navegar sin params no resetea filtros.
 function applyHashParams() {
   const [, , query] = parseHash();
-  if (query) rankUI.metric = metricFromParams(query);
   const fromParams = paramsToFilterState(query);
   if (fromParams) {
     state = fromParams;
@@ -278,7 +277,6 @@ function buildViewContext(viewName) {
   return {
     years: state.years,
     prev: viewName === 'dashboard' ? prevTotals() : null,
-    metric: rankUI.metric,
     limits: tableLimits,
     rankUI
   };
@@ -293,7 +291,7 @@ function render() {
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   const isEmpty = isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state, { metric: rankUI.metric }) + `<div id="view-root">${isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx)}</div>`;
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx)}</div>`;
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -357,11 +355,6 @@ function updateFilterDynamics() {
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', String(active));
   });
-  bar.querySelectorAll('[data-global-metric]').forEach((btn) => {
-    const isSelected = btn.dataset.globalMetric === rankUI.metric;
-    btn.classList.toggle('active', isSelected);
-    btn.setAttribute('aria-pressed', String(isSelected));
-  });
   // Los shortcuts de año/mes reflejan el rango vigente (sync inverso): match
   // exacto → el valor, rango arbitrario → "Personalizado", sin rango →
   // placeholder. Nunca hay dos verdades sobre el período activo.
@@ -398,15 +391,6 @@ function wireFilters() {
     adv.addEventListener('toggle', () => { advState = adv.open; });
     adv.open = advState ?? false;
   }
-
-  appRoot.querySelectorAll('[data-global-metric]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const nextMetric = btn.dataset.globalMetric;
-      if (nextMetric !== 'plays' && nextMetric !== 'ms') return;
-      rankUI.metric = nextMetric;
-      applyAndRenderView(`[data-global-metric="${nextMetric}"]`);
-    });
-  });
 
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -524,7 +508,7 @@ function wireRankCard() {
   card.querySelectorAll('[data-metric]').forEach((btn) => {
     btn.addEventListener('click', () => {
       rankUI.metric = btn.dataset.metric;
-      applyAndRenderView(`#rank-card [data-metric="${rankUI.metric}"]`);
+      updateRankCard(`[data-metric="${rankUI.metric}"]`);
     });
   });
   const sel = card.querySelector('[data-topn]');
@@ -688,7 +672,6 @@ window.addEventListener('hashchange', () => {
   const [name, , query] = parseHash();
   // Hash sin query = estado por defecto (entrada inicial o edición manual);
   // con query, los params SON el estado (Back/Forward restauran filtros).
-  rankUI.metric = metricFromParams(query);
   state = paramsToFilterState(query) ?? emptyFilterState();
   render();
   if (name !== lastView) {
@@ -724,7 +707,7 @@ appRoot.addEventListener('click', (e) => {
 appRoot.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[href^="#/"]');
   if (!a || !appRoot.contains(a)) return;
-  const f = filterParams(state, rankUI.metric);
+  const f = filterParams(state);
   if (!f) return;
   const base = a.getAttribute('href').split('?')[0];
   a.setAttribute('href', base + f);

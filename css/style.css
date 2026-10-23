@@ -572,46 +572,6 @@ main.container {
     justify-content: center;
     padding-inline: var(--sp-1);
   }
-
-  .tabs.metric-global {
-    width: 100%;
-    margin-left: 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .tabs.metric-global button {
-    justify-content: center;
-  }
-
-  .table-scroll table.rank-table {
-    width: 100%;
-    table-layout: fixed;
-  }
-
-  .table-scroll table.rank-table th.col-trend,
-  .table-scroll table.rank-table td.col-trend {
-    display: none;
-  }
-
-  .table-scroll table.rank-table .cell-spark-mobile {
-    display: block;
-  }
-
-  .table-scroll table.rank-table th:first-child,
-  .table-scroll table.rank-table td:first-child {
-    width: 2.25rem;
-  }
-
-  .table-scroll table.rank-table th.col-metric,
-  .table-scroll table.rank-table td.col-metric {
-    width: 6.75rem;
-  }
-
-  .table-scroll table.rank-table td .cell-name,
-  .table-scroll table.rank-table td .cell-sub {
-    max-width: 100%;
-  }
 }
 
 /* Navegación: UNA fila deslizante con las 6 secciones (nada oculto tras
@@ -712,7 +672,6 @@ main.container {
   font-variant-numeric: tabular-nums;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: var(--sp-2) var(--sp-3);
 }
@@ -767,7 +726,6 @@ main.container {
   gap: 2px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: var(--sp-3) var(--sp-4);
   min-width: 0;
@@ -850,7 +808,7 @@ main.container {
      a merced de padding-box vs content-box (huecos o 2da columna tapada
      según navegador). Sin padding, `left: 0` es exacto siempre. */
   margin: 0;
-  padding: 0 0 var(--sp-1);
+  padding: 0 0 var(--sp-3);
   /* Sombra de corte: señaliza que hay más contenido a los costados. */
   background:
     linear-gradient(to right, var(--surface) 30%, transparent),
@@ -872,10 +830,6 @@ main.container {
   top: 0;
   z-index: 2;
   background: var(--surface);
-}
-
-.table-scroll--tall thead th:first-child {
-  z-index: 3;
 }
 
 .card h2 {
@@ -1059,6 +1013,7 @@ td a:hover {
 .chart-scroll {
   overflow-x: auto;
   max-width: 100%;
+  padding-bottom: var(--sp-3);
   scrollbar-gutter: stable;
   /* Sombra de corte como .table-scroll: señaliza que hay más contenido
      a los costados cuando la grilla desborda. */
@@ -1101,6 +1056,14 @@ td a:hover {
   background-clip: padding-box;
   z-index: 1;
   box-shadow: 1px 0 0 var(--border);
+}
+
+/* Sticky top-left corner (#) in vertically scrollable tables (Top >= 25) must
+   stack above both thead th (z-index: 2) and tbody td:first-child (z-index: 1). */
+.table-scroll--tall table thead th:first-child {
+  top: 0;
+  left: 0;
+  z-index: 3;
 }
 
 /* Sincroniza el fondo opaco de la celda sticky al pasar el cursor por la fila. */
@@ -1186,11 +1149,47 @@ td a:hover {
   font-size: var(--fs-xs);
 }
 
+/* Fixed 100% layout prevents horizontal overflow in ranking tables across viewports. */
+.table-scroll table.rank-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.table-scroll table.rank-table th:first-child,
+.table-scroll table.rank-table td:first-child {
+  width: 2.75rem;
+}
+
+.table-scroll table.rank-table th.col-trend,
+.table-scroll table.rank-table td.col-trend {
+  width: 6.25rem;
+}
+
+.table-scroll table.rank-table th.col-metric,
+.table-scroll table.rank-table td.col-metric {
+  width: 9rem;
+}
+
+.table-scroll table.rank-table th.col-metric {
+  letter-spacing: 0.03em;
+}
+
+.table-scroll table.rank-table td .cell-name,
+.table-scroll table.rank-table td .cell-sub {
+  max-width: 100%;
+}
+
 .cell-metric-stack {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
+}
+
+.cell-metric-sub {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 400;
 }
 
 .cell-spark-mobile {
@@ -1200,6 +1199,27 @@ td a:hover {
 .cell-spark-mobile .sparkline {
   width: 68px;
   height: 18px;
+}
+
+@media (max-width: 640px) {
+  .table-scroll table.rank-table th.col-trend,
+  .table-scroll table.rank-table td.col-trend {
+    display: none;
+  }
+
+  .table-scroll table.rank-table .cell-spark-mobile {
+    display: block;
+  }
+
+  .table-scroll table.rank-table th:first-child,
+  .table-scroll table.rank-table td:first-child {
+    width: 2.25rem;
+  }
+
+  .table-scroll table.rank-table th.col-metric,
+  .table-scroll table.rank-table td.col-metric {
+    width: 8.25rem;
+  }
 }
 
 .chart-label,
@@ -1542,20 +1562,11 @@ td a:hover {
   background: rgba(29, 185, 84, 0.24);
 }
 
-.filter-top-row {
-  justify-content: space-between;
-}
-
 .filter-presets {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-1);
   align-items: center;
-}
-
-.tabs.metric-global {
-  margin-bottom: 0;
-  margin-left: auto;
 }
 
 .filter-badge {
@@ -1754,8 +1765,7 @@ details.calendar-year[open] summary .chevron {
 
 .hero-archetype {
   background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
-  border: 1px solid var(--accent-border);
-  border-left: 4px solid var(--accent);
+  border: 1px solid var(--border);
 }
 
 .hero-eyebrow {
@@ -1811,18 +1821,23 @@ details.calendar-year summary:hover {
 .tabs button {
   font: inherit;
   font-size: var(--fs-sm);
-  padding: var(--sp-1) var(--sp-4);
+  padding: var(--sp-1) var(--sp-3);
   border: none;
   border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  justify-content: center;
   white-space: nowrap;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.rank-opts .tabs button {
+  padding-inline: var(--sp-2);
 }
 
 .tabs button:hover {
