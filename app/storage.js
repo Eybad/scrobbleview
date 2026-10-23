@@ -159,6 +159,55 @@ export async function hasCache() {
   }
 }
 
+export function summaryFromMetaAndT(meta, tCol) {
+  if (!meta || typeof meta.count !== 'number' || meta.count <= 0) return null;
+  let fromYear = null;
+  let toYear = null;
+  if (tCol && tCol.length > 0 && Number.isFinite(meta.tsMin)) {
+    const len = Math.min(tCol.length, meta.count);
+    let lo = tCol[0];
+    let hi = tCol[0];
+    for (let i = 1; i < len; i++) {
+      if (tCol[i] < lo) lo = tCol[i];
+      if (tCol[i] > hi) hi = tCol[i];
+    }
+    fromYear = new Date((meta.tsMin + lo) * 1000).getUTCFullYear();
+    toYear = new Date((meta.tsMin + hi) * 1000).getUTCFullYear();
+  }
+  return {
+    count: meta.count,
+    fromYear,
+    toYear,
+    sourcesCount: Array.isArray(meta.sources) ? meta.sources.length : 0
+  };
+}
+
+// Lee solo meta y col:t para mostrar el resumen de la sesión guardada en el
+// inicio sin deserializar los diccionarios ni el resto de las columnas.
+export async function cacheSummary() {
+  if (!isAvailable()) return null;
+  try {
+    const pair = await run('readonly', (store) => new Promise((resolve, reject) => {
+      const out = {};
+      let pending = 2;
+      for (const k of ['meta', 'col:t']) {
+        const r = store.get(k);
+        r.onsuccess = () => {
+          out[k] = r.result;
+          if (--pending === 0) resolve(out);
+        };
+        r.onerror = () => reject(r.error);
+      }
+    }));
+    if (!pair.meta) return null;
+    const meta = JSON.parse(pair.meta);
+    const tCol = pair['col:t'] ? new Int32Array(pair['col:t']) : null;
+    return summaryFromMetaAndT(meta, tCol);
+  } catch {
+    return null;
+  }
+}
+
 // Borra toda la caché. Devuelve true si había algo que borrar.
 export async function clear() {
   if (!isAvailable()) return false;

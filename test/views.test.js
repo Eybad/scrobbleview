@@ -930,3 +930,55 @@ test('all Top 10/25/50/100 tables include # column and tall scroll fits at least
   const mainJs = await readFile(new URL('../app/main.js', import.meta.url), 'utf8');
   assert.ok(mainJs.includes('function syncTallTables') && mainJs.includes('rows?.[9]'), 'main.js measures the 10th row (rows[9]) so tall scroll always shows 10 rows');
 });
+
+test('home page UI: conditional storage hierarchy, cache card with metadata & trash icon, clean drop-zone badges, Spotify help details, and left-aligned privacy pill', async () => {
+  const { summaryFromMetaAndT } = await import('../app/storage.js');
+  const { formatCacheMeta } = await import('../app/input.js');
+
+  const summary = summaryFromMetaAndT(
+    { count: 42300, tsMin: 1546300800, sources: ['a.json', 'b.json'] },
+    new Int32Array([0, 220924800])
+  );
+  assert.deepEqual(summary, { count: 42300, fromYear: 2019, toYear: 2026, sourcesCount: 2 });
+  assert.equal(formatCacheMeta(summary), 'Última carga: 42.300 reproducciones · 2019–2026');
+  assert.equal(
+    formatCacheMeta({ count: 1500, fromYear: 2024, toYear: 2024, sourcesCount: 1 }),
+    'Última carga: 1.500 reproducciones · 2024'
+  );
+
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  const inputJs = await readFile(new URL('../app/input.js', import.meta.url), 'utf8');
+
+  assert.ok(html.includes('id="cache-card" class="cache-card" hidden'), 'cache-card hidden by default when no cached data exists');
+  const cacheCardChunk = html.slice(html.indexOf('id="cache-card"'), html.indexOf('id="drop-zone"'));
+  assert.ok(cacheCardChunk.includes('id="btn-cached"'), 'btn-cached lives inside cache-card');
+  assert.ok(cacheCardChunk.includes('id="cache-meta"'), 'cache-meta lives inside cache-card');
+  assert.ok(cacheCardChunk.includes('id="btn-cached-clear"'), 'trash delete button grouped inside cache-card on the right');
+
+  const dropZoneChunk = html.slice(html.indexOf('id="drop-zone"'), html.indexOf('<div class="actions">'));
+  assert.ok(dropZoneChunk.includes('Acepta <code>.zip</code> o múltiples <code>.json</code> de Spotify'), 'short single-line .zip and .json badges');
+  assert.ok(!dropZoneChunk.includes('Streaming_History_Audio_'), 'long literal filename moved out of drop-zone');
+
+  const actionsChunk = html.slice(html.indexOf('<div class="actions">'), html.indexOf('<p id="status"'));
+  assert.ok(actionsChunk.includes('id="btn-upload-alt"') && actionsChunk.includes('hidden'), 'secondary upload button hidden by default and shown when cache exists');
+  assert.ok(actionsChunk.includes('id="btn-demo"'), 'demo button in actions');
+  assert.ok(inputJs.includes('zone.hidden = active'), 'drop-zone hidden when cache card is active (Tarjeta arriba + 2 botones)');
+
+  assert.ok(html.includes('<details class="home-help">'), 'collapsible guide for downloading Spotify history');
+  assert.ok(html.includes('¿Cómo descargo mi historial de Spotify?'), 'onboarding summary text present');
+  assert.ok(html.includes('Historial de reproducción ampliado'), 'guide mentions extended streaming history');
+  assert.ok(html.includes('100% local y offline:'), 'concise privacy pill copy');
+
+  const blockOf = (sel) => {
+    const idx = css.indexOf(sel);
+    assert.ok(idx >= 0, `selector ${sel} exists in style.css`);
+    return css.slice(idx, css.indexOf('}', idx) + 1);
+  };
+
+  assert.ok(!blockOf('.drop-zone-files {').includes('border-top'), 'no internal horizontal line inside dashed drop-zone');
+  assert.ok(blockOf('.drop-zone-badge {').includes('rgba(29, 185, 84, 0.12)'), 'drop-zone badge has subtle green tint');
+  assert.ok(blockOf('.drop-zone-icon {').includes('var(--accent)'), 'drop-zone icon uses green accent');
+  assert.ok(blockOf('.privacy-note {').includes('text-align: left'), 'privacy pill left-aligned with lock on the left');
+  assert.ok(!blockOf('#view-home {').includes('margin: auto'), '#view-home uses controlled top margin instead of margin: auto');
+});

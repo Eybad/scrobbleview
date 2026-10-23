@@ -7,14 +7,33 @@
 
 import { fileBytes } from '../src/parse/adapters/file-bytes.js';
 import { zipSources } from '../src/parse/adapters/zip-bytes.js';
+import { fmtNum } from '../src/charts.js';
 import { demoSource } from './demo.js';
+
+export function formatCacheMeta(summary) {
+  if (!summary || typeof summary !== 'object' || !Number.isFinite(summary.count)) {
+    return 'Sesión guardada en este dispositivo';
+  }
+  const plays = `${fmtNum(summary.count)} ${summary.count === 1 ? 'reproducción' : 'reproducciones'}`;
+  if (Number.isFinite(summary.fromYear) && Number.isFinite(summary.toYear)) {
+    const years = summary.fromYear === summary.toYear
+      ? `${summary.fromYear}`
+      : `${summary.fromYear}–${summary.toYear}`;
+    return `Última carga: ${plays} · ${years}`;
+  }
+  return `Última carga: ${plays}`;
+}
 
 export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCached }) {
   const zone = document.getElementById('drop-zone');
   const input = document.getElementById('file-input');
   const btnDemo = document.getElementById('btn-demo');
+  const btnUploadAlt = document.getElementById('btn-upload-alt');
+  const cacheCard = document.getElementById('cache-card');
+  const cacheMeta = document.getElementById('cache-meta');
   const btnCached = document.getElementById('btn-cached');
   const btnCachedClear = document.getElementById('btn-cached-clear');
+  const actions = document.querySelector('#view-home .actions');
   const status = document.getElementById('status');
   const viewHome = document.getElementById('view-home');
   const viewApp = document.getElementById('view-app');
@@ -111,12 +130,12 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
     }
   }
 
-  zone.addEventListener('dragover', (e) => {
+  viewHome.addEventListener('dragover', (e) => {
     e.preventDefault();
     zone.classList.add('is-dragover');
   });
-  zone.addEventListener('dragleave', () => zone.classList.remove('is-dragover'));
-  zone.addEventListener('drop', (e) => {
+  viewHome.addEventListener('dragleave', () => zone.classList.remove('is-dragover'));
+  viewHome.addEventListener('drop', (e) => {
     e.preventDefault();
     zone.classList.remove('is-dragover');
     pickFiles(e.dataTransfer.files);
@@ -135,26 +154,33 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   });
 
   btnDemo.addEventListener('click', () => run([demoSource()]));
+  if (btnUploadAlt) btnUploadAlt.addEventListener('click', () => input.click());
   if (btnCached) btnCached.addEventListener('click', runCached);
   if (btnCachedClear && onClearCached) {
-    // Confirmación en dos pasos: el primer toque arma el botón (4 s para
-    // confirmar); el segundo borra. Un borrado destructivo a un toque era
-    // demasiado fácil de activar sin querer en táctil.
+    // Confirmación en dos pasos: el primer toque arma el botón de papelera
+    // como píldora roja "Confirmar" (4 s); el segundo borra.
+    const deleteLabel = btnCachedClear.querySelector('.cache-delete-label');
     let armed = false;
     let disarmTimer = 0;
+    const disarm = () => {
+      armed = false;
+      btnCachedClear.classList.remove('is-armed');
+      btnCachedClear.setAttribute('aria-label', 'Borrar datos guardados');
+      btnCachedClear.title = 'Borrar datos guardados';
+      if (deleteLabel) deleteLabel.hidden = true;
+    };
     btnCachedClear.addEventListener('click', async () => {
       if (!armed) {
         armed = true;
-        btnCachedClear.textContent = 'Confirmar borrado';
-        disarmTimer = setTimeout(() => {
-          armed = false;
-          btnCachedClear.textContent = 'Borrar datos guardados';
-        }, 4000);
+        btnCachedClear.classList.add('is-armed');
+        btnCachedClear.setAttribute('aria-label', 'Confirmar borrado de datos guardados');
+        btnCachedClear.title = 'Confirmar borrado de datos guardados';
+        if (deleteLabel) deleteLabel.hidden = false;
+        disarmTimer = setTimeout(disarm, 4000);
         return;
       }
       clearTimeout(disarmTimer);
-      armed = false;
-      btnCachedClear.textContent = 'Borrar datos guardados';
+      disarm();
       await onClearCached();
       setStatus('Datos guardados borrados.');
     });
@@ -162,16 +188,13 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
 
   return {
     setStatus,
-    showCachedButtons(hasCache) {
-      zone.classList.toggle('is-secondary', hasCache);
-      if (btnCached) {
-        btnCached.hidden = !hasCache;
-        // Con caché, continuar es el camino más probable: el sólido se lo
-        // lleva esa acción y la drop zone pasa a secundaria.
-        btnCached.classList.toggle('btn-primary', hasCache);
-        btnCached.classList.toggle('btn-secondary', !hasCache);
-      }
-      if (btnCachedClear) btnCachedClear.hidden = !hasCache;
+    showCachedButtons(cacheInfo) {
+      const active = Boolean(cacheInfo);
+      if (cacheCard) cacheCard.hidden = !active;
+      if (cacheMeta && active) cacheMeta.textContent = formatCacheMeta(cacheInfo);
+      zone.hidden = active;
+      if (btnUploadAlt) btnUploadAlt.hidden = !active;
+      actions?.classList.toggle('has-cache', active);
     }
   };
 }

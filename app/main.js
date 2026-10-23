@@ -16,9 +16,10 @@ import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToIS
 import { modelToTables, exportFilename } from '../src/export.js';
 import { toCSV } from '../src/export/csv.js';
 import { buildZip } from '../src/export/zip.js';
-import { save as cacheSave, load as cacheLoad, clear as cacheClear, hasCache, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
+import { save as cacheSave, load as cacheLoad, clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
 const appRoot = document.getElementById('app-root');
+const siteHeader = document.querySelector('.site-header');
 const headerActions = document.getElementById('header-actions');
 const siteFooter = document.querySelector('.site-footer');
 const footerMeta = document.getElementById('footer-meta');
@@ -312,6 +313,7 @@ function render() {
   // el aviso de privacidad y las acciones no aplican. La tagline también se
   // oculta: junto al nav compite con el título de la vista (el reload del
   // botón "Cargar archivos" la restaura).
+  siteHeader?.classList.remove('site-header--home');
   headerActions?.removeAttribute('hidden');
   siteFooter?.removeAttribute('hidden');
   if (footerMeta && model) {
@@ -678,7 +680,7 @@ const inputApi = setupInput({
 });
 
 if (cacheAvailable()) {
-  hasCache().then((c) => inputApi.showCachedButtons(c));
+  cacheSummary().then((summary) => inputApi.showCachedButtons(summary));
 }
 
 let lastView = parseHash()[0] || 'dashboard';
