@@ -13,11 +13,11 @@ import { createBehaviorAcc } from './impl/behavior.js';
 import { createTransitionsAcc } from './impl/transitions.js';
 import { computeConcentration } from './impl/concentration.js';
 
-const TOP_N = 50;
-const TOP_RATE_N = 10;
-const TOP_OBSESSION_N = 20;
-const TOP_SESSIONS_N = 10;
-const TOP_DISCOVERY_N = 10;
+const TOP_N = 100;
+const TOP_RATE_N = 100;
+const TOP_OBSESSION_N = 100;
+const TOP_SESSIONS_N = 100;
+const TOP_DISCOVERY_N = 100;
 const MIN_PLAYS_FOR_RATE = 20;
 const MIN_PLAYS_FOR_OBSESSION = 15;
 const MIN_MONTHS_FOR_CONSTANCY = 6;
@@ -83,6 +83,61 @@ export function aggregate(ds, opts = {}) {
     cols, totals, groups: g, temporal: t, sessions: s, behavior: b,
     transitions: tr, concentration
   });
+}
+
+function rankByLowSkipRate(entities) {
+  return entities
+    .filter((entity) => entity.plays >= MIN_PLAYS_FOR_RATE)
+    .sort((first, second) => first.skips / first.plays - second.skips / second.plays || second.plays - first.plays || second.ms - first.ms)
+    .slice(0, TOP_RATE_N);
+}
+
+function findDominantTrack(artist, tracksByKey) {
+  let dominantTrack = null;
+  for (const tk of artist.tracks) {
+    const candidate = tracksByKey.get(tk);
+    if (!candidate) continue;
+    const isHigher = !dominantTrack ||
+      candidate.plays > dominantTrack.plays ||
+      (candidate.plays === dominantTrack.plays && candidate.ms > dominantTrack.ms);
+    if (isHigher) dominantTrack = candidate;
+  }
+  return dominantTrack;
+}
+
+function rankOneHitWonders(artistList, tracksByKey) {
+  return artistList
+    .filter((artist) => artist.plays >= MIN_PLAYS_FOR_RATE && artist.tracks.size > 0)
+    .map((artist) => {
+      const dominant = findDominantTrack(artist, tracksByKey);
+      if (!dominant) return null;
+      return {
+        id: artist.id,
+        name: artist.name,
+        plays: artist.plays,
+        ms: artist.ms,
+        trackCount: artist.tracks.size,
+        topTrack: { tk: dominant.tk, name: dominant.name, plays: dominant.plays, ms: dominant.ms },
+        share: artist.plays > 0 ? dominant.plays / artist.plays : 0,
+        shareMs: artist.ms > 0 ? dominant.ms / artist.ms : 0
+      };
+    })
+    .filter(Boolean)
+    .sort((first, second) => second.share - first.share || second.plays - first.plays || second.ms - first.ms)
+    .slice(0, TOP_N);
+}
+
+function rankDeepCatalog(artistList) {
+  return [...artistList]
+    .sort((first, second) => second.tracks.size - first.tracks.size || second.albums.size - first.albums.size || second.plays - first.plays || second.ms - first.ms)
+    .slice(0, TOP_N);
+}
+
+function rankForgottenEntities(entities) {
+  return entities
+    .filter((entity) => entity.plays >= MIN_PLAYS_FOR_OBSESSION && entity.lastTs != null)
+    .sort((first, second) => first.lastTs - second.lastTs || second.plays - first.plays || second.ms - first.ms)
+    .slice(0, TOP_N);
 }
 
 // Meses absolutos (y*12+m-1) para medir distancias: restar índices YYYYMM
@@ -230,6 +285,10 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.skips / b.plays - a.skips / a.plays || b.plays - a.plays)
     .slice(0, TOP_RATE_N);
   const skipRate = { artists: rate(artistList), tracks: rate(trackList) };
+  const lowSkipRate = { artists: rankByLowSkipRate(artistList), tracks: rankByLowSkipRate(trackList) };
+  const oneHitWonders = rankOneHitWonders(artistList, tracks);
+  const deepCatalog = rankDeepCatalog(artistList);
+  const forgotten = { artists: rankForgottenEntities(artistList), tracks: rankForgottenEntities(trackList) };
 
   // Obsesión: intensidad = plays / días activos (mín. MIN_PLAYS_FOR_OBSESSION).
   const obsession = trackList
@@ -293,6 +352,10 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     tracks: tracksTop,
     albums: albumsTop,
     skipRate,
+    lowSkipRate,
+    oneHitWonders,
+    deepCatalog,
+    forgotten,
     obsession,
     binge,
     dayFirst,

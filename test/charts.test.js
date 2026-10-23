@@ -1,7 +1,22 @@
 // test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, lineChart, stackedBar, HEAT, fmtNum, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
+import { makeScale, barChart, lineChart, stackedBar, HEAT, fmtNum, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
+
+test('barChart: caps bar width for sparse series and centers bars in slots', () => {
+  const svg = barChart({ data: [{ label: 'A', value: 10 }, { label: 'B', value: 20 }] });
+  const widths = [...svg.matchAll(/<rect [^>]*width="([\d.]+)"/g)].map((match) => Number(match[1]));
+  assert.equal(widths.length, 2);
+  assert.ok(widths[0] <= 48);
+});
+
+test('stackedBar: fits viewBox height to row count without dead space', () => {
+  const svg = stackedBar({
+    series: [{ label: '2023', values: [1, 2] }, { label: '2024', values: [3, 4] }]
+  });
+  const viewBoxMatch = svg.match(/viewBox="0 0 \d+ (\d+)"/);
+  assert.ok(viewBoxMatch && Number(viewBoxMatch[1]) <= 70);
+});
 
 test('sparkline: trazo fino uniforme y bajo (los picos no dominan la fila)', () => {
   const svg = sparkline({ points: [1, 5, 2, 8, 3] });

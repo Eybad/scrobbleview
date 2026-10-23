@@ -23,6 +23,8 @@ export function createGroupsAcc(ds) {
   return {
     onEvent(ev) {
       const year = Math.floor(ev.ymd / 10000);
+      const tk = trackKey(ev.tr, ev.ar);
+      const ak = ev.al > 0 ? albumKey(ev.ar, ev.al) : 0;
 
       if (ev.ar > 0) {
         let a = artists.get(ev.ar);
@@ -33,8 +35,10 @@ export function createGroupsAcc(ds) {
             plays: 0, ms: 0, skips: 0,
             days: new Set(), months: new Set(), years: new Set(),
             albums: new Set(), // ak de los álbumes del artista
+            tracks: new Set(),
             clock: new Int32Array(168), // plays por dow*24+hour (reloj del artista)
-            firstTs: ev.loc, firstTrack: '', lastTs: ev.loc
+            clockMs: new Float64Array(168),
+            firstTs: ev.loc, firstTrack: '', firstTrackTk: 0, lastTs: ev.loc
           };
           artists.set(ev.ar, a);
         }
@@ -44,14 +48,18 @@ export function createGroupsAcc(ds) {
         a.days.add(ev.day);
         a.months.add(Math.floor(ev.ymd / 100));
         a.years.add(year);
-        a.clock[ev.dow * 24 + ev.hour]++;
-        if (ev.al > 0) a.albums.add(albumKey(ev.ar, ev.al));
+        a.tracks.add(tk);
+        const slot = ev.dow * 24 + ev.hour;
+        a.clock[slot]++;
+        a.clockMs[slot] += ev.ms;
+        if (ev.al > 0) a.albums.add(ak);
         a.lastTs = ev.loc;
-        if (a.firstTrack === '') a.firstTrack = ds.dicts.tracks.get(ev.tr);
+        if (a.firstTrack === '') {
+          a.firstTrack = ds.dicts.tracks.get(ev.tr);
+          a.firstTrackTk = tk;
+        }
       }
 
-      const tk = trackKey(ev.tr, ev.ar);
-      const ak = ev.al > 0 ? albumKey(ev.ar, ev.al) : 0;
       let t = tracks.get(tk);
       if (!t) {
         t = {

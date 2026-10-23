@@ -353,11 +353,51 @@ test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clo
 test('yearly desglosa franjas horarias por año (blocks)', () => {
   const ds = buildDataset([
     { t: 1685584800, m: 1000, track: 'A', artist: 'X' }, // 2023, 02:00 → madrugada
-    { t: 1685584900, m: 1000, track: 'B', artist: 'Y' }, // 2023, 02:00 → madrugada
-    { t: 1717250400, m: 1000, track: 'C', artist: 'Z' } // 2024, 14:00 → tarde
+    { t: 1685584900, m: 2500, track: 'B', artist: 'Y' }, // 2023, 02:00 → madrugada
+    { t: 1717250400, m: 4000, track: 'C', artist: 'Z' } // 2024, 14:00 → tarde
   ]);
   const m = aggregate(ds, { tz: UTC });
   assert.deepEqual([...m.yearly.get(2023).blocks], [2, 0, 0, 0]);
+  assert.deepEqual([...m.yearly.get(2023).blocksMs], [3500, 0, 0, 0]);
   assert.deepEqual([...m.yearly.get(2024).blocks], [0, 0, 1, 0]);
+  assert.deepEqual([...m.yearly.get(2024).blocksMs], [0, 0, 4000, 0]);
   assert.equal(m.blocks[0].plays, 2); // el global sigue intacto
+});
+
+test('tables: cap 100, lowSkipRate, oneHitWonders, deepCatalog, forgotten, and artist clockMs/tracks', () => {
+  const events = [];
+  for (let i = 0; i < 65; i++) {
+    events.push({ t: D0 + i * 60, m: 30000, track: `T${i}`, artist: `Art${i}` });
+  }
+  for (let i = 0; i < 20; i++) {
+    events.push({ t: D0 + 5000 + i * 60, m: 60000, track: 'Hit', artist: 'OneHit' });
+  }
+  for (let i = 0; i < 20; i++) {
+    events.push({
+      t: D0 + 86400 * 10 + i * 60,
+      m: 45000,
+      track: `DeepSong${i % 5}`,
+      artist: 'Deep',
+      flags: i < 10 ? 2 : 0
+    });
+  }
+  const model = aggregate(buildDataset(events), { tz: UTC });
+  assert.equal(model.tables.artists.byPlays.length, 67);
+
+  const oneHitArtist = [...model.artists.byId.values()].find((artist) => artist.name === 'OneHit');
+  assert.equal(oneHitArtist.tracks.size, 1);
+  assert.equal(oneHitArtist.firstTrack, 'Hit');
+  assert.ok(oneHitArtist.firstTrackTk > 0);
+  let sumClockMs = 0;
+  for (let i = 0; i < 168; i++) sumClockMs += oneHitArtist.clockMs[i];
+  assert.equal(sumClockMs, oneHitArtist.ms);
+
+  assert.equal(model.tables.lowSkipRate.artists[0].name, 'OneHit');
+  assert.equal(model.tables.lowSkipRate.artists[0].skips, 0);
+  assert.equal(model.tables.oneHitWonders[0].name, 'OneHit');
+  assert.equal(model.tables.oneHitWonders[0].share, 1);
+  assert.equal(model.tables.oneHitWonders[0].topTrack.name, 'Hit');
+  assert.equal(model.tables.deepCatalog[0].name, 'Deep');
+  assert.equal(model.tables.deepCatalog[0].tracks.size, 5);
+  assert.equal(model.tables.forgotten.artists[0].name, 'OneHit');
 });

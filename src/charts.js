@@ -22,7 +22,7 @@ export const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'a
 export const DOW_SHORT = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
 export const DOW_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-export const PALETTE = ['#4cc9f0', '#f72585', '#ffd166', '#06d6a0', '#9b5de5', '#fb8500', '#8ecae6', '#e63946', '#2a9d8f', '#e9c46a'];
+export const PALETTE = ['#3b82f6', '#f59e0b', '#1db954', '#a855f7', '#06b6d4', '#ec4899', '#eab308', '#10b981', '#8b5cf6', '#f97316'];
 
 // Acento del design system (css/style.css --accent) + escala secuencial de
 // heatmaps (css --heat-0…--heat-5). Los charts no leen variables CSS (son
@@ -101,19 +101,22 @@ export function makeScale(max, palette = HEAT) {
 
 // ---------- barChart ----------
 
+const MAX_BAR_WIDTH = 48;
+const STACKED_VIEWBOX_PAD = 4;
+
 export function barChart({ data, width = 640, height = 220, format = fmtNum, accent = ACCENT, showValue = true }) {
   const n = data.length;
   if (n === 0) return '';
   const max = Math.max(...data.map((d) => d.value), 1);
   const pad = 4;
   const slot = width / n;
-  const barW = Math.max(2, slot - pad * 2);
+  const barW = Math.min(MAX_BAR_WIDTH, Math.max(2, slot - pad * 2));
   const labelH = 18;
   const topPad = showValue ? 16 : 6;
   const plotH = height - labelH - topPad;
   const bars = data.map((d, i) => {
     const h = Math.max(1, (d.value / max) * plotH);
-    const x = i * slot + pad;
+    const x = i * slot + (slot - barW) / 2;
     const y = topPad + plotH - h;
     // Escapar SIEMPRE el valor crudo: armar el title desde el label ya
     // escapado y volver a aplicar esc() produce doble escape ("&amp;lt;").
@@ -413,6 +416,7 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
   const n = series.length;
   if (n === 0) return '';
   const rowH = Math.min(28, (height - 20) / n);
+  const viewBoxHeight = Math.ceil(n * rowH + STACKED_VIEWBOX_PAD);
   const labelW = 90;
   const plotW = width - labelW;
   const rows = series.map((s, i) => {
@@ -440,7 +444,7 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
   // Resumen para lectores de pantalla: totales por serie (los segmentos ya
   // viajan en los <title> de cada rect).
   const aria = `Barras apiladas: ${series.map((s) => `${s.label}: ${format(s.total ?? s.values.reduce((a, b) => a + b, 0))}`).join(', ')}`;
-  return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${height}" role="img" class="chart" aria-label="${esc(aria)}">${rows}</svg>${legend}</div>`;
+  return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${viewBoxHeight}" role="img" class="chart" aria-label="${esc(aria)}">${rows}</svg>${legend}</div>`;
 }
 
 // ---------- heatLegend ----------
