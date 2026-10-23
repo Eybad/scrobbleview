@@ -6,6 +6,7 @@
 // dataset guardado en IndexedDB sin re-parsear) y onClearCached (borrarlo).
 
 import { fileBytes } from '../src/parse/adapters/file-bytes.js';
+import { zipSources } from '../src/parse/adapters/zip-bytes.js';
 import { demoSource } from './demo.js';
 
 export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCached }) {
@@ -86,12 +87,28 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   }
 
   function pickFiles(list) {
-    const files = [...list].filter((f) => f.name.toLowerCase().endsWith('.json'));
+    const files = [...list].filter((f) => /\.json$/i.test(f.name) || /\.zip$/i.test(f.name));
     if (files.length === 0) {
-      setStatus('No se encontraron archivos .json', 'error');
+      setStatus('No se encontraron archivos .json o .zip', 'error');
       return;
     }
-    run(files.map((f) => fileBytes(f)));
+    expandAndRun(files);
+  }
+
+  // El zip se expande a fuentes ANTES de analyze (el seam recibe ByteSources);
+  // los errores de formato del zip se reportan igual que los de parseo.
+  async function expandAndRun(files) {
+    try {
+      const sources = [];
+      for (const f of files) {
+        if (/\.zip$/i.test(f.name)) sources.push(...await zipSources(f));
+        else sources.push(fileBytes(f));
+      }
+      run(sources);
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, 'error');
+      onError?.(err);
+    }
   }
 
   zone.addEventListener('dragover', (e) => {
