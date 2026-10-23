@@ -12,7 +12,7 @@ import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange } from './filter-ui.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState } from './filter-ui.js';
 import { modelToTables, exportFilename } from '../src/export.js';
 import { toCSV } from '../src/export/csv.js';
 import { buildZip } from '../src/export/zip.js';
@@ -31,6 +31,7 @@ let tz = null;
 let state = emptyFilterState();
 let rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
 let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
+let advState = null; // null = sin preferencia manual: abierto en desktop, cerrado en móvil
 
 // Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
 // re-renders porque vive fuera de #app-root; el texto va por textContent).
@@ -43,19 +44,23 @@ toast.hidden = true;
 document.body.appendChild(toast);
 let toastTimer = 0;
 
-// Región viva del re-agregado por filtros (WCAG 4.1.3): los KPIs cambian
-// visualmente, pero un lector de pantalla necesita el anuncio explícito.
-// Persistente fuera de #app-root: sobrevive a los re-renders.
-const filterAnnouncer = document.createElement('p');
-filterAnnouncer.id = 'filter-status';
-filterAnnouncer.className = 'visually-hidden';
-filterAnnouncer.setAttribute('role', 'status');
-filterAnnouncer.setAttribute('aria-atomic', 'true');
-document.body.appendChild(filterAnnouncer);
+// Región viva única para cambios asíncronos que no se anuncian solos
+// (WCAG 4.1.3): re-agregado por filtros, resultados de búsqueda, copia de
+// recibo. Persistente fuera de #app-root: sobrevive a los re-renders.
+const liveRegion = document.createElement('p');
+liveRegion.id = 'live-status';
+liveRegion.className = 'visually-hidden';
+liveRegion.setAttribute('role', 'status');
+liveRegion.setAttribute('aria-atomic', 'true');
+document.body.appendChild(liveRegion);
+
+function announce(text) {
+  liveRegion.textContent = text;
+}
 
 function announceFilters() {
   if (!current) return;
-  filterAnnouncer.textContent = filterStatusMessage(current.totals);
+  announce(filterStatusMessage(current.totals));
 }
 
 function buildTz(dataset) {
@@ -84,6 +89,7 @@ async function analyze(sources, { onProgress }) {
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
   current = model;
+  applyHashParams();
   cacheOffer = cacheAvailable() ? 'save' : null;
   return { ds, model, tz };
 }
@@ -99,6 +105,7 @@ async function loadCached() {
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: 10, query: '' };
   current = model;
+  applyHashParams();
   cacheOffer = 'loaded';
   return { ds, model, tz };
 }
@@ -133,8 +140,29 @@ function prevTotals() {
 
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, '');
-  const [name, id] = h.split('/');
-  return [name || 'dashboard', id || null];
+  const [path, query] = h.split('?');
+  const [name, id] = path.split('/');
+  return [name || 'dashboard', id || null, query || ''];
+}
+
+// La URL refleja el estado de filtros (deep-link + reload). replaceState: sin
+// entrada de historial por cada chip (el Back queda para navegar vistas; al
+// volver, los params del hash de esa entrada restauran sus filtros).
+function syncHash() {
+  const [name, id] = parseHash();
+  const hash = `#/${name}${id != null ? `/${id}` : ''}${filterParams(state)}`;
+  if (location.hash !== hash) history.replaceState(null, '', hash);
+}
+
+// Params del hash inicial → estado (deep-link a una vista filtrada). Con
+// query ausente no toca nada: navegar sin params no resetea filtros.
+function applyHashParams() {
+  const [, , query] = parseHash();
+  const fromParams = paramsToFilterState(query);
+  if (fromParams) {
+    state = fromParams;
+    refreshModel();
+  }
 }
 
 function navHTML(active) {
@@ -253,6 +281,7 @@ function applyAndRenderView() {
   }
   updateFilterDynamics();
   announceFilters();
+  syncHash();
   wireView();
 }
 
@@ -290,12 +319,13 @@ function updateFilterDynamics() {
 }
 
 function wireFilters() {
-  // Avanzados: cerrados en móvil, abiertos en desktop (progresivo, sin
-  // framework). Se respeta el toggle manual dentro de cada montaje.
+  // Avanzados: la preferencia manual sobrevive a los re-renders (cada montaje
+  // destruye el nodo); sin preferencia, abierto en desktop y cerrado en móvil.
+  // El listener va ANTES de setear open: el toggle programático también cuenta.
   const adv = appRoot.querySelector('.filter-advanced');
   if (adv) {
-    if (!adv.dataset.touched && window.matchMedia('(min-width: 700px)').matches) adv.open = true;
-    adv.addEventListener('toggle', () => { adv.dataset.touched = '1'; }, { once: true });
+    adv.addEventListener('toggle', () => { advState = adv.open; });
+    adv.open = advState != null ? advState : window.matchMedia('(min-width: 700px)').matches;
   }
 
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
@@ -390,7 +420,7 @@ function wireFilters() {
 
 let searchTimer = 0;
 
-function updateRankCard() {
+function updateRankCard(focusSel = null) {
   const card = document.getElementById('rank-card');
   if (!card || !current) return;
   // Mismo caso que el nav: conservar el scroll de las filas de tabs.
@@ -398,6 +428,8 @@ function updateRankCard() {
   card.innerHTML = rankCardHTML(current, rankUI);
   card.querySelectorAll('.tabs').forEach((t, i) => { t.scrollLeft = tabsX[i] ?? 0; });
   wireRankCard();
+  // El re-render destruye el control activado: devolverle el foco (teclado).
+  if (focusSel) card.querySelector(focusSel)?.focus();
 }
 
 function wireRankCard() {
@@ -406,19 +438,35 @@ function wireRankCard() {
   card.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
       rankUI.tab = btn.dataset.tab;
-      updateRankCard();
+      updateRankCard(`[data-tab="${rankUI.tab}"]`);
     });
   });
   card.querySelectorAll('[data-metric]').forEach((btn) => {
     btn.addEventListener('click', () => {
       rankUI.metric = btn.dataset.metric;
-      updateRankCard();
+      updateRankCard(`[data-metric="${rankUI.metric}"]`);
     });
   });
   const sel = card.querySelector('[data-topn]');
   if (sel) sel.addEventListener('change', () => {
     rankUI.topN = Number(sel.value);
-    updateRankCard();
+    updateRankCard('[data-topn]');
+  });
+  // Flechas del tablist (APG, activación automática): la selección sigue al
+  // foco; el re-render reposiciona el foco en el tab activado.
+  const tablist = card.querySelector('[role="tablist"][aria-label="Rankings"]');
+  if (tablist) tablist.addEventListener('keydown', (e) => {
+    const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    const next = e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
+      : e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length]
+      : e.key === 'Home' ? tabs[0]
+      : e.key === 'End' ? tabs[tabs.length - 1]
+      : null;
+    if (!next) return;
+    e.preventDefault();
+    next.click();
   });
   const input = card.querySelector('[data-search]');
   if (input) input.addEventListener('input', () => {
@@ -426,11 +474,14 @@ function wireRankCard() {
     const v = input.value;
     searchTimer = setTimeout(() => {
       rankUI.query = v;
-      updateRankCard();
+      updateRankCard('[data-search]');
       const again = card.querySelector('[data-search]');
-      if (again) {
-        again.focus();
-        again.setSelectionRange(again.value.length, again.value.length);
+      if (again) again.setSelectionRange(again.value.length, again.value.length);
+      // El cambio de tabla no se anuncia solo: la región viva da el conteo.
+      const q = v.trim();
+      if (q) {
+        const n = card.querySelectorAll('tbody tr').length;
+        announce(n > 0 ? `${n} ${n === 1 ? 'resultado' : 'resultados'} de “${q}”` : 'Sin resultados.');
       }
     }, 200);
   });
@@ -462,6 +513,7 @@ function wireView() {
       try {
         await navigator.clipboard.writeText(text);
         btn.textContent = '¡Copiado!';
+        announce('Recibo copiado al portapapeles.');
       } catch {
         const pre = document.getElementById('receipt-text');
         if (pre) {
@@ -469,14 +521,11 @@ function wireView() {
           pre.hidden = false;
         }
         btn.textContent = 'Copiá el texto de abajo';
+        announce('No se pudo copiar automáticamente; copiá el texto de abajo.');
       }
     });
   });
 }
-
-// En inicio el footer repite el aviso de privacidad de la tarjeta verde:
-// oculto hasta la primera vista de app (render lo vuelve a mostrar).
-siteFooter?.setAttribute('hidden', '');
 
 // Acciones del header: DOM estático fuera de #app-root, se cablean una vez.
 // Export descarga un .zip con un CSV por tabla (análisis en Sheets/Excel de
@@ -504,7 +553,18 @@ async function exportModel() {
 }
 
 headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
-  btn.addEventListener('click', exportModel);
+  btn.addEventListener('click', async (e) => {
+    // El zip de historiales grandes tarda segundos: sin feedback el usuario
+    // re-toca y encola otra descarga idéntica.
+    const b = e.currentTarget;
+    if (b.disabled) return;
+    b.disabled = true;
+    try {
+      await exportModel();
+    } finally {
+      b.disabled = false;
+    }
+  });
 });
 headerActions?.querySelectorAll('[data-action="reset"]').forEach((btn) => {
   btn.addEventListener('click', () => location.reload());
@@ -513,7 +573,9 @@ headerActions?.querySelectorAll('[data-action="reset"]').forEach((btn) => {
 const inputApi = setupInput({
   analyze,
   onReady() {
-    location.hash = '#/dashboard';
+    // Deep-link: un hash existente (posiblemente con params de filtro) manda;
+    // solo la entrada sin hash aterriza en el dashboard.
+    if (!location.hash) location.hash = '#/dashboard';
     render();
   },
   onError() {
@@ -529,7 +591,10 @@ if (cacheAvailable()) {
 
 let lastView = parseHash()[0] || 'dashboard';
 window.addEventListener('hashchange', () => {
-  const [name] = parseHash();
+  const [name, , query] = parseHash();
+  // Hash sin query = estado por defecto (entrada inicial o edición manual);
+  // con query, los params SON el estado (Back/Forward restauran filtros).
+  state = paramsToFilterState(query) ?? emptyFilterState();
   render();
   if (name !== lastView) {
     lastView = name;
@@ -557,6 +622,17 @@ appRoot.addEventListener('click', (e) => {
   state[k] = null;
   applyAndRenderView();
   document.getElementById('filter-chips')?.focus();
+});
+
+// Los enlaces internos llevan los filtros vigentes en el hash: el click los
+// reescribe antes de navegar (deep-link y Back coherentes entre vistas).
+appRoot.addEventListener('click', (e) => {
+  const a = e.target.closest?.('a[href^="#/"]');
+  if (!a || !appRoot.contains(a)) return;
+  const f = filterParams(state);
+  if (!f) return;
+  const base = a.getAttribute('href').split('?')[0];
+  a.setAttribute('href', base + f);
 });
 
 // Títulos de gráficos en táctil: el <title> del SVG no se muestra al toque.

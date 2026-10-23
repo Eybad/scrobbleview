@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { renderView } from '../app/views.js';
 import { receiptText } from '../app/views.js';
 import { rankCardHTML, emptyFiltersHTML, listenerArchetype } from '../app/views.js';
-import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange } from '../app/filter-ui.js';
+import { chipsHTML, filterBarHTML, locToISODate, isoDateToDay, rangeFromYear, rangeFromMonth, matchRangeShortcut, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState } from '../app/filter-ui.js';
 import { readFile } from 'node:fs/promises';
 import { emptyFilterState } from '../src/filters.js';
 import { analyze } from '../src/analyze.js';
@@ -382,6 +382,46 @@ test('chart-scroll: regiones focables con nombre (scroll sin controles adentro)'
   assert.ok(cal.includes('class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label='), 'calendario');
 });
 
+test('fallback de tabla para relojes y calendario (paridad con el heatmap)', async () => {
+  const model = await demoModel();
+  const artist = renderView('artist', model, model.artists.top.byPlays[0].id);
+  assert.ok(artist.includes('class="table-fallback"'), 'reloj del artista con fallback');
+  assert.ok(artist.includes('Reproducciones por hora y día'), 'caption del reloj');
+  const wrapped = renderView('wrapped', model);
+  assert.ok(wrapped.includes('class="table-fallback"'), 'reloj de wrapped con fallback');
+  const year = [...model.yearly.keys()].sort((a, b) => b - a)[0];
+  const cal = renderView('calendar', model, year);
+  assert.ok(cal.includes('class="table-fallback"'), 'calendario con fallback');
+  assert.ok(cal.includes(`Tiempo escuchado por día en ${year}`), 'caption del calendario');
+  const idx = renderView('calendar', model);
+  assert.ok(idx.includes('class="table-fallback"'), 'índice de calendario con fallback por año');
+});
+
+test('bar/line/stacked dentro de scroll con piso (labels legibles en móvil)', async () => {
+  const model = await demoModel();
+  const dash = renderView('dashboard', model);
+  assert.ok(dash.includes('chart-scroll--bar'), 'wrapper presente en el dashboard');
+  // Misma regla que heat/clock/cal: región focable con nombre (el scroll
+  // horizontal es inalcanzable por teclado sin tabindex).
+  assert.ok(dash.includes('class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label='), 'región focable con nombre');
+  const evo = dash.slice(dash.indexOf('Evolución mensual'));
+  assert.ok(evo.slice(0, 300).includes('chart-scroll--bar'), 'evolución mensual envuelta');
+  const artist = renderView('artist', model, model.artists.top.byPlays[0].id);
+  assert.ok(artist.includes('chart-scroll--bar'), 'evolución del artista envuelta');
+  const track = renderView('track', model, model.tracks.top.byPlays[0].tk);
+  assert.ok(track.includes('chart-scroll--bar'), 'evolución de la canción envuelta');
+  const album = renderView('album', model, [...model.albums.byId.keys()][0]);
+  assert.ok(album.includes('chart-scroll--bar'), 'evolución del álbum envuelta');
+  const sessions = renderView('sessions', model);
+  assert.equal((sessions.match(/chart-scroll--bar/g) || []).length, 4, 'los 4 barCharts de sesiones envueltos');
+  const discovery = renderView('discovery', model);
+  assert.ok(discovery.includes('chart-scroll--bar'), 'línea de descubrimiento envuelta');
+  const yearly = renderView('yearly', model);
+  assert.ok(yearly.includes('chart-scroll--bar'), 'franjas por año envueltas');
+  const wrapped = renderView('wrapped', model);
+  assert.ok(wrapped.includes('chart-scroll--bar'), 'sprint de wrapped envuelto');
+});
+
 test('dashboard: leyenda de la escala del heatmap', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);
@@ -394,6 +434,58 @@ test('filter-ui: previousRange devuelve el período inmediato anterior de igual 
   const p = previousRange(r);
   assert.equal(p.from, 93 * 86400, 'mismo largo hacia atrás');
   assert.equal(p.to, 99 * 86400 + 86399, 'termina el día antes del rango');
+});
+
+test('filter-ui: params de URL serializan y restauran el estado de filtros', () => {
+  const st = emptyFilterState();
+  st.range = { from: 19723 * 86400, to: 20088 * 86400 + 86399 };
+  st.dows = new Set([1, 4]);
+  st.hours = new Set([6, 7]);
+  st.skip = true;
+  st.offline = false;
+  st.artistId = 7;
+  const q = filterParams(st);
+  assert.ok(q.startsWith('?'), 'prefijo de query');
+  assert.ok(q.includes(`r=${19723 * 86400}-`), 'rango serializado en segundos epoch');
+  const back = paramsToFilterState(q.slice(1));
+  assert.equal(back.range.from, st.range.from, 'rango ida y vuelta');
+  assert.equal(back.range.to, st.range.to, 'rango ida y vuelta');
+  assert.deepEqual([...back.dows].sort(), [1, 4], 'días ida y vuelta');
+  assert.deepEqual([...back.hours].sort(), [6, 7], 'franjas ida y vuelta');
+  assert.equal(back.skip, true, 'toggle 3 estados ida y vuelta');
+  assert.equal(back.offline, false, 'toggle 3 estados ida y vuelta');
+  assert.equal(back.artistId, 7, 'entidad ida y vuelta');
+  assert.equal(back.shuffle, null, 'lo ausente vuelve como null');
+  assert.equal(back.trackId, null, 'lo ausente vuelve como null');
+  assert.equal(back.albumId, null, 'lo ausente vuelve como null');
+});
+
+test('filter-ui: sin filtros no hay params; query ausente y basura no rompen', () => {
+  assert.equal(filterParams(emptyFilterState()), '', 'estado limpio no ensucia la URL');
+  assert.equal(paramsToFilterState(''), null, 'sin query → null: el caller conserva el estado');
+  const back = paramsToFilterState('r=abc-d&d=99&s=maybe&ar=-3&h=24,25');
+  assert.equal(back.range, null, 'rango basura descartado');
+  assert.equal(back.dows, null, 'día fuera de 0-6 descartado');
+  assert.equal(back.skip, null, 'toggle inválido → null');
+  assert.equal(back.artistId, null, 'id negativo → null');
+  assert.equal(back.hours, null, 'hora fuera de 0-23 descartada');
+});
+
+test('filter-ui: plural real de meses en el chip', async () => {
+  const model = await demoModel();
+  const one = chipsHTML(model, { ...emptyFilterState(), months: new Set([202403]) });
+  assert.ok(one.includes('1 mes'), 'singular');
+  assert.ok(!one.includes('mes(es)'), 'sin mes(es)');
+  const three = chipsHTML(model, { ...emptyFilterState(), months: new Set([202401, 202402, 202403]) });
+  assert.ok(three.includes('3 meses'), 'plural');
+});
+
+test('filter-ui: la ✕ del chip queda fuera del nombre accesible', async () => {
+  const model = await demoModel();
+  const st = emptyFilterState();
+  st.range = { from: 0, to: 86399 };
+  const chips = chipsHTML(model, st);
+  assert.ok(chips.includes('<span aria-hidden="true">✕</span>'), '✕ decorativa, no leída por lectores');
 });
 
 test('dashboard: comparación contra el período anterior en KPIs', async () => {
@@ -439,6 +531,14 @@ test('rankings: sparkline de evolución mensual por fila', async () => {
   assert.ok(tracks.includes('class="sparkline"'), 'sparkline de canciones por tiempo');
   const albums = rankCardHTML(model, { tab: 'albums', metric: 'plays' });
   assert.ok(albums.includes('class="sparkline"'), 'álbumes suman la evolución de sus canciones');
+});
+
+test('rankings: tabs con patrón APG (roving tabindex + panel etiquetado)', async () => {
+  const model = await demoModel();
+  const html = rankCardHTML(model, { tab: 'tracks' });
+  assert.ok(html.includes('id="rank-tab-tracks" aria-selected="true" tabindex="0"'), 'tab activo focable');
+  assert.ok(html.includes('id="rank-tab-artists" aria-selected="false" tabindex="-1"'), 'tab inactivo fuera del orden de tabulación');
+  assert.ok(html.includes('role="tabpanel" id="rank-panel" tabindex="0" aria-labelledby="rank-tab-tracks"'), 'panel focable y etiquetado por el tab activo');
 });
 
 test('calendario: los días filtran al tocar (selector de rango)', async () => {

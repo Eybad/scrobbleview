@@ -43,6 +43,41 @@ function monthLabel(mi) {
   return `${MONTHS_SHORT[m - 1]} ${y}`;
 }
 
+// Fallback de tabla para los relojes (hora × día): teclado/lector de pantalla
+// no puede leer valores desde el SVG (el heatmap del dashboard ya lo tiene).
+function clockTable(cells) {
+  return heatmapTable({
+    cells: cells.map((c) => ({ x: c.hour, y: c.dow, value: c.value })),
+    xLabels: Array.from({ length: 24 }, (_, h) => `${h}`),
+    yLabels: DOW_SHORT,
+    cellText: (c) => fmtNum(c.value),
+    caption: 'Reproducciones por hora y día'
+  });
+}
+
+// Fallback del calendario: 12 meses × 31 días del mes. Los días sin entrada
+// quedan como celda vacía (heatmapTable no encuentra el par x-y).
+function calendarTable(days, year) {
+  const byMonthDay = new Map(days.map((d) => {
+    const [, m, dd] = d.date.split('-').map(Number);
+    return [`${m}-${dd}`, d.value];
+  }));
+  const cells = [];
+  for (let m = 1; m <= 12; m++) {
+    for (let dd = 1; dd <= 31; dd++) {
+      const v = byMonthDay.get(`${m}-${dd}`);
+      if (v != null) cells.push({ x: dd - 1, y: m - 1, value: v });
+    }
+  }
+  return heatmapTable({
+    cells,
+    xLabels: Array.from({ length: 31 }, (_, i) => `${i + 1}`),
+    yLabels: MONTHS_SHORT,
+    cellText: (c) => fmtMs(c.value),
+    caption: `Tiempo escuchado por día en ${year}`
+  });
+}
+
 // `rows` es HTML YA escapado por el llamador: las celdas reciben markup (enlaces
 // de entidad, <span> de color), por eso no se escapan aquí. Todo valor de dato
 // debe pasar por esc() o entityLink() ANTES de entrar en `rows`.
@@ -106,6 +141,14 @@ function nextMonth(mi) {
   const y = Math.floor(mi / 100);
   const m = mi % 100;
   return m === 12 ? (y + 1) * 100 + 1 : mi + 1;
+}
+
+// Los SVG de barra/línea/apiladas escalan su texto con el ancho de la card:
+// en móvil (viewBox 640 → ~296px) los labels de 12px rinden ~5.5px. El piso
+// de 480px mantiene ≥9px efectivos (mismo patrón que heat/clock/cal). Región
+// focable con nombre: el scroll horizontal es inalcanzable por teclado sin él.
+function scrollChart(svg, label) {
+  return svg ? `<div class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label="${esc(label)}">${svg}</div>` : '';
 }
 
 // Rellena los meses huecos entre el primero y el último (índices YYYYMM):
@@ -246,7 +289,10 @@ export function rankCardHTML(model, opts = {}) {
     rows = source.map(rowOf).slice(0, topN);
   }
 
-  const tabBtn = (id, label) => `<button type="button" role="tab" aria-selected="${tab === id}" class="${tab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`;
+  // Patrón APG de tabs: roving tabindex (solo el activo entra en el orden de
+  // tabulación) + panel etiquetado por el tab activo. Las flechas las cablea
+  // main.js (activación automática: la selección sigue al foco).
+  const tabBtn = (id, label) => `<button type="button" role="tab" id="rank-tab-${id}" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}" class="${tab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`;
   const metricBtn = (id, label) => `<button type="button" aria-pressed="${metric === id}" class="${metric === id ? 'active' : ''}" data-metric="${id}">${label}</button>`;
   const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
   const rankCaption = query
@@ -268,7 +314,7 @@ export function rankCardHTML(model, opts = {}) {
         <input type="search" data-search placeholder="Buscar…" aria-label="Buscar en rankings" value="${esc(opts.query ?? '')}">
       </div>
     </div>
-    <div role="tabpanel">${rows.length
+    <div role="tabpanel" id="rank-panel" tabindex="0" aria-labelledby="rank-tab-${tab}">${rows.length
       ? rankTable(rows, {
         valueFmt,
         valueLabel,
@@ -377,7 +423,7 @@ export function dashboard(model, ctx = {}) {
     ${card('Récords', table(['Récord', 'Cuándo', 'Cuánto'], recordsRows(model), '', ['', '', 'n'], null, 'Récords personales del período'))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
-      ${card('Evolución mensual', evolution)}
+      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
       ${card('Duración de reproducciones', dist)}
     </div>
     ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
@@ -467,7 +513,7 @@ export function artistView(model, ar) {
       { label: 'Última escucha', value: fmtLocal(a.lastTs) }
     ])}
     <div class="grid-2">
-      ${card('Evolución mensual', evolution)}
+      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
       ${card('Tus canciones de este artista', rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: tr.plays, id: tr.tk })), { link: (r) => `#/track/${r.id}`, caption: 'Canciones del artista por reproducciones' }))}
     </div>
     <div class="grid-2">
@@ -475,7 +521,7 @@ export function artistView(model, ar) {
         cells: clockCells,
         colorScale: makeScale(maxPlays),
         cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      })}</div>` + heatLegend())}
+      })}</div>` + heatLegend() + clockTable(clockCells))}
       ${card('Álbumes de este artista', albumRows.length
         ? rankTable(albumRows, { link: (r) => `#/album/${r.id}`, caption: 'Álbumes del artista por reproducciones' })
         : '<p class="empty">Sin álbumes registrados.</p>')}
@@ -517,7 +563,7 @@ export function trackView(model, tk) {
       { label: 'Primera escucha', value: fmtLocal(tr.firstTs) },
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
     ])}
-    ${card('Evolución mensual', evolution)}`;
+    ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}`;
 }
 
 export function albumView(model, ak) {
@@ -556,7 +602,7 @@ export function albumView(model, ak) {
       { label: 'Última escucha', value: fmtLocal(al.lastTs) }
     ])}
     <div class="grid-2">
-      ${card('Evolución mensual', evolution)}
+      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
       ${card('Canciones del álbum', songRows.length
         ? rankTable(songRows, { link: (r) => `#/track/${r.id}`, caption: 'Canciones del álbum por reproducciones' })
         : '<p class="empty">Sin canciones registradas.</p>')}
@@ -598,11 +644,11 @@ export function sessionsView(model) {
       ${card('Sesiones con más reproducciones', table(['Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
     </div>
     <div class="grid-2">
-      ${card('Sesiones por franja', barChart({ data: blocks, showValue: true }))}
-      ${card('Hora de inicio', barChart({ data: startHour.map(([h, n]) => ({ label: `${h}`, value: n })), showValue: false }))}
+      ${card('Sesiones por franja', scrollChart(barChart({ data: blocks, showValue: true }), 'Sesiones por franja'))}
+      ${card('Hora de inicio', scrollChart(barChart({ data: startHour.map(([h, n]) => ({ label: `${h}`, value: n })), showValue: false }), 'Hora de inicio'))}
     </div>
-    ${card('Razones de inicio', barChart({ data: [...model.starts.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }))}
-    ${card('Razones de fin', barChart({ data: [...model.ends.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }))}`;
+    ${card('Razones de inicio', scrollChart(barChart({ data: [...model.starts.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }), 'Razones de inicio'))}
+    ${card('Razones de fin', scrollChart(barChart({ data: [...model.ends.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }), 'Razones de fin'))}`;
 }
 
 export function discoveryView(model) {
@@ -619,7 +665,7 @@ export function discoveryView(model) {
       <h1>Descubrimiento</h1>
       <p class="view-meta">Canciones nuevas por mes</p>
     </header>
-    ${card('Canciones nuevas por mes', line)}
+    ${card('Canciones nuevas por mes', scrollChart(line, 'Canciones nuevas por mes'))}
     <div class="grid-2">
       ${card('Meses con más descubrimientos', table(['Mes', 'Nuevas', 'Reproducciones'], abs.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays)]), '', ['', 'n', 'n'], null, 'Meses con más descubrimientos'))}
       ${card('Meses con mayor proporción de nuevas', table(['Mes', 'Nuevas', 'Reproducciones', 'Proporción'], rel.map(([mi, d]) => [monthLabel(mi), fmtNum(d.new), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
@@ -668,7 +714,7 @@ export function yearlyView(model) {
       <h1>Comparación anual</h1>
     </header>
     ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Saltadas', 'Racha'], rows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n'], null, 'Comparación año a año'))}
-    ${card('Franjas por año', stacked)}`;
+    ${card('Franjas por año', scrollChart(stacked, 'Franjas por año'))}`;
 }
 
 export function calendarView(model, year) {
@@ -703,7 +749,7 @@ export function calendarView(model, year) {
       cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`,
       dataRange,
       interactive: true
-    })}</div>` + heatLegend())}
+    })}</div>` + heatLegend() + calendarTable(days, year))}
 `;
 }
 
@@ -727,7 +773,7 @@ export function calendarIndexView(model) {
       cellTitle: (d) => `${d.date}: ${d.value > 0 ? fmtMs(d.value) : 'sin actividad'}`,
       dataRange,
       interactive: true
-    }) + heatLegend();
+    }) + heatLegend() + calendarTable(days, y);
   };
   const [last, ...prev] = years;
   return `
@@ -785,12 +831,12 @@ export function wrappedView(model, id, ctx) {
       ...(archetype ? [{ label: 'Perfil de escucha', value: archetype.label, sub: archetype.detail }] : [])
     ])}
     <div class="grid-2">
-      ${topArtist ? card(`Sprint de ${topArtist.name}`, sprintChart) : ''}
+      ${topArtist ? card(`Sprint de ${topArtist.name}`, scrollChart(sprintChart, `Sprint de ${topArtist.name}`)) : ''}
       ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Tu semana típica">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxPlays),
         cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      })}</div>` + heatLegend())}
+      })}</div>` + heatLegend() + clockTable(clockCells))}
     </div>
     ${card('Así empezó', `<ul class="receipt">
       <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstTs))}</span></li>

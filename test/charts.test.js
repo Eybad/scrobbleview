@@ -104,6 +104,23 @@ test('stackedBar: segmentLabels en titles + leyenda', () => {
   assert.ok(!plain.includes('<ul class="legend">'), 'sin labels no hay leyenda');
 });
 
+test('stackedBar: aria-label resume los totales por serie (no genérico)', () => {
+  const html = stackedBar({
+    series: [{ label: '2023', values: [2, 1], total: 3 }, { label: '2024', values: [5, 0], total: 5 }]
+  });
+  const aria = html.match(/aria-label="([^"]*)"/)[1];
+  assert.ok(aria.includes('2023: 3'), 'total de 2023 en el resumen');
+  assert.ok(aria.includes('2024: 5'), 'total de 2024 en el resumen');
+  const summed = stackedBar({ series: [{ label: '2024', values: [2, 1] }] });
+  assert.ok(summed.match(/aria-label="([^"]*)"/)[1].includes('2024: 3'), 'sin total explícito suma los valores');
+});
+
+test('sparkline: decorativa (sin role redundante, oculta a lectores)', () => {
+  const svg = sparkline({ points: [1, 2, 3] });
+  assert.ok(!svg.includes('role="img"'), 'aria-hidden la saca: el role sería contradictorio');
+  assert.ok(svg.includes('aria-hidden="true"'), 'oculta a tecnologías asistivas');
+});
+
 test('heatLegend: swatch de nivel cero + rampa 1..5 con extremos rotulados', () => {
   const html = heatLegend({});
   assert.ok(html.includes(HEAT[0]), 'nivel cero presente');

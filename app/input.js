@@ -30,6 +30,10 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   function setStatus(msg, kind = '') {
     status.textContent = msg;
     status.className = `status ${kind}`.trim();
+    // Los errores son asertivos (role=alert, se anuncian al insertarse); el
+    // resto queda como status (cortés). Cambiar el role dinámicamente es lo
+    // que el patrón pide: el elemento vive en el HTML estático.
+    status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   }
 
   function showApp(result) {
@@ -116,7 +120,24 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   btnDemo.addEventListener('click', () => run([demoSource()]));
   if (btnCached) btnCached.addEventListener('click', runCached);
   if (btnCachedClear && onClearCached) {
+    // Confirmación en dos pasos: el primer toque arma el botón (4 s para
+    // confirmar); el segundo borra. Un borrado destructivo a un toque era
+    // demasiado fácil de activar sin querer en táctil.
+    let armed = false;
+    let disarmTimer = 0;
     btnCachedClear.addEventListener('click', async () => {
+      if (!armed) {
+        armed = true;
+        btnCachedClear.textContent = 'Confirmar borrado';
+        disarmTimer = setTimeout(() => {
+          armed = false;
+          btnCachedClear.textContent = 'Borrar datos guardados';
+        }, 4000);
+        return;
+      }
+      clearTimeout(disarmTimer);
+      armed = false;
+      btnCachedClear.textContent = 'Borrar datos guardados';
       await onClearCached();
       setStatus('Datos guardados borrados.');
     });

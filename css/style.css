@@ -76,6 +76,15 @@
 
 html {
   color-scheme: dark;
+  /* El flash gris del tap nativo compite con el feedback propio (:active,
+     estados translúcidos); el doble-tap-zoom no aporta en esta app. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Elimina el delay de ~300 ms de double-tap-zoom en táctil sobre controles
+   (el viewport ya lo evita, esto lo refuerza en WebViews viejos). */
+a, button, select, summary, input, [tabindex] {
+  touch-action: manipulation;
 }
 
 body {
@@ -95,6 +104,7 @@ body {
 h1, h2, h3, h4 {
   line-height: 1.2;
   margin: 0 0 var(--sp-3);
+  text-wrap: balance;
 }
 
 code {
@@ -163,6 +173,13 @@ main.container {
 .btn-icon:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+
+/* Ocupado (export construye el zip): sin feedback el usuario re-toca y
+   encola otra descarga idéntica. */
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .brand {
@@ -419,12 +436,13 @@ main.container {
   font-size: var(--fs-sm);
 }
 
-/* Destaca fallos sin introducir colores semáforo ajenos a la paleta. */
+/* Destaca fallos con el color de peligro del sistema (la barra accent
+   sugería "seleccionado", no "algo falló"). */
 .status.error {
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border-strong);
-  border-left: 4px solid var(--accent);
+  border-left: 4px solid var(--danger);
   border-radius: var(--radius-sm);
   padding: var(--sp-3) var(--sp-4);
   text-align: left;
@@ -796,6 +814,12 @@ td a:hover {
 
 .chart-scroll--heat svg,
 .chart-scroll--clock svg {
+  min-width: 480px;
+}
+
+/* bar/line/stacked (viewBox 640): en móvil la card da ~296px y el texto de
+   12px del SVG rinde ~5.5px. El piso de 480px mantiene ≥9px efectivos. */
+.chart-scroll--bar svg {
   min-width: 480px;
 }
 

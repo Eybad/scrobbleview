@@ -5,7 +5,7 @@
 // skip/shuffle/offline. Los filtros cruzados por entidad (artista/canción/
 // álbum) se aplican desde las fichas, no desde la barra.
 
-import { RANGE_PRESETS } from '../src/filters.js';
+import { RANGE_PRESETS, emptyFilterState } from '../src/filters.js';
 import { esc, MONTHS_SHORT, fmtNum, fmtMs } from '../src/charts.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 
@@ -165,7 +165,7 @@ export function chipsHTML(model, state) {
   if (entity) chips.push({ unset: entity.kind, label: entity.label });
   if (state.range) chips.push({ unset: 'range', label: rangeChipLabel(state.range) });
   if (state.years) for (const y of [...state.years].sort()) chips.push({ unset: 'years', label: `Año ${y}` });
-  if (state.months) chips.push({ unset: 'months', label: `${state.months.size} mes(es)` });
+  if (state.months) chips.push({ unset: 'months', label: `${state.months.size} ${state.months.size === 1 ? 'mes' : 'meses'}` });
   // Todo filtro que afecta el cómputo proyecta su chip: sin esto, los días y
   // franjas activos son invisibles con el panel cerrado (filtros fantasma).
   if (state.dows) {
@@ -188,7 +188,62 @@ export function chipsHTML(model, state) {
   // botón (la fila colapsa), así que nunca flota un control muerto.
   const clearBtn = isFilterActive(state) ? '<button type="button" data-action="clear">Borrar todo</button>' : '';
   if (!chips.length && !clearBtn) return '';
-  return chips.map((c) => `<button type="button" class="chip chip-active" data-unset="${c.unset}">${esc(c.label)} ✕</button>`).join('') + clearBtn;
+  return chips.map((c) => `<button type="button" class="chip chip-active" data-unset="${c.unset}">${esc(c.label)} <span aria-hidden="true">✕</span></button>`).join('') + clearBtn;
+}
+
+// Serialización del estado de filtros a query de URL (deep-link + reload).
+// Solo lo que la UI puede producir: rango, días, franjas, toggles 3-estado y
+// entidad. years/months son paths muertos de la API pura: no se serializan.
+// Los valores (dígitos, coma, guión, yes/no) son URL-safe: sin encodeo.
+export function filterParams(state) {
+  const parts = [];
+  if (state.range) parts.push(`r=${state.range.from}-${state.range.to}`);
+  if (state.dows) parts.push(`d=${[...state.dows].sort((a, b) => a - b).join(',')}`);
+  if (state.hours) parts.push(`h=${[...state.hours].sort((a, b) => a - b).join(',')}`);
+  if (state.skip != null) parts.push(`s=${state.skip ? 'yes' : 'no'}`);
+  if (state.shuffle != null) parts.push(`f=${state.shuffle ? 'yes' : 'no'}`);
+  if (state.offline != null) parts.push(`o=${state.offline ? 'yes' : 'no'}`);
+  if (state.artistId != null) parts.push(`ar=${state.artistId}`);
+  if (state.trackId != null) parts.push(`tk=${state.trackId}`);
+  if (state.albumId != null) parts.push(`al=${state.albumId}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
+// Inversa: query → estado completo (cada filtro ausente vuelve como vacío:
+// los params son la verdad completa, no un delta). null si no hay query:
+// el caller conserva el estado vigente (navegar no resetea filtros).
+export function paramsToFilterState(search) {
+  if (!search) return null;
+  const p = new URLSearchParams(search);
+  if (![...p.keys()].length) return null;
+  const state = emptyFilterState();
+  const nums = (v) => v.split(',').map(Number).filter(Number.isFinite);
+  const r = p.get('r');
+  if (r) {
+    const [from, to] = r.split('-').map(Number);
+    if (Number.isFinite(from) && Number.isFinite(to) && to >= from) state.range = { from, to };
+  }
+  if (p.get('d')) {
+    const dows = nums(p.get('d')).filter((d) => d >= 0 && d <= 6);
+    if (dows.length) state.dows = new Set(dows);
+  }
+  if (p.get('h')) {
+    const hours = nums(p.get('h')).filter((h) => h >= 0 && h <= 23);
+    if (hours.length) state.hours = new Set(hours);
+  }
+  const tri = (v) => (v === 'yes' ? true : v === 'no' ? false : null);
+  state.skip = tri(p.get('s'));
+  state.shuffle = tri(p.get('f'));
+  state.offline = tri(p.get('o'));
+  const id = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  state.artistId = id(p.get('ar'));
+  state.trackId = id(p.get('tk'));
+  state.albumId = id(p.get('al'));
+  return state;
 }
 
 export function filterBarHTML(model, state) {

@@ -337,7 +337,7 @@ export function sparkline({ points, width = 120, height = 32, accent = ACCENT })
   // cortada"). preserveAspectRatio="none" + non-scaling-stroke: el CSS fija
   // el alto (sparkline compacta en tablas) y el trazo queda uniforme en
   // pantalla en vez de escalar con el ancho de columna.
-  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" class="sparkline" aria-hidden="true"><path d="${line}" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="sparkline" aria-hidden="true"><path d="${line}" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
 // ---------- calendarGrid (año × día, estilo GitHub) ----------
@@ -437,7 +437,10 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
         return `<li class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(String(l))}</li>`;
       }).join('')}</ul>`
     : '';
-  return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${height}" role="img" class="chart" aria-label="Barras apiladas">${rows}</svg>${legend}</div>`;
+  // Resumen para lectores de pantalla: totales por serie (los segmentos ya
+  // viajan en los <title> de cada rect).
+  const aria = `Barras apiladas: ${series.map((s) => `${s.label}: ${format(s.total ?? s.values.reduce((a, b) => a + b, 0))}`).join(', ')}`;
+  return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${height}" role="img" class="chart" aria-label="${esc(aria)}">${rows}</svg>${legend}</div>`;
 }
 
 // ---------- heatLegend ----------
