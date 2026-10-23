@@ -149,7 +149,7 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
   const cell = (r) => {
     const full = r.sub ? `${r.name} — ${r.sub}` : r.name;
     const inner = r.sub
-      ? `<span class="cell-name">${esc(r.name)}</span><span class="cell-sub">${esc(r.sub)}</span>`
+      ? `<span class="cell-name">${esc(r.name)}</span> <span class="cell-sub">${esc(r.sub)}</span>`
       : `<span class="cell-name">${esc(r.name)}</span>`;
     return link
       ? `<a class="cell-link" href="${link(r)}" title="${esc(full)}">${inner}</a>`
@@ -193,7 +193,7 @@ function entityLink(type, id, name) {
 function trackSubLink(tk, name, artist) {
   if (!artist) return entityLink('track', tk, name);
   const full = `${name} — ${artist}`;
-  return `<a class="cell-link" href="#/track/${tk}" title="${esc(full)}"><span class="cell-name">${esc(name)}</span><span class="cell-sub">${esc(artist)}</span></a>`;
+  return `<a class="cell-link" href="#/track/${tk}" title="${esc(full)}"><span class="cell-name">${esc(name)}</span> <span class="cell-sub">${esc(artist)}</span></a>`;
 }
 
 function topEntityInMap(map, ignoreZero = false) {
@@ -867,7 +867,10 @@ export function sessionsView(model, ctx = {}) {
 export function discoveryView(model, ctx = {}) {
   const disc = [...model.monthlyDiscovery.entries()].sort((a, b) => a[0] - b[0]);
   const line = lineChart({
-    points: disc.map(([mi, d]) => ({ label: monthLabel(mi), y: d.new })),
+    points: fillMonths(sortedMonths(model.monthlyDiscovery)).map((mi) => ({
+      label: monthLabel(mi),
+      y: model.monthlyDiscovery.get(mi)?.new ?? 0
+    })),
     format: fmtNum
   });
   const absLimit = resolveLimit(ctx, 'disc-abs', 10);
@@ -886,8 +889,8 @@ export function discoveryView(model, ctx = {}) {
       <p class="view-meta">Canciones nuevas por mes</p>
     </header>
     ${kpis([
-      { label: 'Canciones descubiertas', value: fmtNum(totalNewTracks), sub: pctOf(totalNewTracks, model.totals.records) },
-      { label: 'Repetidas del catálogo', value: fmtNum(totalRepTracks), sub: pctOf(totalRepTracks, model.totals.records) },
+      { label: 'Canciones descubiertas', value: fmtNum(totalNewTracks) },
+      { label: 'Escuchas de catálogo', value: fmtNum(totalRepTracks), sub: `${pctOf(totalRepTracks, model.totals.records)} de las reproducciones` },
       { label: 'Promedio mensual', value: `${avgNewPerMonth} nuevas` },
       { label: 'Artistas únicos', value: fmtNum(model.artists.byId.size) }
     ])}
@@ -1114,13 +1117,14 @@ export function hoursView(model, ctx = {}) {
     const hStat = model.hour[h];
     const map = byMs ? model.hourTracksMs[h] : model.hourTracks[h];
     const topEntry = topEntityInMap(map, false);
-    const topTr = topEntry ? model.tracks.byId.get(topEntry[0]) : null;
+    const topTk = topEntry ? topEntry[0] : null;
+    const topTr = topTk != null ? model.tracks.byId.get(topTk) : null;
+    const topPlays = topTk != null ? (model.hourTracks[h].get(topTk) ?? 0) : 0;
+    const topMs = topTk != null ? (model.hourTracksMs[h].get(topTk) ?? 0) : 0;
     return [
       esc(label),
-      fmtNum(hStat.plays),
-      fmtMs(hStat.ms),
-      topTr ? trackSubLink(topEntry[0], topTr.name, topTr.artist) : '—',
-      topEntry ? valFmt(topEntry[1]) : '—'
+      `<div class="cell-metric-stack"><span class="cell-metric-val">${fmtNum(hStat.plays)} rep.</span><span class="cell-metric-sub">${fmtMs(hStat.ms)}</span></div>`,
+      topTr ? trackSubLink(topTk, topTr.name, `${topTr.artist} · ${fmtNum(topPlays)} rep. (${fmtMs(topMs)})`) : '—'
     ];
   });
 
@@ -1142,7 +1146,7 @@ export function hoursView(model, ctx = {}) {
       ${card(`Actividad por día de la semana (${valLabel.toLowerCase()})`, dowChart)}
     </div>
     ${card('Las 4 franjas del día', table(['Franja', 'Reproducciones', 'Tiempo', '%', 'Artista #1', 'Canción #1'], blockRows, '', ['', 'n', 'n', 'n', '', ''], null, 'Comparación de las 4 franjas del día'))}
-    ${card('Canción #1 de cada hora (00:00–23:00)', table(['Hora', 'Reproducciones', 'Tiempo', 'Canción #1', `${valLabel} en esa hora`], hourTrackRows, '', ['c', 'n', 'n', '', 'n'], null, 'Canción más escuchada en cada una de las 24 horas del día'))}`;
+    ${card('Detalle por hora (00:00–23:00)', table(['Hora', 'Total de la hora', 'Canción #1'], hourTrackRows, '', ['c', 'n', ''], null, 'Actividad total y canción más escuchada en cada una de las 24 horas del día'))}`;
 }
 
 export function habitsView(model, ctx = {}) {
@@ -1265,18 +1269,18 @@ export function habitsView(model, ctx = {}) {
     <div class="grid-2">
       ${cardWithLimit('One-hit wonders (≥80% en 1 canción)', 'habits-onehit', oneHitLimit, oneHitRows.length
         ? table(['Artista', 'Canción dominante', 'Concentración', 'Reproducciones'], oneHitRows, '', ['', '', 'n', 'n'], null, 'Artistas cuyas reproducciones se concentran en una sola canción')
-        : '<p class="empty">Sin artistas con ≥80% en una sola canción (mínimo 5 reproducciones).</p>')}
+        : '<p class="empty">Sin artistas con ≥80% en una sola canción (mínimo 20 reproducciones).</p>')}
       ${cardWithLimit('Catálogo profundo (más canciones distintas)', 'habits-deep', deepLimit, deepRows.length
         ? table(['Artista', 'Canciones', 'Álbumes', 'Reproducciones', 'Tiempo'], deepRows, '', ['', 'n', 'n', 'n', 'n'], null, 'Artistas con más canciones distintas escuchadas')
         : '<p class="empty">Sin datos.</p>')}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Artistas olvidados', 'habits-forg-art', forgArtLimit, forgArtRows.length
-        ? table(['Artista', 'Reproducciones', 'Tiempo', 'Última escucha'], forgArtRows, '', ['', 'n', 'n', ''], null, 'Artistas con al menos 10 reproducciones cuya última escucha fue hace más tiempo')
-        : '<p class="empty">Sin artistas con ≥10 reproducciones.</p>')}
+        ? table(['Artista', 'Reproducciones', 'Tiempo', 'Última escucha'], forgArtRows, '', ['', 'n', 'n', ''], null, 'Artistas con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
+        : '<p class="empty">Sin artistas con ≥15 reproducciones.</p>')}
       ${cardWithLimit('Canciones olvidadas', 'habits-forg-trk', forgTrkLimit, forgTrkRows.length
-        ? table(['Canción', 'Reproducciones', 'Tiempo', 'Última escucha'], forgTrkRows, '', ['', 'n', 'n', ''], null, 'Canciones con al menos 10 reproducciones cuya última escucha fue hace más tiempo')
-        : '<p class="empty">Sin canciones con ≥10 reproducciones.</p>')}
+        ? table(['Canción', 'Reproducciones', 'Tiempo', 'Última escucha'], forgTrkRows, '', ['', 'n', 'n', ''], null, 'Canciones con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
+        : '<p class="empty">Sin canciones con ≥15 reproducciones.</p>')}
     </div>`;
 }
 

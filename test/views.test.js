@@ -674,10 +674,11 @@ test('rankings and css: Top 100 option, skip-link, base links, and no invalid --
   assert.ok(/^\s*a\s*\{/m.test(css));
 });
 
-test('hours view: 24-hour #1 tracks, 4 blocks comparison, and metric switching', async () => {
+test('hours view: 24-hour grouped detail table, 4 blocks comparison, and metric switching', async () => {
   const model = await demoModel();
   const playsHtml = renderView('hours', model, null, { metric: 'plays' });
-  assert.ok(playsHtml.includes('Canción #1 de cada hora'));
+  assert.ok(playsHtml.includes('Detalle por hora (00:00–23:00)'));
+  assert.ok(playsHtml.includes('Total de la hora'));
   assert.ok(playsHtml.includes('00:00') && playsHtml.includes('23:00'));
   assert.ok(playsHtml.includes('Artista #1') && playsHtml.includes('Canción #1'));
   assert.ok(playsHtml.includes('Fin de semana'));
@@ -775,6 +776,7 @@ test('detail views (artist, track, album): firstTrack, active months, clockMs, s
   const tk = model.tracks.top.byPlays[0].tk;
   const trackHtml = renderView('track', model, tk);
   assert.ok(trackHtml.includes('Meses activos'));
+  assert.ok(!trackHtml.includes('<dt>Meses activos</dt><dd>0</dd>'), 'track active months is populated and non-zero');
   assert.ok(trackHtml.includes('Duración media'));
 
   const ak = [...model.albums.byId.keys()][0];
