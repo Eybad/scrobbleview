@@ -6,12 +6,12 @@
 // episodios, así que el dataset nunca los contiene.
 
 const MS_BUCKETS = [
-  [0, 10000, '<10s'],
-  [10000, 30000, '10-30s'],
-  [30000, 60000, '30s-1m'],
-  [60000, 180000, '1-3m'],
-  [180000, 300000, '3-5m'],
-  [300000, Infinity, '>5m']
+  [0, 10000, '<10 s'],
+  [10000, 30000, '10–30 s'],
+  [30000, 60000, '30–60 s'],
+  [60000, 180000, '1–3 min'],
+  [180000, 300000, '3–5 min'],
+  [300000, Infinity, '>5 min']
 ];
 
 const COMPLETED_REASONS = new Set(['trackdone', 'endplay']);

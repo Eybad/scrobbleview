@@ -33,7 +33,7 @@ test('totales: records, ms, flags, completitud, mediana, buckets', () => {
   assert.equal(m.totals.playsSignificant, 2); // ms >= 30000
   assert.equal(m.totals.playsSkipped, 2); // ms < 10000
   assert.deepEqual(m.totals.msDist.map((x) => x.count), [2, 0, 0, 2, 0, 0]);
-  assert.deepEqual(m.totals.msDist.map((x) => x.label), ['<10s', '10-30s', '30s-1m', '1-3m', '3-5m', '>5m']);
+  assert.deepEqual(m.totals.msDist.map((x) => x.label), ['<10 s', '10–30 s', '30–60 s', '1–3 min', '3–5 min', '>5 min']);
 });
 
 test('episodes se deriva de los warnings del parser', () => {

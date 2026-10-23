@@ -179,10 +179,14 @@ export function chipsHTML(model, state) {
     chips.push({ unset: 'hours', label: `Franjas: ${parts.join(', ')}` });
   }
   for (const k of ['skip', 'shuffle', 'offline']) {
-    if (state[k] != null) {
-      const name = k === 'skip' ? 'Saltadas' : k === 'shuffle' ? 'Shuffle' : 'Offline';
-      chips.push({ unset: k, label: state[k] ? `Solo ${name.toLowerCase()}` : `Sin ${name.toLowerCase()}` });
+    if (state[k] == null) continue;
+    // offline=false es "con conexión": el "Sin" genérico diría "Sin sin conexión".
+    if (k === 'offline') {
+      chips.push({ unset: k, label: state[k] ? 'Solo sin conexión' : 'Con conexión' });
+      continue;
     }
+    const name = k === 'skip' ? 'saltadas' : 'aleatorio';
+    chips.push({ unset: k, label: state[k] ? `Solo ${name}` : `Sin ${name}` });
   }
   // Borrar todo vive al final de la fila de chips: sin filtros no hay chips ni
   // botón (la fila colapsa), así que nunca flota un control muerto.
@@ -274,7 +278,7 @@ export function filterBarHTML(model, state) {
 
   // 3 estados: Todos (null) / Solo sí (true) / Excluir (false).
   const toggles = ['skip', 'shuffle', 'offline'].map((k) => {
-    const label = k === 'skip' ? 'Saltadas' : k === 'shuffle' ? 'Shuffle' : 'Offline';
+    const label = k === 'skip' ? 'Saltadas' : k === 'shuffle' ? 'Aleatorio' : 'Sin conexión';
     const v = state[k] === true ? 'yes' : state[k] === false ? 'no' : '';
     return `<label class="chip">${label} <select data-toggle3="${k}" aria-label="${label}">
       <option value="" ${v === '' ? 'selected' : ''}>Todos</option>
