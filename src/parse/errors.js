@@ -21,10 +21,10 @@ export class SchemaError extends Error {
 }
 
 export class FileError extends Error {
-  constructor(message, { cause } = {}) {
+  constructor(message, { cause, code = 'E_FILE' } = {}) {
     super(message, { cause });
     this.name = 'FileError';
-    this.code = 'E_FILE';
+    this.code = code;
   }
 }
 

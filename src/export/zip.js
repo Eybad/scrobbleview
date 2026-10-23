@@ -17,9 +17,15 @@ const CRC_TABLE = (() => {
 })();
 
 export function crc32(bytes) {
-  let c = 0xFFFFFFFF;
+  return (crc32Update(0xFFFFFFFF, bytes) ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Variante incremental para streams: el lector de zip acumula el CRC por
+// chunk sin materializar la entrada completa.
+export function crc32Update(crc, bytes) {
+  let c = crc;
   for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
+  return c >>> 0;
 }
 
 async function deflateRaw(bytes) {
