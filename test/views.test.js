@@ -651,3 +651,65 @@ test('rankings and css: Top 100 option, skip-link, base links, and no invalid --
   assert.ok(css.includes('.skip-link'));
   assert.ok(/^\s*a\s*\{/m.test(css));
 });
+
+test('hours view: 24-hour #1 tracks, 4 blocks comparison, and metric switching', async () => {
+  const model = await demoModel();
+  const playsHtml = renderView('hours', model, null, { metric: 'plays' });
+  assert.ok(playsHtml.includes('Canción #1 de cada hora'));
+  assert.ok(playsHtml.includes('00:00') && playsHtml.includes('23:00'));
+  assert.ok(playsHtml.includes('Artista #1') && playsHtml.includes('Canción #1'));
+  assert.ok(playsHtml.includes('Fin de semana'));
+
+  const msHtml = renderView('hours', model, null, { metric: 'ms' });
+  assert.ok(msHtml.includes('Tiempo'));
+});
+
+test('habits view: concentration, Pareto curve, monthly behavior, transitions, pairs, and catalog curiosities', async () => {
+  const model = await demoModel();
+  const html = renderView('habits', model);
+  for (const label of [
+    'Efectivos exp(H)',
+    'Gini',
+    'Entropía norm.',
+    'Curva de Pareto',
+    'Saltos por mes',
+    'Aleatorio por mes',
+    'Transiciones entre artistas',
+    'Pares de inicio',
+    'One-hit wonders',
+    'Catálogo profundo',
+    'Artistas olvidados',
+    'Canciones olvidadas'
+  ]) {
+    assert.ok(html.includes(label), `habits view includes ${label}`);
+  }
+});
+
+test('sessions, discovery, yearly, and calendar enrichments and metric switching', async () => {
+  const model = await model2y();
+  const sess = renderView('sessions', model);
+  assert.ok(sess.includes('Reproducciones mediana'));
+  assert.ok(sess.includes('Sesiones por mes'));
+  assert.ok(sess.includes('Sesiones por día de la semana'));
+  assert.ok(sess.includes('data-table-limit="sessions-dur"'));
+
+  const disc = renderView('discovery', model);
+  assert.ok(disc.includes('data-table-limit="disc-constancy"'));
+  assert.ok(disc.includes('Repetidas'));
+
+  const yearlyPlays = renderView('yearly', model, null, { metric: 'plays' });
+  assert.ok(yearlyPlays.includes('Álbumes'));
+  assert.ok(yearlyPlays.includes('Artista #1'));
+  assert.ok(yearlyPlays.includes('Canción #1'));
+  const yearlyMs = renderView('yearly', model, null, { metric: 'ms' });
+  assert.ok(yearlyMs.includes('2023 — Madrugada: 2m'));
+
+  const calIdx = renderView('calendar', model);
+  const yearDetails = calIdx.slice(calIdx.indexOf('<details class="card calendar-year">'));
+  const summarySection = yearDetails.slice(yearDetails.indexOf('<summary>'), yearDetails.indexOf('</summary>'));
+  assert.ok(summarySection.includes('class="chevron"'));
+  assert.ok(!summarySection.includes('<a '), 'summary does not wrap a competing link');
+
+  const calPlays = renderView('calendar', model, 2024, { metric: 'plays' });
+  assert.ok(calPlays.includes('Reproducciones por día en 2024'));
+});
