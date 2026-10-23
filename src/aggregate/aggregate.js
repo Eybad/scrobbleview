@@ -21,6 +21,7 @@ const TOP_DISCOVERY_N = 100;
 const MIN_PLAYS_FOR_RATE = 20;
 const MIN_PLAYS_FOR_OBSESSION = 15;
 const MIN_MONTHS_FOR_CONSTANCY = 6;
+const MIN_ONE_HIT_SHARE = 0.8;
 
 export function aggregate(ds, opts = {}) {
   const tz = opts.tz;
@@ -111,6 +112,8 @@ function rankOneHitWonders(artistList, tracksByKey) {
     .map((artist) => {
       const dominant = findDominantTrack(artist, tracksByKey);
       if (!dominant) return null;
+      const share = artist.plays > 0 ? dominant.plays / artist.plays : 0;
+      if (share < MIN_ONE_HIT_SHARE) return null;
       return {
         id: artist.id,
         name: artist.name,
@@ -118,7 +121,7 @@ function rankOneHitWonders(artistList, tracksByKey) {
         ms: artist.ms,
         trackCount: artist.tracks.size,
         topTrack: { tk: dominant.tk, name: dominant.name, plays: dominant.plays, ms: dominant.ms },
-        share: artist.plays > 0 ? dominant.plays / artist.plays : 0,
+        share,
         shareMs: artist.ms > 0 ? dominant.ms / artist.ms : 0
       };
     })
