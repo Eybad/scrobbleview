@@ -279,22 +279,47 @@ function maxEntry(map, getVal) {
   return best;
 }
 
-// Récords personales del período: celdas listas para table() (que no escapa
-// rows), así que todo string de dato va por esc() o entityLink().
-function recordsRows(model) {
-  const rows = [];
+function recordsGridHTML(model) {
+  const tiles = [];
   const day = maxEntry(model.daily, (v) => v.ms);
-  if (day) rows.push(['Día más intenso', esc(fmtDay(day[0])), esc(fmtMs(day[1].ms))]);
+  if (day) {
+    tiles.push({
+      label: 'Día más intenso',
+      val: esc(fmtMs(day[1].ms)),
+      meta: esc(`${fmtDay(day[0])} · ${fmtNum(day[1].plays)} rep.`)
+    });
+  }
   const month = maxEntry(model.monthly, (v) => v.ms);
-  if (month) rows.push(['Mes más intenso', esc(monthLabel(month[0])), esc(fmtMs(month[1].ms))]);
+  if (month) {
+    tiles.push({
+      label: 'Mes más intenso',
+      val: esc(fmtMs(month[1].ms)),
+      meta: esc(`${monthLabel(month[0])} · ${fmtNum(month[1].plays)} rep.`)
+    });
+  }
   const sess = model.tables.sessions.byDuration[0];
-  if (sess) rows.push(['Sesión más larga', esc(fmtLocal(sess.start)), esc(fmtMs(sess.duration * 1000))]);
+  if (sess) {
+    tiles.push({
+      label: 'Sesión más larga',
+      val: esc(fmtMs(sess.duration * 1000)),
+      meta: esc(`${fmtLocal(sess.start)} · ${fmtNum(sess.plays)} rep.`)
+    });
+  }
   const run = maxEntry(model.maxRun, (v) => v);
   if (run) {
     const tr = model.tracks.byId.get(run[0]);
-    rows.push(['Maratón de una canción', tr ? entityLink('track', run[0], tr.name) : '—', esc(`${fmtNum(run[1])} seguidas`)]);
+    tiles.push({
+      label: 'Maratón de una canción',
+      val: esc(`${fmtNum(run[1])} seguidas`),
+      meta: tr ? trackSubLink(run[0], tr.name, tr.artist) : '—'
+    });
   }
-  return rows;
+  tiles.push({
+    label: 'Días con escucha',
+    val: esc(`${fmtNum(model.daily.size)} días`),
+    meta: esc(`${fmtNum(model.zeroDays)} días sin actividad`)
+  });
+  return `<div class="records-grid">${tiles.map((t) => `<div class="record-tile"><span class="record-label">${esc(t.label)}</span><span class="record-val">${t.val}</span><span class="record-meta">${t.meta}</span></div>`).join('')}</div>`;
 }
 
 // Arquetipo de oyente: etiqueta derivada de skip rate, concentración (HHI),
@@ -418,53 +443,66 @@ export function emptyFiltersHTML() {
 export function dashboard(model, ctx = {}) {
   const t = model.totals;
   const prev = ctx.prev ?? null;
+  const byMs = (ctx.metric ?? 'ms') === 'ms';
+  const valFmt = byMs ? fmtMs : fmtNum;
   const range = model.meta.firstTs != null
     ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`
     : '—';
   const filesLabel = model.meta.sources.length === 1 ? 'archivo' : 'archivos';
 
   const heatCells = [];
-  let maxMs = 0;
+  let maxVal = 0;
+  const heatSrc = byMs ? model.dayHourMs : model.dayHour;
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
-      const v = model.dayHourMs[d * 24 + h];
-      if (v > maxMs) maxMs = v;
+      const v = heatSrc[d * 24 + h];
+      if (v > maxVal) maxVal = v;
       heatCells.push({ x: h, y: d, value: v });
     }
   }
   const heat = heatmap({
     cells: heatCells,
     width: 640, height: 190,
-    colorScale: makeScale(maxMs),
+    colorScale: makeScale(maxVal),
     xLabels: [0, 3, 6, 9, 12, 15, 18, 21].map((h) => `${h}`),
     yLabels: DOW_SHORT,
-    cellTitle: (c) => `${DOW_LONG[c.y]} ${c.x}:00 — ${fmtMs(c.value)}`,
-    ariaLabel: 'Actividad por hora del día y día de la semana (tiempo escuchado)'
+    cellTitle: (c) => `${DOW_LONG[c.y]} ${c.x}:00 — ${valFmt(c.value)}`,
+    ariaLabel: `Actividad por hora del día y día de la semana (${byMs ? 'tiempo escuchado' : 'reproducciones'})`
   });
   const heatTable = heatmapTable({
     cells: heatCells,
     xLabels: Array.from({ length: 24 }, (_, h) => `${h}`),
     yLabels: DOW_SHORT,
-    cellText: (c) => fmtMs(c.value),
-    caption: 'Tiempo escuchado por hora y día'
+    cellText: (c) => valFmt(c.value),
+    caption: byMs ? 'Tiempo escuchado por hora y día' : 'Reproducciones por hora y día'
   });
 
   const monthly = fillMonths(sortedMonths(model.monthly)).map((mi) => ({
     label: monthLabel(mi),
-    y: model.monthly.get(mi)?.ms ?? 0
+    y: model.monthly.get(mi)?.[byMs ? 'ms' : 'plays'] ?? 0
   }));
-  const evolution = lineChart({ points: monthly, format: fmtMs });
+  const evolution = lineChart({ points: monthly, format: valFmt });
 
   const dist = hbarChart({
     rows: t.msDist.map((b) => ({ label: b.label, value: b.count })),
     format: fmtNum
   });
 
-  const rankings = `<div id="rank-card">${rankCardHTML(model, {})}</div>`;
+  const rankings = `<div id="rank-card">${rankCardHTML(model, { metric: ctx.metric ?? 'plays' })}</div>`;
 
   const skipRate = t.records > 0 ? fmtPct(t.skipped / t.records) : '—';
   const shuffleRate = t.records > 0 ? fmtPct(t.shuffle / t.records) : '—';
   const offlineRate = t.records > 0 ? fmtPct(t.offline / t.records) : '—';
+  const avgDuration = t.records > 0 ? t.ms / t.records : 0;
+
+  const obsLimit = resolveLimit(ctx, 'dash-obsession', 10);
+  const bingeLimit = resolveLimit(ctx, 'dash-binge', 10);
+  const skipArtLimit = resolveLimit(ctx, 'dash-skip-art', 10);
+  const skipTrkLimit = resolveLimit(ctx, 'dash-skip-trk', 10);
+  const lowSkipArtLimit = resolveLimit(ctx, 'dash-lowskip-art', 10);
+  const lowSkipTrkLimit = resolveLimit(ctx, 'dash-lowskip-trk', 10);
+  const firstLimit = resolveLimit(ctx, 'dash-first', 10);
+  const lastLimit = resolveLimit(ctx, 'dash-last', 10);
 
   return `
     <header class="view-header">
@@ -481,84 +519,119 @@ export function dashboard(model, ctx = {}) {
       { label: 'Álbumes', value: fmtNum(model.albums.byId.size) },
       { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
-      { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate }
+      { label: 'Duración promedio', value: fmtMs(avgDuration), sub: `mediana ${fmtMs(t.medianMs)}` },
+      { label: 'Completadas', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} interrumpidas` },
+      { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
+      { label: 'Con aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
+      { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },
+      { label: `Reproducciones (+${thresholdLabel(model.meta.minMs)})`, value: fmtNum(t.playsSignificant) },
+      { label: `Cortadas (<${thresholdLabel(model.meta.skipThresholdMs)})`, value: fmtNum(t.playsSkipped) }
     ])}
-    ${card('Récords', table(['Récord', 'Cuándo', 'Cuánto'], recordsRows(model), '', ['', '', 'n'], null, 'Récords personales del período'))}
+    ${card('Récords', recordsGridHTML(model))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
       ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
       ${card('Duración de reproducciones', dist)}
     </div>
     ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
-    ${card('Obsesión (reproducciones por día activo)', table(['Canción', 'Intensidad', 'Reproducciones'], model.tables.obsession.slice(0, 10).map((o) => [
-      entityLink('track', o.tk, o.name),
-      o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
-      fmtNum(o.plays)
-    ]), '', ['', 'n', 'n'], null, 'Canciones más escuchadas por día activo'))}
     <div class="grid-2">
-      ${card('Rachas (misma canción seguida)', table(['Canción', 'Racha'], model.tables.binge.slice(0, 10).map((b) => [
-        entityLink('track', b.tk, b.track.name),
-        fmtNum(b.run)
-      ]), '', ['', 'n'], null, 'Canciones repetidas en racha'))}
-      ${card('Mayor tasa de salto', table(['Nombre', 'Saltadas'], [...model.tables.skipRate.artists.slice(0, 5).map((a) => [
-        entityLink('artist', a.id, a.name),
-        fmtPct(a.skips / a.plays)
-      ]), ...model.tables.skipRate.tracks.slice(0, 5).map((tr) => [
-        entityLink('track', tr.tk, tr.name),
-        fmtPct(tr.skips / tr.plays)
-      ])], '', ['', 'n'], null, 'Artistas y canciones con mayor tasa de salto'))}
+      ${cardWithLimit('Obsesión (reproducciones por día activo)', 'dash-obsession', obsLimit, table(['Canción', 'Intensidad', 'Días', 'Reproducciones', 'Tiempo'], model.tables.obsession.slice(0, obsLimit).map((o) => [
+        trackSubLink(o.tk, o.name, o.artist),
+        o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
+        fmtNum(o.days.size),
+        fmtNum(o.plays),
+        fmtMs(o.ms)
+      ]), '', ['', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'))}
+      ${cardWithLimit('Rachas (misma canción seguida)', 'dash-binge', bingeLimit, table(['Canción', 'Racha', 'Reproducciones'], model.tables.binge.slice(0, bingeLimit).map((b) => [
+        trackSubLink(b.tk, b.track.name, b.track.artist),
+        fmtNum(b.run),
+        fmtNum(b.track.plays)
+      ]), '', ['', 'n', 'n'], null, 'Canciones repetidas en racha'))}
     </div>
     <div class="grid-2">
-      ${card('Primera canción del día', table(['Canción', 'Días'], model.tables.dayFirst.slice(0, 10).map((d) => [
-        entityLink('track', d.tk, d.track.name),
+      ${cardWithLimit('Mayor tasa de salto — Artistas', 'dash-skip-art', skipArtLimit, table(['Artista', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.artists.slice(0, skipArtLimit).map((a) => [
+        entityLink('artist', a.id, a.name),
+        fmtNum(a.skips),
+        fmtNum(a.plays),
+        fmtPct(a.skips / a.plays)
+      ]), '', ['', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto'))}
+      ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['Canción', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr) => [
+        trackSubLink(tr.tk, tr.name, tr.artist),
+        fmtNum(tr.skips),
+        fmtNum(tr.plays),
+        fmtPct(tr.skips / tr.plays)
+      ]), '', ['', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto'))}
+    </div>
+    <div class="grid-2">
+      ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['Artista', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a) => [
+        entityLink('artist', a.id, a.name),
+        fmtNum(a.skips),
+        fmtNum(a.plays),
+        fmtPct(a.skips / a.plays)
+      ]), '', ['', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto'))}
+      ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['Canción', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr) => [
+        trackSubLink(tr.tk, tr.name, tr.artist),
+        fmtNum(tr.skips),
+        fmtNum(tr.plays),
+        fmtPct(tr.skips / tr.plays)
+      ]), '', ['', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto'))}
+    </div>
+    <div class="grid-2">
+      ${cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d) => [
+        trackSubLink(d.tk, d.track.name, d.track.artist),
         fmtNum(d.count)
       ]), '', ['', 'n'], null, 'Canción con la que arranca cada día'))}
-      ${card('Última canción del día', table(['Canción', 'Días'], model.tables.dayLast.slice(0, 10).map((d) => [
-        entityLink('track', d.tk, d.track.name),
+      ${cardWithLimit('Última canción del día', 'dash-last', lastLimit, table(['Canción', 'Días'], model.tables.dayLast.slice(0, lastLimit).map((d) => [
+        trackSubLink(d.tk, d.track.name, d.track.artist),
         fmtNum(d.count)
       ]), '', ['', 'n'], null, 'Canción con la que cierra cada día'))}
-    </div>
-    ${kpis([
-      { label: 'Con aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
-      { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },
-      { label: `Reproducciones (+${thresholdLabel(model.meta.minMs)})`, value: fmtNum(t.playsSignificant) },
-      { label: `Cortadas (<${thresholdLabel(model.meta.skipThresholdMs)})`, value: fmtNum(t.playsSkipped) }
-    ])}`;
+    </div>`;
 }
 
-export function artistView(model, ar) {
+export function artistView(model, ar, ctx = {}) {
   const a = model.artists.byId.get(ar);
   if (!a) return `<p class="empty">Artista no encontrado.</p>`;
+  const byMs = ctx?.metric === 'ms';
+  const valFmt = byMs ? fmtMs : fmtNum;
+  const valLabel = byMs ? 'Tiempo' : 'Reproducciones';
   const totalMs = model.totals.ms;
+  const tracksLimit = resolveLimit(ctx, 'artist-tracks', 10);
+  const albumsLimit = resolveLimit(ctx, 'artist-albums', 10);
+  const transLimit = resolveLimit(ctx, 'artist-trans', 10);
+
   const topTracks = [...model.tracks.byId.entries()]
     .filter(([tk]) => tk % 4294967296 === ar)
     .map(([tk, tr]) => ({ tk, tr }))
-    .sort((x, y) => y.tr.plays - x.tr.plays || y.tr.ms - x.tr.ms)
-    .slice(0, 10);
+    .sort((x, y) => (byMs ? y.tr.ms - x.tr.ms || y.tr.plays - x.tr.plays : y.tr.plays - x.tr.plays || y.tr.ms - x.tr.ms))
+    .slice(0, tracksLimit);
   const transitions = model.transitions.top
     .filter((x) => x.from === ar || x.to === ar)
-    .slice(0, 10);
+    .slice(0, transLimit);
 
   const evolution = lineChart({
-    points: monthlySeries(model.monthlyArtistMs, ar),
-    format: fmtMs
+    points: monthlySeries(byMs ? model.monthlyArtistMs : model.monthlyArtistPlays, ar),
+    format: valFmt
   });
 
   const albumRows = [...a.albums]
     .map((ak) => model.albums.byId.get(ak))
     .filter(Boolean)
-    .sort((x, y) => y.plays - x.plays || y.ms - x.ms)
-    .map((al) => ({ name: al.name, value: al.plays, id: al.id }));
+    .sort((x, y) => (byMs ? y.ms - x.ms || y.plays - x.plays : y.plays - x.plays || y.ms - x.ms))
+    .slice(0, albumsLimit)
+    .map((al) => ({ name: al.name, value: byMs ? al.ms : al.plays, id: al.id }));
 
+  const clockSrc = byMs && a.clockMs ? a.clockMs : a.clock;
   const clockCells = [];
-  let maxPlays = 0;
+  let maxVal = 0;
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
-      const v = a.clock[d * 24 + h];
-      if (v > maxPlays) maxPlays = v;
+      const v = clockSrc[d * 24 + h];
+      if (v > maxVal) maxVal = v;
       clockCells.push({ hour: h, dow: d, value: v });
     }
   }
+
+  const firstTr = a.firstTrackTk ? model.tracks.byId.get(a.firstTrackTk) : null;
 
   return `
     <header class="view-header">
@@ -570,26 +643,42 @@ export function artistView(model, ar) {
     ${kpis([
       { label: 'Reproducciones', value: fmtNum(a.plays) },
       { label: 'Tiempo', value: fmtMs(a.ms) },
+      { label: 'Canciones', value: fmtNum(a.tracks ? a.tracks.size : topTracks.length) },
+      { label: 'Álbumes', value: fmtNum(a.albums.size) },
       { label: 'Saltadas', value: fmtNum(a.skips), sub: pctOf(a.skips, a.plays) },
       { label: 'Días activos', value: fmtNum(a.days.size) },
+      { label: 'Meses activos', value: fmtNum(a.months.size), sub: `${fmtNum(a.years.size)} años` },
+      { label: 'Primera canción', value: firstTr ? entityLink('track', a.firstTrackTk, firstTr.name) : '—', text: true },
       { label: 'Primera escucha', value: fmtLocal(a.firstTs) },
       { label: 'Última escucha', value: fmtLocal(a.lastTs) }
     ])}
     <div class="grid-2">
       ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
-      ${card('Tus canciones de este artista', rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: tr.plays, id: tr.tk })), { link: (r) => `#/track/${r.id}`, caption: 'Canciones del artista por reproducciones' }))}
+      ${cardWithLimit('Tus canciones de este artista', 'artist-tracks', tracksLimit, rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk })), {
+        valueFmt: valFmt,
+        valueLabel: valLabel,
+        link: (r) => `#/track/${r.id}`,
+        caption: `Canciones del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
+        spark: (r) => rowSeries(model, 'tracks', byMs ? 'ms' : 'plays', r.id)
+      }))}
     </div>
     <div class="grid-2">
       ${card('Tu semana con este artista', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Reloj de escucha del artista">${listeningClock({
         cells: clockCells,
-        colorScale: makeScale(maxPlays),
-        cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      })}</div>` + heatLegend() + clockTable(clockCells))}
-      ${card('Álbumes de este artista', albumRows.length
-        ? rankTable(albumRows, { link: (r) => `#/album/${r.id}`, caption: 'Álbumes del artista por reproducciones' })
+        colorScale: makeScale(maxVal),
+        cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${byMs ? fmtMs(x.value) : `${fmtNum(x.value)} reproducciones`}`
+      })}</div>` + heatLegend() + clockTable(clockCells, byMs))}
+      ${cardWithLimit('Álbumes de este artista', 'artist-albums', albumsLimit, albumRows.length
+        ? rankTable(albumRows, {
+          valueFmt: valFmt,
+          valueLabel: valLabel,
+          link: (r) => `#/album/${r.id}`,
+          caption: `Álbumes del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
+          spark: (r) => rowSeries(model, 'albums', byMs ? 'ms' : 'plays', r.id)
+        })
         : '<p class="empty">Sin álbumes registrados.</p>')}
     </div>
-    ${card('Transiciones', transitions.length
+    ${cardWithLimit('Transiciones', 'artist-trans', transLimit, transitions.length
       ? table(['De', 'A', 'Veces'], transitions.map((x) => [
           x.from === ar ? `<strong>${esc(x.fromName)}</strong>` : entityLink('artist', x.from, x.fromName),
           x.to === ar ? `<strong>${esc(x.toName)}</strong>` : entityLink('artist', x.to, x.toName),
@@ -598,16 +687,17 @@ export function artistView(model, ar) {
       : '<p class="empty">Sin transiciones destacadas.</p>')}`;
 }
 
-export function trackView(model, tk) {
+export function trackView(model, tk, ctx = {}) {
   const tr = model.tracks.byId.get(tk);
   if (!tr) return `<p class="empty">Canción no encontrada.</p>`;
+  const byMs = (ctx?.metric ?? 'ms') === 'ms';
   const totalMs = model.totals.ms;
   const ar = tk % 4294967296;
   const al = tr.ak > 0 ? model.albums.byId.get(tr.ak) : null;
   const run = model.maxRun.get(tk) ?? 0;
   const evolution = lineChart({
-    points: monthlySeries(model.monthlyTrackMs, tk),
-    format: fmtMs
+    points: monthlySeries(byMs ? model.monthlyTrackMs : model.monthlyTrackPlays, tk),
+    format: byMs ? fmtMs : fmtNum
   });
 
   return `
@@ -620,33 +710,42 @@ export function trackView(model, tk) {
     ${kpis([
       { label: 'Reproducciones', value: fmtNum(tr.plays) },
       { label: 'Tiempo', value: fmtMs(tr.ms) },
+      { label: 'Duración media', value: fmtMs(tr.plays > 0 ? tr.ms / tr.plays : 0) },
       { label: 'Saltadas', value: fmtNum(tr.skips), sub: pctOf(tr.skips, tr.plays) },
       { label: 'Racha máxima (seguidas)', value: fmtNum(run) },
       { label: 'Días activos', value: fmtNum(tr.days.size) },
+      { label: 'Meses activos', value: fmtNum(tr.months ? tr.months.size : 0) },
       { label: 'Primera escucha', value: fmtLocal(tr.firstTs) },
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
     ])}
     ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}`;
 }
 
-export function albumView(model, ak) {
+export function albumView(model, ak, ctx = {}) {
   const al = model.albums.byId.get(ak);
   if (!al) return `<p class="empty">Álbum no encontrado.</p>`;
+  const byMs = ctx?.metric === 'ms';
+  const evoByMs = (ctx?.metric ?? 'ms') === 'ms';
+  const valFmt = byMs ? fmtMs : fmtNum;
+  const valLabel = byMs ? 'Tiempo' : 'Reproducciones';
   const totalMs = model.totals.ms;
   // ak = ar*2^32 + al: la parte alta es el artista (el residuo es el id del álbum).
   const ar = Math.floor(ak / 4294967296);
+  const tracksLimit = resolveLimit(ctx, 'album-tracks', 25);
   const songRows = [...al.tracks]
     .map((tk) => model.tracks.byId.get(tk))
     .filter(Boolean)
-    .sort((x, y) => y.plays - x.plays || y.ms - x.ms)
-    .map((tr) => ({ name: tr.name, value: tr.plays, id: tr.tk }));
+    .sort((x, y) => (byMs ? y.ms - x.ms || y.plays - x.plays : y.plays - x.plays || y.ms - x.ms))
+    .slice(0, tracksLimit)
+    .map((tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk }));
+  const monthTrackMap = evoByMs ? model.monthlyTrackMs : model.monthlyTrackPlays;
   const evolution = lineChart({
     points: fillMonths(sortedMonths(model.monthly)).map((mi) => {
-      let ms = 0;
-      for (const tk of al.tracks) ms += model.monthlyTrackMs.get(mi)?.get(tk) ?? 0;
-      return { label: monthLabel(mi), y: ms };
+      let sum = 0;
+      for (const tk of al.tracks) sum += monthTrackMap.get(mi)?.get(tk) ?? 0;
+      return { label: monthLabel(mi), y: sum };
     }),
-    format: fmtMs
+    format: evoByMs ? fmtMs : fmtNum
   });
   return `
     <header class="view-header">
@@ -666,8 +765,14 @@ export function albumView(model, ak) {
     ])}
     <div class="grid-2">
       ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
-      ${card('Canciones del álbum', songRows.length
-        ? rankTable(songRows, { link: (r) => `#/track/${r.id}`, caption: 'Canciones del álbum por reproducciones' })
+      ${cardWithLimit('Canciones del álbum', 'album-tracks', tracksLimit, songRows.length
+        ? rankTable(songRows, {
+          valueFmt: valFmt,
+          valueLabel: valLabel,
+          link: (r) => `#/track/${r.id}`,
+          caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
+          spark: (r) => rowSeries(model, 'tracks', byMs ? 'ms' : 'plays', r.id)
+        })
         : '<p class="empty">Sin canciones registradas.</p>')}
     </div>`;
 }
@@ -1144,8 +1249,10 @@ export function habitsView(model, ctx = {}) {
 
 export function wrappedView(model, id, ctx) {
   const t = model.totals;
-  const topArtist = model.artists.top.byMs[0];
-  const topTrack = model.tracks.top.byMs[0];
+  const byMs = ctx?.metric === 'ms';
+  const evoByMs = (ctx?.metric ?? 'ms') === 'ms';
+  const topArtist = model.artists.top[evoByMs ? 'byMs' : 'byPlays'][0];
+  const topTrack = model.tracks.top[evoByMs ? 'byMs' : 'byPlays'][0];
   const c = model.concentration.artists;
   const archetype = listenerArchetype(model);
   const onlyYear = ctx?.years && ctx.years.size === 1 ? [...ctx.years][0] : null;
@@ -1153,10 +1260,10 @@ export function wrappedView(model, id, ctx) {
 
   // Evolución del artista top: ms por mes.
   const sprint = topArtist
-    ? monthlySeries(model.monthlyArtistMs, topArtist.id)
+    ? monthlySeries(evoByMs ? model.monthlyArtistMs : model.monthlyArtistPlays, topArtist.id)
     : [];
   const sprintChart = topArtist
-    ? lineChart({ points: sprint, format: fmtMs })
+    ? lineChart({ points: sprint, format: evoByMs ? fmtMs : fmtNum })
     : '';
 
   // Concentración legible: los efectivos redondeados como valor principal y
@@ -1165,57 +1272,65 @@ export function wrappedView(model, id, ctx) {
   const effNoun = eff === 1 ? 'artista base' : 'artistas base';
   const hhiPct = `${(c.hhi * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`;
 
+  const clockSrc = byMs ? model.dayHourMs : model.dayHour;
   const clockCells = [];
-  let maxPlays = 0;
+  let maxVal = 0;
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
-      const v = model.dayHour[d * 24 + h];
-      if (v > maxPlays) maxPlays = v;
+      const v = clockSrc[d * 24 + h];
+      if (v > maxVal) maxVal = v;
       clockCells.push({ hour: h, dow: d, value: v });
     }
   }
+
+  const heroHTML = archetype
+    ? `<section class="card hero-archetype"><span class="eyebrow">Perfil de escucha</span><h2>${esc(archetype.label)}</h2><p class="hero-detail">${esc(archetype.detail)}</p></section>`
+    : '';
 
   return `
     <header class="view-header">
       <h1>${esc(title)}</h1>
       <p class="view-meta">generado ${new Date(model.meta.generatedAt * 1000).toLocaleString('es-ES')}</p>
     </header>
+    ${heroHTML}
     ${kpis([
-      { label: 'Artista del año', value: topArtist ? entityLink('artist', topArtist.id, topArtist.name) : '—' },
-      { label: 'Canción del año', value: topTrack ? entityLink('track', topTrack.tk, topTrack.name) : '—' },
+      { label: 'Artista del año', value: topArtist ? entityLink('artist', topArtist.id, topArtist.name) : '—', text: true },
+      { label: 'Canción del año', value: topTrack ? entityLink('track', topTrack.tk, topTrack.name) : '—', text: true },
       { label: 'Tiempo total', value: fmtMs(t.ms) },
+      { label: 'Reproducciones', value: fmtNum(t.records) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—' },
-      { label: 'Artistas efectivos', value: `~${eff} ${effNoun}`, sub: `Equivale a repartir tu tiempo en partes iguales entre ${eff} ${eff === 1 ? 'artista' : 'artistas'}` },
-      { label: 'Concentración (HHI)', value: hhiPct },
-      ...(archetype ? [{ label: 'Perfil de escucha', value: archetype.label, sub: archetype.detail }] : [])
+      { label: 'Artistas efectivos', value: `~${eff} ${effNoun}`, sub: `Equivale a repartir tu tiempo en partes iguales entre ${eff} ${eff === 1 ? 'artista' : 'artistas'}`, text: true },
+      { label: 'Concentración (HHI)', value: hhiPct }
     ])}
     <div class="grid-2">
       ${topArtist ? card(`Evolución de ${topArtist.name}`, scrollChart(sprintChart, `Evolución de ${topArtist.name}`)) : ''}
       ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Tu semana típica">${listeningClock({
         cells: clockCells,
-        colorScale: makeScale(maxPlays),
-        cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${fmtNum(x.value)} reproducciones`
-      })}</div>` + heatLegend() + clockTable(clockCells))}
+        colorScale: makeScale(maxVal),
+        cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${byMs ? fmtMs(x.value) : `${fmtNum(x.value)} reproducciones`}`
+      })}</div>` + heatLegend() + clockTable(clockCells, byMs))}
     </div>
-    ${card('Así empezó', `<ul class="receipt">
-      <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstTs))}</span></li>
-      ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
-      ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
-    </ul>`)}
-    ${card('Resumen', `<ul class="receipt">
-      <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>
-      <li><span>Artistas distintos</span><span>${fmtNum(model.artists.byId.size)}</span></li>
-      <li><span>Canciones distintas</span><span>${fmtNum(model.tracks.byId.size)}</span></li>
-      <li><span>Sesiones de escucha</span><span>${fmtNum(model.sessionsStats.count)}</span></li>
-      <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.records)})</span></li>
-      <li><span>Con aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
-      <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.records)})</span></li>
-      <li><span>Repetidas dentro de sesión</span><span>${fmtNum(model.intraSession.repeatedPlays)}</span></li>
-      <li><span>Mismo artista seguido</span><span>${fmtNum(model.transitions.auto)}</span></li>
-    </ul>`)}
-    ${card('Compartir', `
-      <p><button type="button" class="btn btn-secondary" data-action="copy-receipt">Copiar resumen en texto</button></p>
-      <pre id="receipt-text" class="receipt-plain" hidden></pre>`)}`;
+    <div class="grid-2">
+      ${card('Así empezó', `<ul class="receipt">
+        <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstTs))}</span></li>
+        ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
+        ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
+      </ul>`)}
+      ${card('Resumen', `<ul class="receipt">
+        <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>
+        <li><span>Artistas distintos</span><span>${fmtNum(model.artists.byId.size)}</span></li>
+        <li><span>Canciones distintas</span><span>${fmtNum(model.tracks.byId.size)}</span></li>
+        <li><span>Álbumes distintos</span><span>${fmtNum(model.albums.byId.size)}</span></li>
+        <li><span>Sesiones de escucha</span><span>${fmtNum(model.sessionsStats.count)}</span></li>
+        <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.records)})</span></li>
+        <li><span>Con aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
+        <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.records)})</span></li>
+        <li><span>Repetidas dentro de sesión</span><span>${fmtNum(model.intraSession.repeatedPlays)}</span></li>
+        <li><span>Mismo artista seguido</span><span>${fmtNum(model.transitions.auto)}</span></li>
+      </ul>
+      <div class="receipt-actions"><button type="button" class="btn btn-secondary" data-action="copy-receipt">Copiar resumen en texto</button></div>
+      <pre id="receipt-text" class="receipt-plain" hidden></pre>`)}
+    </div>`;
 }
 
 // Resumen en texto plano (para portapapeles / copia manual). Sin HTML: se

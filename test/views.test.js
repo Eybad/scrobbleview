@@ -713,3 +713,50 @@ test('sessions, discovery, yearly, and calendar enrichments and metric switching
   const calPlays = renderView('calendar', model, 2024, { metric: 'plays' });
   assert.ok(calPlays.includes('Reproducciones por día en 2024'));
 });
+
+test('dashboard: unified KPIs, records grid, separated skip rate tables, and metric switching', async () => {
+  const model = await demoModel();
+  const dash = renderView('dashboard', model);
+  assert.ok(dash.includes('Duración promedio'));
+  assert.ok(dash.includes('Completadas'));
+  assert.ok(dash.includes('records-grid'));
+  assert.ok(dash.includes('Mayor tasa de salto — Artistas'));
+  assert.ok(dash.includes('Mayor tasa de salto — Canciones'));
+  assert.ok(dash.includes('Menor tasa de salto'));
+  assert.ok(dash.includes('data-table-limit="dash-obsession"'));
+  assert.equal((dash.match(/<dl class="kpis">/g) || []).length, 1, 'single unified KPI grid in dashboard');
+
+  const dashPlays = renderView('dashboard', model, null, { metric: 'plays' });
+  assert.ok(dashPlays.includes('Reproducciones por hora y día'));
+});
+
+test('wrapped: hero archetype card and unified receipt with share button', async () => {
+  const model = await demoModel();
+  const html = renderView('wrapped', model, null, { metric: 'ms' });
+  assert.ok(html.includes('hero-archetype'));
+  assert.ok(!html.includes('<h2>Compartir</h2>'), 'share button is unified into the summary card');
+  assert.ok(html.includes('Tiempo escuchado por hora y día'), 'wrapped clock switches to ms when metric=ms');
+});
+
+test('detail views (artist, track, album): firstTrack, active months, clockMs, sparklines, and table limits', async () => {
+  const model = await demoModel();
+  const ar = model.artists.top.byPlays[0].id;
+  const artistPlays = renderView('artist', model, ar, { metric: 'plays' });
+  assert.ok(artistPlays.includes('Primera canción'));
+  assert.ok(artistPlays.includes('Meses activos'));
+  assert.ok(artistPlays.includes('data-table-limit="artist-tracks"'));
+  assert.ok(artistPlays.includes('class="sparkline"'));
+
+  const artistMs = renderView('artist', model, ar, { metric: 'ms' });
+  assert.ok(artistMs.includes('Tiempo escuchado por hora y día'));
+
+  const tk = model.tracks.top.byPlays[0].tk;
+  const trackHtml = renderView('track', model, tk, { metric: 'plays' });
+  assert.ok(trackHtml.includes('Meses activos'));
+  assert.ok(trackHtml.includes('Duración media'));
+
+  const ak = [...model.albums.byId.keys()][0];
+  const albumHtml = renderView('album', model, ak, { metric: 'ms' });
+  assert.ok(albumHtml.includes('data-table-limit="album-tracks"'));
+  assert.ok(albumHtml.includes('class="sparkline"'));
+});
