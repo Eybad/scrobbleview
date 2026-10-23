@@ -506,14 +506,14 @@ function wireView() {
     });
   });
 
-  // Copiar recibo en texto plano (con fallback a copia manual).
+  // Copiar resumen en texto plano (con fallback a copia manual).
   appRoot.querySelectorAll('[data-action="copy-receipt"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const text = receiptText(current);
       try {
         await navigator.clipboard.writeText(text);
         btn.textContent = '¡Copiado!';
-        announce('Recibo copiado al portapapeles.');
+        announce('Resumen copiado al portapapeles.');
       } catch {
         const pre = document.getElementById('receipt-text');
         if (pre) {

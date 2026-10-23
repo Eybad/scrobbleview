@@ -43,6 +43,32 @@ function monthLabel(mi) {
   return `${MONTHS_SHORT[m - 1]} ${y}`;
 }
 
+// Códigos de reason_start/reason_end de Spotify → etiquetas cortas en español
+// (los gráficos de razones no deben desbordar). Los códigos sin mapeo quedan
+// crudos: preferible a inventar una traducción dudosa.
+const REASON_LABELS = new Map([
+  ['trackdone', 'Canción completa'],
+  ['fwdbtn', 'Botón siguiente'],
+  ['backbtn', 'Botón anterior'],
+  ['clickrow', 'Clic en pista'],
+  ['appload', 'Inicio de app'],
+  ['appstart', 'Inicio de app'],
+  ['endplay', 'Cierre de sesión'],
+  ['logout', 'Cierre de sesión'],
+  ['remote', 'Control remoto'],
+  ['unexpected-exit', 'Cierre inesperado'],
+  ['shuffle', 'Aleatorio']
+]);
+const reasonLabel = (code) => REASON_LABELS.get(code) ?? code;
+
+// Umbral de los KPIs (minMs/skipThresholdMs vienen de meta y son
+// configurables): "+30 s", "+1,5 s" o "+500 ms" según el valor.
+function thresholdLabel(ms) {
+  if (ms < 1000) return `${ms} ms`;
+  const s = ms / 1000;
+  return Number.isInteger(s) ? `${s} s` : `${s.toFixed(1).replace('.', ',')} s`;
+}
+
 // Fallback de tabla para los relojes (hora × día): teclado/lector de pantalla
 // no puede leer valores desde el SVG (el heatmap del dashboard ya lo tiene).
 function clockTable(cells) {
@@ -383,7 +409,7 @@ export function dashboard(model, ctx = {}) {
     xLabels: Array.from({ length: 24 }, (_, h) => `${h}`),
     yLabels: DOW_SHORT,
     cellText: (c) => fmtMs(c.value),
-    caption: 'Tiempo escuchado por hora y día (ms)'
+    caption: 'Tiempo escuchado por hora y día'
   });
 
   const monthly = fillMonths(sortedMonths(model.monthly)).map((mi) => ({
@@ -427,7 +453,7 @@ export function dashboard(model, ctx = {}) {
       ${card('Duración de reproducciones', dist)}
     </div>
     ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
-    ${card('Obsesión (plays por día activo)', table(['Canción', 'Intensidad', 'Reproducciones'], model.tables.obsession.slice(0, 10).map((o) => [
+    ${card('Obsesión (reproducciones por día activo)', table(['Canción', 'Intensidad', 'Reproducciones'], model.tables.obsession.slice(0, 10).map((o) => [
       entityLink('track', o.tk, o.name),
       o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
       fmtNum(o.plays)
@@ -456,10 +482,10 @@ export function dashboard(model, ctx = {}) {
       ]), '', ['', 'n'], null, 'Canción con la que cierra cada día'))}
     </div>
     ${kpis([
-      { label: 'Con shuffle', value: fmtNum(t.shuffle), sub: shuffleRate },
+      { label: 'Con aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
       { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },
-      { label: 'Reproducciones significativas', value: fmtNum(t.playsSignificant) },
-      { label: 'Saltadas por duración', value: fmtNum(t.playsSkipped) }
+      { label: `Reproducciones (+${thresholdLabel(model.meta.minMs)})`, value: fmtNum(t.playsSignificant) },
+      { label: `Cortadas (<${thresholdLabel(model.meta.skipThresholdMs)})`, value: fmtNum(t.playsSkipped) }
     ])}`;
 }
 
@@ -629,7 +655,7 @@ export function sessionsView(model) {
   return `
     <header class="view-header">
       <h1>Sesiones de escucha</h1>
-      <p class="view-meta">Gap de 30 min entre sesiones</p>
+      <p class="view-meta">Pausa de 30 min entre sesiones</p>
     </header>
     ${kpis([
       { label: 'Sesiones', value: fmtNum(s.count) },
@@ -647,8 +673,8 @@ export function sessionsView(model) {
       ${card('Sesiones por franja', scrollChart(barChart({ data: blocks, showValue: true }), 'Sesiones por franja'))}
       ${card('Hora de inicio', scrollChart(barChart({ data: startHour.map(([h, n]) => ({ label: `${h}`, value: n })), showValue: false }), 'Hora de inicio'))}
     </div>
-    ${card('Razones de inicio', scrollChart(barChart({ data: [...model.starts.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }), 'Razones de inicio'))}
-    ${card('Razones de fin', scrollChart(barChart({ data: [...model.ends.entries()].map(([k, v]) => ({ label: k, value: v })), showValue: true }), 'Razones de fin'))}`;
+    ${card('Razones de inicio', scrollChart(barChart({ data: [...model.starts.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), showValue: true }), 'Razones de inicio'))}
+    ${card('Razones de fin', scrollChart(barChart({ data: [...model.ends.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), showValue: true }), 'Razones de fin'))}`;
 }
 
 export function discoveryView(model) {
@@ -740,7 +766,7 @@ export function calendarView(model, year) {
     <header class="view-header">
       <p><a href="#/calendar">← Todos los años</a></p>
       <h1>Calendario ${esc(String(year))}</h1>
-      <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin escuchar · tocá un día para filtrar (shift+click = rango)</p>
+      <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin escuchar · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
     ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(year))}">${calendarGrid({
       days,
@@ -779,7 +805,7 @@ export function calendarIndexView(model) {
   return `
     <header class="view-header">
       <h1>Calendario</h1>
-      <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin escuchar en total · tocá un día para filtrar (shift+click = rango)</p>
+      <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin escuchar en total · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
     ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${yearGrid(last)}</div>`, '', true) : ''}
     ${prev.map((y) => `
@@ -798,13 +824,19 @@ export function wrappedView(model, id, ctx) {
   const onlyYear = ctx?.years && ctx.years.size === 1 ? [...ctx.years][0] : null;
   const title = onlyYear != null ? `Tu ${onlyYear} en resumen` : 'Tu año en resumen';
 
-  // Sprint del artista top: ms por mes.
+  // Evolución del artista top: ms por mes.
   const sprint = topArtist
     ? monthlySeries(model.monthlyArtistMs, topArtist.id)
     : [];
   const sprintChart = topArtist
     ? lineChart({ points: sprint, format: fmtMs })
     : '';
+
+  // Concentración legible: los efectivos redondeados como valor principal y
+  // el HHI en porcentaje como dato secundario (el crudo 0.083 no dice nada).
+  const eff = Math.max(1, Math.round(c.effective));
+  const effNoun = eff === 1 ? 'artista base' : 'artistas base';
+  const hhiPct = `${(c.hhi * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`;
 
   const clockCells = [];
   let maxPlays = 0;
@@ -826,12 +858,12 @@ export function wrappedView(model, id, ctx) {
       { label: 'Canción del año', value: topTrack ? entityLink('track', topTrack.tk, topTrack.name) : '—' },
       { label: 'Tiempo total', value: fmtMs(t.ms) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—' },
-      { label: 'Concentración (HHI)', value: c.hhi.toFixed(3) },
-      { label: 'Artistas efectivos', value: c.effective.toFixed(1) },
+      { label: 'Artistas efectivos', value: `~${eff} ${effNoun}`, sub: `Equivale a repartir tu tiempo en partes iguales entre ${eff} ${eff === 1 ? 'artista' : 'artistas'}` },
+      { label: 'Concentración (HHI)', value: hhiPct },
       ...(archetype ? [{ label: 'Perfil de escucha', value: archetype.label, sub: archetype.detail }] : [])
     ])}
     <div class="grid-2">
-      ${topArtist ? card(`Sprint de ${topArtist.name}`, scrollChart(sprintChart, `Sprint de ${topArtist.name}`)) : ''}
+      ${topArtist ? card(`Evolución de ${topArtist.name}`, scrollChart(sprintChart, `Evolución de ${topArtist.name}`)) : ''}
       ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Tu semana típica">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxPlays),
@@ -843,23 +875,23 @@ export function wrappedView(model, id, ctx) {
       ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
       ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
     </ul>`)}
-    ${card('Recibo', `<ul class="receipt">
+    ${card('Resumen', `<ul class="receipt">
       <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>
       <li><span>Artistas distintos</span><span>${fmtNum(model.artists.byId.size)}</span></li>
       <li><span>Canciones distintas</span><span>${fmtNum(model.tracks.byId.size)}</span></li>
       <li><span>Sesiones de escucha</span><span>${fmtNum(model.sessionsStats.count)}</span></li>
       <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.records)})</span></li>
-      <li><span>Con shuffle</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
+      <li><span>Con aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
       <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.records)})</span></li>
       <li><span>Repetidas dentro de sesión</span><span>${fmtNum(model.intraSession.repeatedPlays)}</span></li>
       <li><span>Mismo artista seguido</span><span>${fmtNum(model.transitions.auto)}</span></li>
     </ul>`)}
     ${card('Compartir', `
-      <p><button type="button" class="btn btn-secondary" data-action="copy-receipt">Copiar recibo en texto</button></p>
+      <p><button type="button" class="btn btn-secondary" data-action="copy-receipt">Copiar resumen en texto</button></p>
       <pre id="receipt-text" class="receipt-plain" hidden></pre>`)}`;
 }
 
-// Recibo en texto plano (para portapapeles / copia manual). Sin HTML: se
+// Resumen en texto plano (para portapapeles / copia manual). Sin HTML: se
 // asigna con textContent, así que no necesita escaping.
 export function receiptText(model) {
   const t = model.totals;

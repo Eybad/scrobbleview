@@ -876,6 +876,13 @@ td a:hover {
   }
 }
 
+/* El hint de shift+click del calendario no aplica en pantalla táctil. */
+@media (pointer: coarse) {
+  .hint-shift {
+    display: none;
+  }
+}
+
 /* Alineación por semántica de columna (no por posición): texto a la
    izquierda por defecto; .n numérico comparable a la derecha + tabular;
    .c para # rank (ordinal corto centrado). El th hereda la de sus datos. */
