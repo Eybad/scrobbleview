@@ -1,7 +1,7 @@
 // test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, barChart, lineChart, stackedBar, HEAT, fmtNum, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
+import { makeScale, barChart, lineChart, stackedBar, HEAT, fmtNum, fmtMs, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
 
 test('barChart: caps bar width for sparse series and centers bars in slots', () => {
   const svg = barChart({ data: [{ label: 'A', value: 10 }, { label: 'B', value: 20 }] });
@@ -38,6 +38,13 @@ test('hbarChart: barras horizontales proporcionales con porcentaje', () => {
   assert.ok(html.includes('width:100.0%'), 'el máximo llena la pista');
   assert.ok(html.includes('width:33.3%'), 'proporcional al máximo, no al total');
   assert.ok(html.includes('75%') && html.includes('25%'), 'porcentaje del total visible');
+});
+
+test('fmtMs: uses min instead of m for minutes', () => {
+  assert.equal(fmtMs(500), '500 ms');
+  assert.equal(fmtMs(12500), '12.5s');
+  assert.equal(fmtMs(125000), '2 min 5s');
+  assert.equal(fmtMs(5.5 * 3600000), '5h 30 min');
 });
 
 test('fmtBytes: unidad alineada a la escala (KB para ~10^6, MB para ~10^9)', () => {

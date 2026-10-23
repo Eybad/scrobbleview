@@ -61,10 +61,10 @@ export function fmtMs(ms) {
   if (s < 60) return `${s.toFixed(1)}s`;
   const m = Math.floor(s / 60);
   const rs = Math.round(s % 60);
-  if (m < 60) return `${m}m ${rs}s`;
+  if (m < 60) return `${m} min ${rs}s`;
   const h = Math.floor(m / 60);
   const rm = m % 60;
-  return `${h}h ${rm}m`;
+  return `${h}h ${rm} min`;
 }
 
 export function fmtPct(x) {
