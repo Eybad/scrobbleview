@@ -68,6 +68,7 @@ async function run() {
   assert(kpiValue('Reproducciones') === '3', 'La carga debe mostrar 3 reproducciones');
 
   element('[data-preset="4w"]').click();
+  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '2', 'filtro de 4 semanas');
   assert(kpiValue('Reproducciones') === '2', 'El rango de 4 semanas debe mostrar 2 reproducciones');
   const filteredHash = appWindow.location.hash;
   element('.skip-link').click();
@@ -77,26 +78,31 @@ async function run() {
   element('.app-nav a[href="#/sessions"]').click();
   await waitFor(() => element('#view-root h1').textContent === 'Sesiones de escucha', 'abrir Sesiones');
   element('[data-preset="all"]').click();
+  await waitFor(() => !element('#view-root').hidden && kpiValue('Sesiones') === '3', 'Todo en Sesiones');
   const allHash = appWindow.location.hash;
 
   appWindow.history.back();
-  await waitFor(() => appWindow.location.hash === filteredHash && element('#view-root h1').textContent === 'Resumen', 'Atrás');
+  await waitFor(() => appWindow.location.hash === filteredHash && !element('#view-root').hidden && element('#view-root h1').textContent === 'Resumen', 'Atrás');
   assert(element('[data-preset="4w"]').getAttribute('aria-pressed') === 'true', 'Atrás debe restaurar el filtro');
   assert(kpiValue('Reproducciones') === '2', 'Atrás debe restaurar las cifras filtradas');
   const comparison = [...frame.contentDocument.querySelectorAll('.kpi-sub')].map(node => node.textContent).join(' ');
   assert(comparison.includes('+100'), 'La comparación debe usar el período filtrado');
 
   appWindow.history.forward();
-  await waitFor(() => appWindow.location.hash === allHash && element('#view-root h1').textContent === 'Sesiones de escucha', 'Adelante');
+  await waitFor(() => appWindow.location.hash === allHash && !element('#view-root').hidden && element('#view-root h1').textContent === 'Sesiones de escucha', 'Adelante');
   assert(element('[data-preset="all"]').getAttribute('aria-pressed') === 'true', 'Adelante debe restaurar Todo');
   assert(kpiValue('Sesiones') === '3', 'Adelante debe restaurar el modelo completo');
 
   appWindow.location.hash = filteredHash;
-  await waitFor(() => element('#view-root h1').textContent === 'Resumen', 'hash filtrado');
+  await waitFor(() => !element('#view-root').hidden && element('#view-root h1').textContent === 'Resumen' && kpiValue('Reproducciones') === '2', 'hash filtrado');
   assert(kpiValue('Reproducciones') === '2', 'Un cambio manual del hash debe filtrar las cifras');
   appWindow.location.hash = '#/dashboard';
-  await waitFor(() => element('[data-preset="all"]').getAttribute('aria-pressed') === 'true', 'hash sin filtros');
+  await waitFor(() => !element('#view-root').hidden && element('[data-preset="all"]').getAttribute('aria-pressed') === 'true' && kpiValue('Reproducciones') === '3', 'hash sin filtros');
   assert(kpiValue('Reproducciones') === '3', 'Un hash sin filtros debe restaurar las 3 reproducciones');
+  element('[data-preset="4w"]').click();
+  element('#cancel-processing').click();
+  assert(element('#view-app').hidden, 'Cancelar debe volver a la carga de archivos');
+  assert(!element('#view-home').hidden, 'Cancelar debe mostrar el inicio');
   results.textContent = 'APROBADO: carga, filtros, Atrás, Adelante, comparación y cambios manuales del hash.';
 }
 

@@ -1,14 +1,6 @@
-// app/input.js — carga de archivos: drop zone + file input + botón demo
-//
-// Controla la vista de inicio. Recibe `analyze` (async (sources, {onProgress})
-// → { ds, model, tz }) desde main.js y reporta progreso/errores en la UI.
-// Al terminar: onReady({ ds, model, tz }). Opcional: onLoadCached (cargar el
-// dataset guardado en IndexedDB sin re-parsear) y onClearCached (borrarlo).
+// File selection and local loading status. Analysis runs through the worker client.
 
-import { fileBytes } from '../src/parse/adapters/file-bytes.js';
-import { zipSources } from '../src/parse/adapters/zip-bytes.js';
 import { fmtNum } from '../src/charts.js';
-import { demoSource } from './demo.js';
 
 export function assertDistinctFiles(files) {
   const seen = new Set();
@@ -71,13 +63,13 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
     onReady(result);
   }
 
-  async function run(sources) {
+  async function run(inputData) {
     if (busy) return;
     busy = true;
     zone.classList.add('busy');
     setStatus('Procesando…');
     try {
-      const result = await analyze(sources, {
+      const result = await analyze(inputData, {
         onProgress(p, label) {
           const name = label ? ` (${label})` : '';
           setStatus(`Procesando${name}… ${Math.round(p * 100)}%`);
@@ -85,7 +77,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
       });
       showApp(result);
     } catch (err) {
-      setStatus(`Error: ${err.message}`, 'error');
+      setStatus(err.code === 'E_ABORT' ? err.message : `Error: ${err.message}`, err.code === 'E_ABORT' ? '' : 'error');
       onError?.(err);
     } finally {
       busy = false;
@@ -106,7 +98,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
       }
       showApp(result);
     } catch (err) {
-      setStatus(`Error: ${err.message}`, 'error');
+      setStatus(err.code === 'E_ABORT' ? err.message : `Error: ${err.message}`, err.code === 'E_ABORT' ? '' : 'error');
       onError?.(err);
     } finally {
       busy = false;
@@ -120,24 +112,10 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
       setStatus('No se encontraron archivos .json o .zip', 'error');
       return;
     }
-    expandAndRun(files);
-  }
-
-  // El zip se expande a fuentes ANTES de analyze (el seam recibe ByteSources);
-  // los errores de formato del zip se reportan igual que los de parseo.
-  async function expandAndRun(files) {
     try {
       assertDistinctFiles(files);
-      const sources = [];
-      for (const f of files) {
-        if (/\.zip$/i.test(f.name)) sources.push(...await zipSources(f));
-        else sources.push(fileBytes(f));
-      }
-      run(sources);
-    } catch (err) {
-      setStatus(`Error: ${err.message}`, 'error');
-      onError?.(err);
-    }
+      run({ files: files.map((file) => ({ name: file.name, size: file.size, lastModified: file.lastModified, blob: file })) });
+    } catch (error) { setStatus(error.message, 'error'); }
   }
 
   viewHome.addEventListener('dragover', (e) => {
@@ -163,7 +141,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
     input.value = ''; // permite re-cargar el mismo archivo
   });
 
-  btnDemo.addEventListener('click', () => run([demoSource()]));
+  btnDemo.addEventListener('click', () => run({ demo: true }));
   if (btnUploadAlt) btnUploadAlt.addEventListener('click', () => input.click());
   if (btnCached) btnCached.addEventListener('click', runCached);
   if (btnCachedClear && onClearCached) {
@@ -205,6 +183,10 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
 
   return {
     setStatus,
+    reset(message) {
+      viewApp.hidden = true; viewHome.hidden = false; setStatus(message);
+      (zone.hidden ? btnCached : zone)?.focus();
+    },
     showCachedButtons(cacheInfo) {
       const active = Boolean(cacheInfo);
       if (cacheCard) cacheCard.hidden = !active;

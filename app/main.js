@@ -1,23 +1,13 @@
-// app/main.js — composition root
-//
-// Construye la tz del navegador (intl-tz) sobre el rango del dataset, cablea
-// input → analyze → vistas → filtros, y hace routing por hash (#/dashboard,
-// #/artist/123, #/calendar/2024, …). Los filtros re-agregan sobre un subconjunto
-// del dataset (nunca se re-parsea).
+// UI composition root: URL, filter state, worker responses and rendering.
 
-import { analyze as analyzeDataset } from '../src/analyze.js';
-import { parse } from '../src/parse/parse.js';
-import { aggregate } from '../src/aggregate/aggregate.js';
-import { derive } from '../src/aggregate/impl/derive.js';
-import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
-import { applyFilters, countFiltered, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
+import { createAnalysisClient } from './analysis-client.js';
+import { createAnalysisState } from './analysis-state.js';
+import { AbortError } from '../src/parse/errors.js';
+import { emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText } from './views.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
-import { modelToTables, exportFilename } from '../src/export.js';
-import { toCSV } from '../src/export/csv.js';
-import { buildZip } from '../src/export/zip.js';
-import { save as cacheSave, load as cacheLoad, clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
+import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -62,11 +52,10 @@ function saveStoredLimits() {
 }
 
 const initialLimits = loadStoredLimits();
-let ds = null;
-let derived = null;
 let model = null; // modelo completo (sin filtros)
 let current = null; // modelo activo (filtrado o completo)
-let tz = null;
+let currentPrev = null;
+let initializing = false;
 let state = emptyFilterState();
 let rankUI = { tab: 'artists', metric: 'plays', topN: initialLimits.rankTopN, query: '' };
 const tableLimits = initialLimits.map;
@@ -103,51 +92,81 @@ function announceFilters() {
   announce(filterStatusMessage(current.totals));
 }
 
-function buildTz(dataset) {
-  // min/max real de t: el dataset concatena fuentes en orden de archivo, así
-  // que t[0] y t[count-1] NO son necesariamente los extremos. Con un rango
-  // invertido o acortado, los eventos fuera de la tabla quedaban con el offset
-  // equivocado en silencio.
-  const n = dataset.meta.count;
-  let lo = dataset.t[0];
-  let hi = dataset.t[0];
-  for (let i = 1; i < n; i++) {
-    if (dataset.t[i] < lo) lo = dataset.t[i];
-    if (dataset.t[i] > hi) hi = dataset.t[i];
-  }
-  const first = lo + dataset.meta.tsMin;
-  const last = hi + dataset.meta.tsMin;
-  const iana = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  return intlTz(iana, { startSec: first - 86400, endSec: last + 86400 });
+const analysisClient = createAnalysisClient();
+const analysisState = createAnalysisState(analysisClient);
+const processing = document.getElementById('processing');
+const processingStatus = document.getElementById('processing-status');
+const processingProgress = document.getElementById('processing-progress');
+const cancelProcessing = document.getElementById('cancel-processing');
+const jobs = new Map();
+let nextJob = 0, processingError = null;
+
+function updateProcessing() {
+  const job = [...jobs.values()].at(-1);
+  processing.hidden = !job && !processingError;
+  processingStatus.setAttribute('role', processingError && !job ? 'alert' : 'status');
+  processingStatus.textContent = job ? `${job.label}… ${Math.round(job.fraction * 100)}%` : processingError ?? '';
+  processingProgress.hidden = !job;
+  if (job) processingProgress.value = job.fraction;
+  cancelProcessing.hidden = !job;
 }
 
-async function analyze(sources, { onProgress }) {
-  ds = await parse(sources, { onProgress });
-  tz = buildTz(ds);
-  derived = derive(ds, tz);
-  model = await analyzeDataset(ds, { tz, derived, now: Math.floor(Date.now() / 1000) });
-  state = emptyFilterState();
-  rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
+function beginProcessing(label) {
+  const id = ++nextJob;
+  processingError = null;
+  jobs.set(id, { label, fraction: 0 });
+  updateProcessing();
+  return {
+    progress(fraction, nextLabel) { if (jobs.has(id)) { jobs.set(id, { fraction, label: nextLabel }); updateProcessing(); } },
+    finish() { jobs.delete(id); updateProcessing(); }
+  };
+}
+
+function reportProcessingError(error) {
+  if (error.code === 'E_ABORT') return;
+  processingError = `${error.message} Podés volver a cargar los archivos.`;
+  updateProcessing();
+}
+
+async function initializeAnalysis(result) {
+  model = result.model;
   current = model;
-  applyHashParams();
-  cacheOffer = cacheAvailable() ? 'save' : null;
-  return { ds, model, tz };
+  currentPrev = null;
+  analysisState.initialize(model);
+  rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
+  initializing = true;
+  try {
+    let restored, hash;
+    do {
+      hash = location.hash;
+      restored = await applyHashParams();
+      if (!model) throw new AbortError();
+    } while (!restored || hash !== location.hash);
+  } finally { initializing = false; }
+  return { model };
 }
 
-// Carga el dataset guardado en IndexedDB (sin re-parsear). Devuelve null si no hay caché.
+async function analyze(input, { onProgress } = {}) {
+  const job = beginProcessing('Leyendo archivos');
+  try {
+    const result = await analysisClient.request('load', input, { onProgress(fraction, label) {
+      job.progress(fraction, label); onProgress?.(fraction, label);
+    } });
+    await initializeAnalysis(result);
+    cacheOffer = cacheAvailable() ? 'save' : null;
+    return result;
+  } finally { job.finish(); }
+}
+
 async function loadCached() {
-  const cached = await cacheLoad();
-  if (!cached) return null;
-  ds = cached;
-  tz = buildTz(ds);
-  derived = derive(ds, tz);
-  model = await analyzeDataset(ds, { tz, derived, now: Math.floor(Date.now() / 1000) });
-  state = emptyFilterState();
-  rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
-  current = model;
-  applyHashParams();
-  cacheOffer = 'loaded';
-  return { ds, model, tz };
+  const job = beginProcessing('Cargando datos guardados');
+  try {
+    const result = await analysisClient.request('cached', {}, { onProgress: job.progress });
+    if (!result) return null;
+    await initializeAnalysis(result);
+    cacheOffer = 'loaded';
+    return result;
+  } finally { job.finish(); }
 }
 
 async function clearCached() {
@@ -158,22 +177,28 @@ async function clearCached() {
   return true;
 }
 
-function refreshModel() {
-  if (!ds) return;
-  if (!isFilterActive(state)) {
-    current = model;
-    return;
-  }
-  const { indices } = applyFilters(ds, state, tz, derived);
-  current = aggregate(ds, { tz, derived, indices, now: model.meta.generatedAt, history: { tracks: model.tracks.byId, artists: model.artists.byId } });
-}
-
-// Totales del período inmediato anterior (comparación % en los KPIs del
-// dashboard). Solo con rango activo: sin rango no hay "anterior" definido.
-// Solo para la vista dashboard: las demás no muestran comparación.
-function prevTotals() {
-  if (!ds || !state.range) return null;
-  return countFiltered(ds, { ...state, range: previousRange(state.range) }, tz, derived);
+async function refreshModel() {
+  if (!model) return false;
+  const [view, id] = parseHash();
+  const requestedHash = location.hash;
+  const job = beginProcessing('Actualizando estadísticas');
+  const root = document.getElementById('view-root');
+  if (root) root.hidden = true;
+  appRoot.setAttribute('aria-busy', 'true');
+  try {
+    const result = await analysisState.update(state, { view, id, onProgress: job.progress });
+    if (!result || requestedHash !== location.hash) return false;
+    current = result.model;
+    currentPrev = result.prev;
+    if (root) root.hidden = false;
+    appRoot.setAttribute('aria-busy', 'false');
+    return true;
+  } catch (error) {
+    appRoot.setAttribute('aria-busy', 'false');
+    reportProcessingError(error);
+    if (initializing) throw error;
+    return false;
+  } finally { job.finish(); }
 }
 
 function parseHash() {
@@ -195,10 +220,10 @@ function syncHash() {
 
 // The URL is authoritative on load, Back/Forward and manual hash changes.
 // Restore state and its model together before any view reads either one.
-function applyHashParams() {
+async function applyHashParams() {
   const [, , query] = parseHash();
   state = paramsToFilterState(query) ?? emptyFilterState();
-  refreshModel();
+  return refreshModel();
 }
 
 function navHTML(active) {
@@ -211,7 +236,7 @@ function navHTML(active) {
     ${link('discovery', 'Descubrimiento', 'discovery')}
     ${link('yearly', 'Años', 'yearly')}
     ${link('calendar', 'Calendario', 'calendar')}
-    ${link('wrapped', 'Resumen del año', 'wrapped')}
+    ${link('wrapped', 'Resumen del período', 'wrapped')}
   </nav>`;
 }
 
@@ -256,7 +281,10 @@ cacheToast.addEventListener('click', async (e) => {
   const btn = e.target.closest?.('[data-cache]');
   if (!btn) return;
   if (btn.dataset.cache === 'save') {
-    const ok = await cacheSave(ds);
+    let ok;
+    try { ok = await analysisClient.request('save'); }
+    catch (error) { if (error.code === 'E_ABORT') return; ok = false; }
+    if (!model) return;
     if (ok) {
       cacheOffer = 'saved';
       cachePersist(); // best-effort: pedir al SO que no evicte la caché
@@ -275,7 +303,7 @@ function buildViewContext(viewName) {
   return {
     years: state.years,
     range: state.range,
-    prev: viewName === 'dashboard' ? prevTotals() : null,
+    prev: viewName === 'dashboard' ? currentPrev : null,
     limits: tableLimits,
     rankUI
   };
@@ -326,8 +354,10 @@ function render() {
 // Cambio de filtro: re-agrega y actualiza SOLO la vista + los dinámicos de la
 // barra (presets, meses, fechas, chips, fila de Limpiar). La barra persiste: no
 // se pierde el foco ni el estado del <details> de avanzados.
-function applyAndRenderView(focusSelector = null) {
-  refreshModel();
+async function applyAndRenderView(focusSelector = null) {
+  syncHash();
+  updateFilterDynamics();
+  if (!await refreshModel()) return;
   const [name, id] = parseHash();
   const root = document.getElementById('view-root');
   if (root) {
@@ -369,7 +399,7 @@ function updateFilterDynamics() {
   });
   bar.querySelectorAll('[data-toggle3]').forEach((sel) => {
     const key = sel.dataset.toggle3;
-    sel.value = state[key] === true ? 'yes' : state[key] === false ? 'no' : '';
+    sel.value = state[key] === true ? 'yes' : state[key] === false ? 'no' : state[key] === 'unknown' ? 'unknown' : '';
   });
   const badge = document.getElementById('filter-adv-badge');
   if (badge) {
@@ -625,19 +655,15 @@ function wireView() {
 // <a download>: sin red, CSP intacta.
 async function exportModel() {
   if (!model) return;
-  const now = Math.floor(Date.now() / 1000);
-  const encoder = new TextEncoder();
-  const entries = modelToTables(model).map(({ name, headers, rows }) => ({
-    name: `${name}.csv`,
-    // BOM: sin él Excel asume ANSI y rompe los acentos.
-    bytes: encoder.encode(`\uFEFF${toCSV(headers, rows)}`)
-  }));
-  const zip = await buildZip(entries);
-  const blob = new Blob([zip], { type: 'application/zip' });
+  const job = beginProcessing('Preparando exportación');
+  let result;
+  try { result = await analysisClient.request('export', {}, { onProgress: job.progress }); }
+  finally { job.finish(); }
+  const blob = new Blob([result.bytes], { type: 'application/zip' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = exportFilename(now).replace(/\.json$/, '.zip');
+  a.download = result.filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -653,6 +679,8 @@ headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
     b.disabled = true;
     try {
       await exportModel();
+    } catch (error) {
+      reportProcessingError(error);
     } finally {
       b.disabled = false;
     }
@@ -677,6 +705,22 @@ const inputApi = setupInput({
   onClearCached: clearCached
 });
 
+cancelProcessing.addEventListener('click', () => {
+  analysisState.clear();
+  analysisClient.cancel();
+  model = null; current = null; currentPrev = null; cacheOffer = null;
+  appRoot.replaceChildren();
+  jobs.clear(); processingError = null;
+  appRoot.setAttribute('aria-busy', 'false');
+  updateProcessing(); updateCacheToast();
+  headerActions?.setAttribute('hidden', '');
+  siteFooter?.setAttribute('hidden', '');
+  siteHeader?.classList.add('site-header--home');
+  tagline?.removeAttribute('hidden');
+  inputApi.reset('Procesamiento cancelado. Volvé a seleccionar los archivos para continuar.');
+});
+window.addEventListener('pagehide', (event) => { if (!event.persisted) analysisClient.cancel(); });
+
 if (cacheAvailable()) {
   cacheSummary().then((summary) => inputApi.showCachedButtons(summary));
 }
@@ -691,10 +735,11 @@ document.querySelector('.skip-link').addEventListener('click', (event) => {
   event.preventDefault();
   focusMainContent();
 });
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', async () => {
   if (location.hash === '#main-content') { focusMainContent(); return; }
+  if (initializing || !model) return;
   const [name] = parseHash();
-  applyHashParams();
+  if (!await applyHashParams()) return;
   render();
   if (name !== lastView) {
     lastView = name;

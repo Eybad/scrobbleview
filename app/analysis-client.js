@@ -24,8 +24,8 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
       if (data.error) request.reject(Object.assign(new Error(data.error.message), data.error));
       else request.resolve(data.result);
     });
-    port.addEventListener('error', () => stop(new Error('No se pudo ejecutar el cálculo local. Serví la aplicación por HTTP y volvé a cargar los archivos.')));
-    port.addEventListener('messageerror', () => stop(new Error('No se pudieron recibir las estadísticas. Volvé a cargar los archivos.')));
+    port.addEventListener('error', () => { if (worker === port) stop(new Error('No se pudo ejecutar el cálculo local. Serví la aplicación por HTTP y volvé a cargar los archivos.')); });
+    port.addEventListener('messageerror', () => { if (worker === port) stop(new Error('No se pudieron recibir las estadísticas. Volvé a cargar los archivos.')); });
   }
 
   return {

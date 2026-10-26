@@ -71,3 +71,16 @@ test('worker cancellation rejects pending work and permits a fresh load', async 
   await assert.rejects(loading, (error) => error.code === 'E_ABORT');
   assert.equal((await client.request('load', { files: [file(events)], timeZone: 'UTC' })).model.totals.records, 2);
 });
+
+test('analysis in the worker leaves the caller event loop available', async (t) => {
+  const client = clientForTest(t);
+  const many = Array.from({ length: 10000 }, (_, index) => ({ ...events[index % 2],
+    ts: new Date(Date.UTC(2024, 0, 1) + index * 1000).toISOString() }));
+  let ticks = 0;
+  const timer = setInterval(() => { ticks++; }, 2);
+  try {
+    const { model } = await client.request('load', { files: [file(many)], timeZone: 'UTC' });
+    assert.equal(model.totals.records, 10000);
+    assert.ok(ticks > 0, 'caller timers must continue while the worker processes data');
+  } finally { clearInterval(timer); }
+});
