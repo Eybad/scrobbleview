@@ -313,3 +313,13 @@ test('strict JSON grammar agrees with JSON.parse across chunk boundaries', async
     assert.equal(ds.m[0], 1000);
   }
 });
+
+test('escaped field names and track identities use decoded JSON strings', async () => {
+  const names = ['\\u0041', 'A', '\ufffd', '\ud800', '\ud801'];
+  const events = names.map((name) => ({ ts: '2024-01-01T10:03:00Z', master_metadata_track_name: name }));
+  let json = JSON.stringify(events);
+  json = json.replace('"ts"', '"\\u0074s"').replace('"A"', '"\\u0041"');
+  const ds = await parse(memoryBytes('canonical', json), { chunkBytes: 1 });
+  assert.deepEqual(Array.from(ds.tr, (id) => ds.dicts.tracks.get(id)), names);
+  assert.equal(new Set(ds.tr).size, names.length);
+});

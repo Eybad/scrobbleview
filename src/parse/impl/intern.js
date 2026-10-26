@@ -45,12 +45,22 @@ export class Interner {
 
   // bytes: Uint8Array con el string (puede tener escapes JSON). Devuelve el id.
   add(bytes, start = 0, end = bytes.length) {
+    if (hasEscape(bytes, start, end)) {
+      const value = decodeJSONString(bytes, start, end);
+      const canonical = utf8Encode(value);
+      const ids = this.table.get(fnv1a(canonical, 0, canonical.length));
+      if (ids) {
+        for (const id of ids) if (this.strings[id] === value) return id;
+      }
+      return this.insert(value);
+    }
     const h = fnv1a(bytes, start, end);
     const ids = this.table.get(h);
     if (ids) {
       for (let k = 0; k < ids.length; k++) {
         const id = ids[k];
-        if (bytesEqual(this.keys, this.offsets[id], this.lengths[id], bytes, start, end)) return id;
+        if (bytesEqual(this.keys, this.offsets[id], this.lengths[id], bytes, start, end)
+          && !/[\uD800-\uDFFF]/.test(this.strings[id])) return id;
       }
     }
     const s = decodeJSONString(bytes, start, end);
@@ -62,7 +72,7 @@ export class Interner {
     if (ids2) {
       for (let k = 0; k < ids2.length; k++) {
         const id = ids2[k];
-        if (bytesEqual(this.keys, this.offsets[id], this.lengths[id], ub, 0, ub.length)) return id;
+        if (this.strings[id] === s) return id;
       }
     }
     return this.insert(s);
@@ -137,4 +147,4 @@ export class Interner {
   }
 }
 
-import { decodeJSONString, utf8Encode } from '../text.js';
+import { decodeJSONString, utf8Encode, hasEscape } from '../text.js';
