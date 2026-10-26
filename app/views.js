@@ -444,17 +444,19 @@ export function footerMetaText(model) {
   const sourcesCount = model.meta.sources.length;
   const filesLabel = sourcesCount === 1 ? 'archivo' : 'archivos';
   const parts = [`${fmtNum(sourcesCount)} ${filesLabel}`, fmtBytes(model.meta.bytesRead)];
-  const w = model.meta.warnings;
-  if (w && w.length > 0) {
+  const warnings = model.meta.warnings ?? [];
+  const ignored = warnings.filter((warning) => warning.code !== 'OVERLAPPING_SOURCES');
+  if (ignored.length) {
     const byCode = new Map();
-    for (const x of w) byCode.set(x.code, (byCode.get(x.code) || 0) + 1);
-    const warnItems = [...byCode.entries()].map(([code, n]) => {
+    for (const warning of ignored) byCode.set(warning.code, (byCode.get(warning.code) || 0) + 1);
+    const items = [...byCode].map(([code, count]) => {
       const labels = WARNING_LABELS[code];
-      const label = labels ? (n === 1 ? labels[0] : labels[1]) : code;
-      return `${fmtNum(n)} ${label}`;
+      return `${fmtNum(count)} ${labels ? labels[count === 1 ? 0 : 1] : code}`;
     });
-    const ignoredWord = w.length === 1 ? 'ignorado' : 'ignorados';
-    parts.push(`${warnItems.join(', ')} ${ignoredWord}`);
+    parts.push(`${items.join(', ')} ${ignored.length === 1 ? 'ignorado' : 'ignorados'}`);
+  }
+  if (warnings.some((warning) => warning.code === 'OVERLAPPING_SOURCES')) {
+    parts.push('Aviso: hay archivos con períodos solapados; se concatenan sin eliminar posibles duplicados.');
   }
   return parts.join(' · ');
 }

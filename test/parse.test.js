@@ -352,3 +352,10 @@ test('input budgets and cancellation fail atomically and close the source', asyn
     onProgress() { controller.abort(); }
   }), (err) => err.code === 'E_ABORT');
 });
+
+test('overlapping sources are reported without deleting legitimate events', async () => {
+  const json = JSON.stringify([{ ts: '2024-01-01T00:00:00Z', master_metadata_track_name: 'T', ms_played: 180000 }]);
+  const ds = await parse([memoryBytes('first', json), memoryBytes('second', json)]);
+  assert.equal(ds.meta.count, 2);
+  assert.ok(ds.meta.warnings.some((warning) => warning.code === 'OVERLAPPING_SOURCES'));
+});

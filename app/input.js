@@ -10,6 +10,15 @@ import { zipSources } from '../src/parse/adapters/zip-bytes.js';
 import { fmtNum } from '../src/charts.js';
 import { demoSource } from './demo.js';
 
+export function assertDistinctFiles(files) {
+  const seen = new Set();
+  for (const file of files) {
+    const key = JSON.stringify([file.name, file.size, file.lastModified]);
+    if (seen.has(key)) throw new Error(`Posible archivo repetido: ${file.name}. Seleccionalo una sola vez; si son archivos distintos, cambiales el nombre.`);
+    seen.add(key);
+  }
+}
+
 export function formatCacheMeta(summary) {
   if (!summary || typeof summary !== 'object' || !Number.isFinite(summary.count)) {
     return 'Sesión guardada en este dispositivo';
@@ -118,6 +127,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   // los errores de formato del zip se reportan igual que los de parseo.
   async function expandAndRun(files) {
     try {
+      assertDistinctFiles(files);
       const sources = [];
       for (const f of files) {
         if (/\.zip$/i.test(f.name)) sources.push(...await zipSources(f));

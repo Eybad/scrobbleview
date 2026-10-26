@@ -37,6 +37,8 @@ export async function parse(src, opts = {}) {
   let tsMin = Infinity;
   const totalBytes = sources.reduce((a, s) => a + (s.totalBytes || 0), 0);
   let readSoFar = 0;
+  let sourceMin = Infinity, sourceMax = -Infinity;
+  const sourceRanges = [];
 
   function onEvent(ev) {
     count++;
@@ -79,6 +81,8 @@ export async function parse(src, opts = {}) {
     if (ev.skipped == null) flags |= 32;
     if (ev.offline == null) flags |= 64;
 
+    sourceMin = Math.min(sourceMin, t);
+    sourceMax = Math.max(sourceMax, t);
     cols.push(t, m, tr, ar, al, rs, re, flags);
     if (t < tsMin) tsMin = t;
   }
@@ -86,6 +90,7 @@ export async function parse(src, opts = {}) {
   // Loop de archivos: scanner fresco por archivo (cada uno es un array JSON
   // completo), estado compartido (interners/columns/warnings).
   for (const s of sources) {
+    sourceMin = Infinity; sourceMax = -Infinity;
     const scanner = createScanner({ onEvent, maxDepth: opts.maxDepth, maxTokenBytes: opts.maxTokenBytes });
     let carry = null;
     try {
@@ -117,6 +122,10 @@ export async function parse(src, opts = {}) {
       if (opts.signal?.aborted) throw new AbortError();
       if (carry && carry.length > 0) scanner.push(carry);
       scanner.end();
+      if (sourceMin !== Infinity) {
+        if (sourceRanges.some((range) => sourceMin <= range.to && sourceMax >= range.from)) warnings.push({ code: 'OVERLAPPING_SOURCES', source: s.label });
+        sourceRanges.push({ from: sourceMin, to: sourceMax });
+      }
     } catch (err) {
       // Con varias fuentes, el error debe decir QUÉ archivo falló (código y
       // byteOffset intactos: solo se antepone el label al mensaje).

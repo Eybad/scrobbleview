@@ -139,3 +139,21 @@ test('facade and aggregation share defaults and session options for parsed datas
   assert.equal(custom.totals.playsSkipped, 0);
   await assert.rejects(analyze(memoryBytes('invalid', '[]'), { tz: UTC, chunkBytes: 0 }), /chunkBytes/);
 });
+
+test('repeated file selections are rejected and overlapping exports remain explicit', async () => {
+  const { assertDistinctFiles } = await import('../app/input.js');
+  assert.throws(() => assertDistinctFiles([
+    { name: 'history.json', size: 100, lastModified: 1 },
+    { name: 'history.json', size: 100, lastModified: 1 }
+  ]), /repetido/);
+  assert.doesNotThrow(() => assertDistinctFiles([
+    { name: 'history.json', size: 100, lastModified: 1 },
+    { name: 'other.json', size: 100, lastModified: 1 }
+  ]));
+  const json = JSON.stringify([{ ts: '2024-01-01T00:00:00Z', master_metadata_track_name: 'T' }]);
+  const model = await analyze([memoryBytes('one', json), memoryBytes('two', json)], { tz: UTC });
+  const { footerMetaText } = await import('../app/views.js');
+  assert.equal(model.totals.records, 2);
+  assert.match(footerMetaText(model), /períodos solapados/);
+  assert.doesNotMatch(footerMetaText(model), /ignorados/);
+});
