@@ -629,7 +629,7 @@ test('traducciones: KPIs de umbral con sub debajo del número y nombres naturale
   assert.ok(html.includes(`<dd>${model.totals.playsSignificant.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">+30 s</span></dd>`), '+30 s debajo del número');
   assert.ok(html.includes('<dt>Descartadas</dt>'), 'nombre natural para plays < skipThresholdMs');
   assert.ok(html.includes(`<dd>${model.totals.playsSkipped.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">&lt;10 s</span></dd>`), '<10 s debajo del número');
-  assert.ok(html.includes('<dt>Completas</dt>') && html.includes('sin terminar</span>'), 'Completas con sin terminar debajo');
+  assert.ok(html.includes('<dt>Final con código trackdone</dt>') && html.includes('otros finales'), 'Completas con sin terminar debajo');
   assert.ok(html.includes('<dt>En aleatorio</dt>'), 'En aleatorio en vez de Con aleatorio');
   const custom = { ...model, meta: { ...model.meta, minMs: 1500, skipThresholdMs: 500 } };
   const htmlCustom = renderView('dashboard', custom);
@@ -795,7 +795,7 @@ test('dashboard: unified KPIs, records grid, separated skip rate tables, and met
   const model = await demoModel();
   const dash = renderView('dashboard', model);
   assert.ok(dash.includes('Duración promedio'));
-  assert.ok(dash.includes('Completas'));
+  assert.ok(dash.includes('Final con código trackdone'));
   assert.ok(dash.includes('records-grid'));
   assert.ok(dash.includes('Mayor tasa de salto — Artistas'));
   assert.ok(dash.includes('Mayor tasa de salto — Canciones'));

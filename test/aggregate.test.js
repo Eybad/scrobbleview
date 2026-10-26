@@ -26,8 +26,8 @@ test('totales: records, ms, flags, completitud, mediana, buckets', () => {
   assert.equal(m.totals.shuffle, 1);
   assert.equal(m.totals.offline, 1);
   assert.equal(m.totals.episodes, 0);
-  assert.equal(m.totals.completed, 2);
-  assert.equal(m.totals.interrupted, 2);
+  assert.equal(m.totals.completed, 1);
+  assert.equal(m.totals.interrupted, 3);
   assert.equal(m.totals.medianMs, 32500); // [0, 5000, 60000, 120000]
   assert.equal(m.totals.avgMs, 46250);
   assert.equal(m.totals.playsSignificant, 2); // ms >= 30000
@@ -536,4 +536,16 @@ test('hourTracks and blocks top entities count only valid listens (ms >= minMs)'
   const [[topTk, topPlays]] = [...model.hourTracks[1].entries()];
   assert.equal(model.tracks.byId.get(topTk).name, 'RealSong');
   assert.equal(topPlays, 2);
+});
+
+test('end codes separate trackdone, other endings and missing reasons', () => {
+  const ds = buildDataset([
+    { t: Date.parse('2024-01-01T00:00:00Z') / 1000, m: 1000, track: 'T', artist: 'A', reasonEnd: 'endplay' },
+    { t: Date.parse('2024-02-01T00:00:00Z') / 1000, m: 60000, track: 'T', artist: 'A', reasonEnd: 'trackdone' },
+    { t: Date.parse('2024-02-02T00:00:00Z') / 1000, m: 60000, track: 'New', artist: 'B' }
+  ]);
+  const full = aggregate(ds, { tz: UTC });
+  assert.equal(full.totals.completed, 1);
+  assert.equal(full.totals.endReasonUnknown, 1);
+  assert.equal(full.totals.interrupted, 1);
 });

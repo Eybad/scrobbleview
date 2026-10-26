@@ -24,3 +24,6 @@ La parte del historial de una canción agrupada atribuida a un álbum. Sus total
 
 **Unknown value (valor desconocido)**:
 Un campo ausente, nulo o una duración inválida. No equivale a cero ni a «no». Las medias, medianas y umbrales de duración usan solo duraciones conocidas; las tasas de banderas usan como denominador los registros donde esa bandera es conocida.
+
+**Trackdone ending (final con código trackdone)**:
+Un registro cuyo motivo de fin es literalmente `trackdone`. Los demás códigos, incluido `endplay`, se cuentan aparte; un motivo ausente es desconocido. Este conteo no acredita por sí solo que se haya escuchado toda la canción.

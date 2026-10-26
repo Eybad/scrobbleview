@@ -545,7 +545,7 @@ export function dashboard(model, ctx = {}) {
       { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
       { label: 'Duración promedio', value: avgDuration == null ? '—' : fmtMs(avgDuration), sub: `mediana ${t.medianMs == null ? '—' : fmtMs(t.medianMs)}` },
-      { label: 'Completas', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} sin terminar` },
+      { label: 'Final con código trackdone', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} otros finales · ${fmtNum(t.endReasonUnknown)} desconocidos` },
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
       { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
       { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },

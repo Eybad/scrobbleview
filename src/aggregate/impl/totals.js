@@ -14,7 +14,7 @@ const MS_BUCKETS = [
   [300000, Infinity, '>5 min']
 ];
 
-const COMPLETED_REASONS = new Set(['trackdone', 'endplay']);
+const COMPLETED_REASONS = new Set(['trackdone']);
 
 export function computeTotals(ds, minMs, skipThresholdMs) {
   const n = ds.meta.count;
@@ -24,6 +24,7 @@ export function computeTotals(ds, minMs, skipThresholdMs) {
   let shuffle = 0;
   let offline = 0;
   let completed = 0;
+  let endReasonKnown = 0;
   let playsSignificant = 0;
   let playsSkipped = 0;
   const msDist = new Array(MS_BUCKETS.length).fill(0);
@@ -43,6 +44,7 @@ export function computeTotals(ds, minMs, skipThresholdMs) {
     if (known && m >= minMs) playsSignificant++;
     if (known && m < skipThresholdMs) playsSkipped++;
     const re = ds.re[i];
+    if (re) endReasonKnown++;
     if (re && COMPLETED_REASONS.has(ds.dicts.reasons.get(re))) completed++;
     const b = m < 10000 ? 0 : m < 30000 ? 1 : m < 60000 ? 2 : m < 180000 ? 3 : m < 300000 ? 4 : 5;
     if (known) msDist[b]++;
@@ -67,7 +69,8 @@ export function computeTotals(ds, minMs, skipThresholdMs) {
     offline,
     episodes,
     completed,
-    interrupted: n - completed,
+    interrupted: endReasonKnown - completed,
+    endReasonUnknown: n - endReasonKnown,
     medianMs,
     avgMs: durationKnown ? ms / durationKnown : null,
     msDist: MS_BUCKETS.map(([, , label], i) => ({ label, count: msDist[i] })),
