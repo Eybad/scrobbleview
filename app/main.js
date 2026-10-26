@@ -151,10 +151,11 @@ async function loadCached() {
 }
 
 async function clearCached() {
-  await cacheClear();
+  if (!await cacheClear()) return false;
   cacheOffer = null;
   updateCacheToast();
   inputApi.showCachedButtons(false);
+  return true;
 }
 
 function refreshModel() {

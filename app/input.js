@@ -181,8 +181,15 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
       }
       clearTimeout(disarmTimer);
       disarm();
-      await onClearCached();
-      setStatus('Datos guardados borrados.');
+      btnCachedClear.disabled = true;
+      try {
+        const cleared = await onClearCached();
+        setStatus(cleared ? 'Datos guardados borrados.' : 'No se pudieron borrar los datos guardados. Volvé a intentarlo.', cleared ? '' : 'error');
+      } catch (error) {
+        setStatus(`No se pudieron borrar los datos guardados: ${error.message}`, 'error');
+      } finally {
+        btnCachedClear.disabled = false;
+      }
     });
   }
 

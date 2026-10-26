@@ -65,32 +65,35 @@ export function isAvailable() {
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const fail = (error) => { settled = true; clearTimeout(timer); reject(error); };
+    const timer = setTimeout(() => fail(new Error('IndexedDB no responde')), 5000);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) {
         req.result.createObjectStore(STORE);
       }
     };
     req.onsuccess = () => {
+      clearTimeout(timer);
       const db = req.result;
+      if (settled) { db.close(); return; }
+      settled = true;
       // Otra pestaña del mismo origen pide una versión nueva: cerrar para no
       // bloquear el upgrade (sin esto, open() de la otra pestaña queda en blocked).
       db.onversionchange = () => db.close();
       resolve(db);
     };
-    req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('IndexedDB bloqueado por otra pestaña'));
-    // Timeout de seguridad: si open() nunca resuelve, no dejar la UI colgada.
-    setTimeout(() => reject(new Error('IndexedDB no responde')), 5000);
+    req.onerror = () => fail(req.error);
+    req.onblocked = () => fail(new Error('IndexedDB bloqueado por otra pestaña'));
   });
 }
 
 function run(mode, fn) {
   return openDB().then((db) => new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const store = t.objectStore(STORE);
-    let out;
+    let t, out;
     try {
-      out = fn(store);
+      t = db.transaction(STORE, mode);
+      out = fn(t.objectStore(STORE));
     } catch (err) {
       db.close();
       reject(err);
