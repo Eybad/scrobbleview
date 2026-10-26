@@ -29,6 +29,12 @@ export function serialize(ds) {
     rows[`dict:${name}:offsets`] = d.offsets.slice(0, d.count).buffer;
     rows[`dict:${name}:lengths`] = d.lengths.slice(0, d.count).buffer;
     rows[`dict:${name}:count`] = d.count;
+    const surrogates = [];
+    for (let id = 0; id < d.count; id++) {
+      const value = d.get(id);
+      if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(value)) surrogates.push([id, value]);
+    }
+    rows[`dict:${name}:surrogates`] = surrogates;
   }
   rows.schemaVersion = 2;
   rows.meta = JSON.stringify(ds.meta);
@@ -50,7 +56,8 @@ export function deserialize(rows) {
       keys: new Uint8Array(rows[`dict:${name}:keys`]),
       offsets: new Uint32Array(rows[`dict:${name}:offsets`]),
       lengths: new Uint32Array(rows[`dict:${name}:lengths`]),
-      count: rows[`dict:${name}:count`]
+      count: rows[`dict:${name}:count`],
+      surrogates: rows[`dict:${name}:surrogates`] ?? []
     });
   }
   ds.meta = JSON.parse(rows.meta);

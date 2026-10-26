@@ -121,13 +121,13 @@ export class Interner {
   // se validan: un count fabricado o un rango corrupto (caché manipulada) lanzan
   // en vez de recortar en silencio, que produciría entidades truncadas.
   // El llamador (storage.js) convierte la excepción en un miss de caché.
-  static fromParts({ keys, offsets, lengths, count }) {
+  static fromParts({ keys, offsets, lengths, count, surrogates = [] }) {
     const it = new Interner();
     it.keys = keys;
     it.offsets = offsets;
     it.lengths = lengths;
-    const n = Number.isInteger(count) && count >= 0 ? count : 0;
-    it.count = Math.min(n, offsets.length, lengths.length);
+    if (!Number.isInteger(count) || count < 0 || count > offsets.length || count > lengths.length) throw new RangeError('caché corrupta: cantidad de claves inválida');
+    it.count = count;
     it.table = new Map();
     it.strings = [];
     const dec = new TextDecoder();
@@ -142,6 +142,13 @@ export class Interner {
       const ids = it.table.get(h);
       if (ids) ids.push(id);
       else it.table.set(h, [id]);
+    }
+    if (!Array.isArray(surrogates)) throw new RangeError('caché corrupta: strings inválidos');
+    for (const [id, value] of surrogates) {
+      if (!Number.isInteger(id) || id < 0 || id >= count || typeof value !== 'string') throw new RangeError('caché corrupta: string inválido');
+      const encoded = utf8Encode(value);
+      if (!bytesEqual(keys, offsets[id], lengths[id], encoded, 0, encoded.length)) throw new RangeError('caché corrupta: string incompatible');
+      it.strings[id] = value;
     }
     return it;
   }

@@ -45,3 +45,18 @@ test('cache failures leave analysis available without claiming persistence', asy
   assert.equal(await load(), null);
   assert.equal(await clear(), false);
 });
+
+test('cache round trips preserve distinct valid JSON surrogate strings', async () => {
+  const { serialize, deserialize } = await import('../app/storage.js');
+  const { parse } = await import('../src/parse/parse.js');
+  const { memoryBytes } = await import('../src/parse/adapters/memory-bytes.js');
+  const names = ['\ufffd', '\ud800', '\ud801', '🎵'];
+  const ds = await parse(memoryBytes('unicode', JSON.stringify(names.map((name) => ({
+    ts: '2024-01-01T00:00:00Z', master_metadata_track_name: name
+  })))));
+  const restored = deserialize(serialize(ds));
+  assert.deepEqual([...restored.tr].map((id) => restored.dicts.tracks.get(id)), names);
+  const rows = serialize(ds);
+  rows['dict:tracks:count'] = 99999;
+  assert.throws(() => deserialize(rows), RangeError);
+});
