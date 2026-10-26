@@ -5,11 +5,39 @@ import { parse } from '../src/parse/parse.js';
 import { aggregate } from '../src/aggregate/aggregate.js';
 import { derive } from '../src/aggregate/impl/derive.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
+import { offsetTable } from '../src/aggregate/adapters/offset-table.js';
 import { memoryBytes } from '../src/parse/adapters/memory-bytes.js';
 import { syntheticJSON } from '../src/synthetic.js';
 import { applyFilters, filterDataset, emptyFilterState } from '../src/filters.js';
+import { buildDataset } from './fakes/dataset.js';
 
 const UTC = fixedTz('utc', 0);
+
+test('filters select both occurrences of a local range during DST fall-back', () => {
+  const tz = offsetTable('ny', [[0, -240], [1730613600, -300]]);
+  const ds = buildDataset([
+    { t: 1730613000, m: 180000, track: 'A', artist: 'X' }, // 01:50 EDT
+    { t: 1730614200, m: 60000, track: 'B', artist: 'Y' }, // 01:10 EST
+    { t: 1730616600, m: 120000, track: 'C', artist: 'X' }, // 01:50 EST
+    { t: 1730617800, m: 60000, track: 'D', artist: 'Y' } // 02:10 EST
+  ]);
+  const state = {
+    ...emptyFilterState(),
+    range: {
+      from: Date.parse('2024-11-03T01:45:00Z') / 1000,
+      to: Date.parse('2024-11-03T01:55:00Z') / 1000
+    }
+  };
+  for (const derived of [null, derive(ds, tz)]) {
+    const selected = applyFilters(ds, state, tz, derived);
+    assert.deepEqual([...selected.indices], [0, 2]);
+    assert.equal(selected.counts.ms, 300000);
+    const crossed = applyFilters(ds, { ...state, hours: new Set([1]), artistId: 1 }, tz, derived);
+    assert.deepEqual([...crossed.indices], [0, 2]);
+    const filtered = aggregate(filterDataset(ds, selected.indices), { tz });
+    assert.deepEqual([...filtered.cols.t], [1730613000, 1730616600]);
+  }
+});
 
 async function makeDs() {
   return parse(memoryBytes('demo.json', syntheticJSON(800, 9)), {});

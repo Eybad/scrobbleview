@@ -845,20 +845,20 @@ export function sessionsView(model, ctx = {}) {
   return `
     <header class="view-header">
       <h1>Sesiones de escucha</h1>
-      <p class="view-meta">Pausa de 30 min entre sesiones</p>
+      <p class="view-meta">Una pausa de más de ${fmtNum(s.gapMinutes)} min inicia otra sesión. Duración estimada desde el final de cada reproducción y su tiempo escuchado; puede incluir pausas y solapamientos.</p>
     </header>
     ${kpis([
       { label: 'Sesiones', value: fmtNum(s.count) },
-      { label: 'Duración promedio', value: fmtMs(s.avgDuration * 1000) },
-      { label: 'Duración mediana', value: fmtMs(s.medianDuration * 1000) },
+      { label: 'Duración estimada promedio', value: fmtMs(s.avgDuration * 1000) },
+      { label: 'Duración estimada mediana', value: fmtMs(s.medianDuration * 1000) },
       { label: 'Reproducciones promedio', value: s.avgPlays.toFixed(1) },
       { label: 'Reproducciones mediana', value: s.medianPlays.toFixed(1) },
       { label: 'Sesiones con repeticiones', value: fmtNum(model.intraSession.sessionsWithRepeats), sub: pctOf(model.intraSession.sessionsWithRepeats, s.count) },
       { label: 'Reproducciones repetidas', value: fmtNum(model.intraSession.repeatedPlays) }
     ])}
     <div class="grid-2">
-      ${cardWithLimit('Sesiones más largas', 'sessions-dur', durLimit, table(['#', 'Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topDur), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones más largas'))}
-      ${cardWithLimit('Sesiones con más reproducciones', 'sessions-plays', playsLimit, table(['#', 'Inicio', 'Duración', 'Reproducciones', 'Tiempo'], sessRows(topPlays), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
+      ${cardWithLimit('Sesiones más largas', 'sessions-dur', durLimit, table(['#', 'Inicio estimado', 'Duración estimada', 'Reproducciones', 'Tiempo escuchado'], sessRows(topDur), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones más largas'))}
+      ${cardWithLimit('Sesiones con más reproducciones', 'sessions-plays', playsLimit, table(['#', 'Inicio estimado', 'Duración estimada', 'Reproducciones', 'Tiempo escuchado'], sessRows(topPlays), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
     </div>
     <div class="grid-2">
       ${card('Sesiones por franja', scrollChart(barChart({ data: blocks, showValue: true }), 'Sesiones por franja'))}
@@ -1365,7 +1365,7 @@ export function wrappedView(model, id, ctx) {
     </div>
     <div class="grid-2">
       ${card('Así empezó', `<ul class="receipt">
-        <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstTs))}</span></li>
+        <li><span>Primera escucha</span><span>${esc(fmtLocal(model.cols.loc[0] ?? null))}</span></li>
         ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
         ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
       </ul>`)}

@@ -1,8 +1,5 @@
-// impl/derive.js — cols derivadas en orden cronológico local
-//
-// Un pase sobre el dataset: ordena los eventos por timestamp LOCAL (como el v2:
-// el orden por UTC puede diferir en la transición de DST), y produce las
-// columnas que usan todas las métricas y los filtros. Aritmética entera, cero Date.
+// Derived columns follow UTC chronology. localOrder indexes these columns by
+// wall-clock time for range searches, which need a separate order during DST.
 
 // Días desde epoch → fecha civil (inverso del algoritmo de Hinnant).
 export function civilFromDays(z) {
@@ -23,14 +20,9 @@ export function civilFromDays(z) {
 // order: permutación posición-sorteada → índice original (para leer ds.* en orden).
 export function derive(ds, tz) {
   const n = ds.meta.count;
-  const local = new Int32Array(n);
-  for (let i = 0; i < n; i++) {
-    const abs = ds.t[i] + ds.meta.tsMin;
-    local[i] = abs + tz.offsetMinutes(abs) * 60;
-  }
   const order = new Array(n);
   for (let i = 0; i < n; i++) order[i] = i;
-  order.sort((a, b) => local[a] - local[b]);
+  order.sort((a, b) => ds.t[a] - ds.t[b]);
 
   const t = new Int32Array(n);
   const loc = new Int32Array(n);
@@ -44,7 +36,7 @@ export function derive(ds, tz) {
   for (let k = 0; k < n; k++) {
     const i = order[k];
     const abs = ds.t[i] + ds.meta.tsMin;
-    const l = local[i];
+    const l = abs + tz.offsetMinutes(abs) * 60;
     t[k] = abs;
     loc[k] = l;
     hour[k] = ((Math.floor(l / 3600) % 24) + 24) % 24; // doble módulo: el local puede ser < 0 (pre-1970) y el % simple da negativo → 254 en Uint8Array
@@ -56,5 +48,8 @@ export function derive(ds, tz) {
     isSkipped[k] = (ds.flags[i] & 2) !== 0 ? 1 : 0;
     ms[k] = ds.m[i];
   }
-  return { t, loc, hour, dow, ymd, day, isSkipped, ms, order };
+  const localOrder = new Uint32Array(n);
+  for (let k = 0; k < n; k++) localOrder[k] = k;
+  localOrder.sort((a, b) => loc[a] - loc[b]);
+  return { t, loc, hour, dow, ymd, day, isSkipped, ms, order, localOrder };
 }

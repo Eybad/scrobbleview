@@ -64,6 +64,8 @@ function locISO(loc) {
 const TRACK_KEY_ARTIST = 4294967296; // 2^32: tk = tr*2^32 + ar
 
 export function modelToTables(model) {
+  // Session duration_s is estimated; start is local display time and
+  // start_utc/end_utc are epoch seconds.
   const tables = [];
   const artists = [...model.artists.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
@@ -85,8 +87,8 @@ export function modelToTables(model) {
   });
   tables.push({
     name: 'sessions',
-    headers: ['start', 'duration_s', 'plays', 'ms'],
-    rows: model.sessions.map((s) => [locISO(s.start), s.duration, s.plays, s.ms])
+    headers: ['start', 'duration_s', 'plays', 'ms', 'start_utc', 'end_utc'],
+    rows: model.sessions.map((s) => [locISO(s.start), s.duration, s.plays, s.ms, s.startUtc, s.endUtc])
   });
   tables.push({
     name: 'monthly',

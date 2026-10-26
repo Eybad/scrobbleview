@@ -2,7 +2,7 @@
 //
 // Port del v2: starts/ends/pairs (Counter de reason_*), max_run keyed por
 // track_key compuesto (como el v2 keyea por tid). Binge: racha consecutiva
-// de la misma canción en el orden cronológico local.
+// de la misma canción en el orden cronológico UTC.
 
 import { trackKey } from './groups.js';
 

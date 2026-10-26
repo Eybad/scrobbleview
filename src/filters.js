@@ -42,26 +42,26 @@ export function emptyFilterState() {
   };
 }
 
-// Primer índice k con loc[k] >= target (loc está ordenado por local).
-function lowerBound(loc, from, to, target) {
+// Search localOrder without assuming UTC and wall-clock order agree.
+function lowerBound(loc, localOrder, from, to, target) {
   let lo = from;
   let hi = to;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (loc[mid] < target) lo = mid + 1;
+    if (loc[localOrder[mid]] < target) lo = mid + 1;
     else hi = mid;
   }
   return lo;
 }
 
-function countRange(ds, order, lo, hi) {
+function countRange(ds, order, localOrder, lo, hi) {
   let records = 0;
   let ms = 0;
   let skipped = 0;
   let shuffle = 0;
   let offline = 0;
   for (let k = lo; k < hi; k++) {
-    const i = order[k];
+    const i = order[localOrder[k]];
     records++;
     ms += ds.m[i];
     if (ds.flags[i] & 2) skipped++;
@@ -76,12 +76,13 @@ export function applyFilters(ds, state, tz, derived = null) {
   const n = ds.meta.count;
   const { loc, hour, dow, ymd, day } = d;
   const order = d.order;
+  const localOrder = d.localOrder;
 
   let lo = 0;
   let hi = n;
   if (state.range) {
-    lo = lowerBound(loc, 0, n, state.range.from);
-    hi = lowerBound(loc, lo, n, state.range.to + 1);
+    lo = lowerBound(loc, localOrder, 0, n, state.range.from);
+    hi = lowerBound(loc, localOrder, lo, n, state.range.to + 1);
   }
 
   const years = state.years;
@@ -101,8 +102,8 @@ export function applyFilters(ds, state, tz, derived = null) {
 
   if (!hasCross) {
     const indices = new Uint32Array(hi - lo);
-    for (let k = lo; k < hi; k++) indices[k - lo] = order[k];
-    return { indices, counts: countRange(ds, order, lo, hi) };
+    for (let k = lo; k < hi; k++) indices[k - lo] = order[localOrder[k]];
+    return { indices, counts: countRange(ds, order, localOrder, lo, hi) };
   }
 
   const tmp = [];
@@ -111,7 +112,8 @@ export function applyFilters(ds, state, tz, derived = null) {
   let skipped = 0;
   let shuffleC = 0;
   let offlineC = 0;
-  for (let k = lo; k < hi; k++) {
+  for (let position = lo; position < hi; position++) {
+    const k = localOrder[position];
     const i = order[k];
     if (years && !years.has(civilFromDays(day[k]).y)) continue;
     if (months && !months.has((ymd[k] / 100) | 0)) continue;

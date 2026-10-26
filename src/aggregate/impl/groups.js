@@ -38,7 +38,8 @@ export function createGroupsAcc(ds) {
             tracks: new Set(),
             clock: new Int32Array(168), // plays por dow*24+hour (reloj del artista)
             clockMs: new Float64Array(168),
-            firstTs: ev.loc, firstTrack: '', firstTrackTk: 0, lastTs: ev.loc
+            firstTs: ev.loc, firstUtc: ev.t, firstTrack: '', firstTrackTk: 0,
+            lastTs: ev.loc, lastUtc: ev.t
           };
           artists.set(ev.ar, a);
         }
@@ -54,6 +55,7 @@ export function createGroupsAcc(ds) {
         a.clockMs[slot] += ev.ms;
         if (ev.al > 0) a.albums.add(ak);
         a.lastTs = ev.loc;
+        a.lastUtc = ev.t;
         if (a.firstTrack === '') {
           a.firstTrack = ds.dicts.tracks.get(ev.tr);
           a.firstTrackTk = tk;
@@ -71,7 +73,7 @@ export function createGroupsAcc(ds) {
           artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
           plays: 0, ms: 0, skips: 0,
           days: new Set(), months: new Set(), years: new Set(),
-          firstTs: ev.loc, lastTs: ev.loc
+          firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t
         };
         tracks.set(tk, t);
       }
@@ -82,6 +84,7 @@ export function createGroupsAcc(ds) {
       t.months.add(Math.floor(ev.ymd / 100));
       t.years.add(year);
       t.lastTs = ev.loc;
+      t.lastUtc = ev.t;
 
       if (ev.al > 0) {
         let al = albums.get(ak);
@@ -91,7 +94,7 @@ export function createGroupsAcc(ds) {
             artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
             name: ds.dicts.albums.get(ev.al),
             plays: 0, ms: 0,
-            firstTs: ev.loc, lastTs: ev.loc,
+            firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t,
             days: new Set(), // días con escucha del álbum
             tracks: new Set() // tk de las canciones del álbum
           };
@@ -100,6 +103,7 @@ export function createGroupsAcc(ds) {
         al.plays++;
         al.ms += ev.ms;
         al.lastTs = ev.loc;
+        al.lastUtc = ev.t;
         al.days.add(ev.day);
         al.tracks.add(tk);
       }

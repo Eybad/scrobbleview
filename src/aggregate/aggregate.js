@@ -1,7 +1,7 @@
 // aggregate.js — aggregate(ds, opts) → StatsModel
 //
 // Pura, síncrona, determinista (byte-idéntico para mismo input). Un pase único
-// sobre los eventos ordenados por timestamp local con objeto ev reutilizable;
+// sobre los eventos ordenados por timestamp UTC con objeto ev reutilizable;
 // post-proceso: streak, tables (rankings precalculados), resolución de nombres.
 
 import { derive, civilFromDays } from './impl/derive.js';
@@ -42,7 +42,7 @@ export function aggregate(ds, opts = {}) {
 
   const groups = createGroupsAcc(ds);
   const temporal = createTemporalAcc(minMs);
-  const sessions = createSessionsAcc();
+  const sessions = createSessionsAcc({ tz });
   const behavior = createBehaviorAcc();
   const transitions = createTransitionsAcc();
 
@@ -81,7 +81,7 @@ export function aggregate(ds, opts = {}) {
 
   return buildStats({
     ds, tz, now, minMs, skipThresholdMs,
-    cols, totals, groups: g, temporal: t, sessions: s, behavior: b,
+    cols, localOrder: derived.localOrder, totals, groups: g, temporal: t, sessions: s, behavior: b,
     transitions: tr, concentration
   });
 }
@@ -139,7 +139,7 @@ function rankDeepCatalog(artistList) {
 function rankForgottenEntities(entities) {
   return entities
     .filter((entity) => entity.plays >= MIN_PLAYS_FOR_OBSESSION && entity.lastTs != null)
-    .sort((first, second) => first.lastTs - second.lastTs || second.plays - first.plays || second.ms - first.ms)
+    .sort((first, second) => first.lastUtc - second.lastUtc || second.plays - first.plays || second.ms - first.ms)
     .slice(0, TOP_N);
 }
 
@@ -177,7 +177,7 @@ function longestStreak(days) {
   return { len: bestLen, start: bestStart, end: bestEnd };
 }
 
-function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, totals, groups, temporal, sessions, behavior, transitions, concentration }) {
+function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration }) {
   const { artists, tracks, albums } = groups;
   const n = ds.meta.count;
 
@@ -224,8 +224,8 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, totals, groups,
       minMs,
       skipThresholdMs,
       records: n,
-      firstTs: n ? cols.loc[0] : null,
-      lastTs: n ? cols.loc[n - 1] : null,
+      firstTs: n ? cols.loc[localOrder[0]] : null,
+      lastTs: n ? cols.loc[localOrder[n - 1]] : null,
       datedEvents: n,
       sources: ds.meta.sources,
       warnings: ds.meta.warnings,

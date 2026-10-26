@@ -1,6 +1,6 @@
 // impl/transitions.js — transiciones artista→artista (Markov primer orden)
 //
-// Todos los pares consecutivos en el orden cronológico local, incluyendo
+// Todos los pares consecutivos en el orden cronológico UTC, incluyendo
 // auto-transiciones (mismo artista dos veces seguidas → badge "repeat").
 // top: pares con count >= 5, ordenados desc. auto: total de auto-transiciones.
 

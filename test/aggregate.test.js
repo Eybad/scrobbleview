@@ -140,6 +140,70 @@ test('sesiones: gap <= 30 min → 1 sesión; gap > 30 min → 2', () => {
   assert.equal(m2.sessionsStats.medianDuration, 0);
 });
 
+test('sessions estimate a single play interval and keep listened time separate', () => {
+  const model = aggregate(buildDataset([
+    { t: D0 + 180, m: 180000, track: 'A', artist: 'X' }
+  ]), { tz: UTC });
+  const session = model.sessions[0];
+  assert.equal(session.start, D0);
+  assert.equal(session.end, D0 + 180);
+  assert.equal(session.duration, 180);
+  assert.equal(session.ms, 180000);
+  assert.equal(model.sessionsStats.avgDuration, 180);
+});
+
+test('sessions merge earlier intervals when a long overlapping play connects them', () => {
+  const model = aggregate(buildDataset([
+    { t: D0 + 180, m: 180000, track: 'A', artist: 'X' },
+    { t: D0 + 4200, m: 180000, track: 'A', artist: 'X' },
+    { t: D0 + 4800, m: 4800000, track: 'A', artist: 'X' }
+  ]), { tz: UTC });
+  assert.equal(model.sessions.length, 1);
+  assert.equal(model.sessions[0].startUtc, D0);
+  assert.equal(model.sessions[0].endUtc, D0 + 4800);
+  assert.equal(model.sessions[0].duration, 4800);
+  assert.equal(model.sessions[0].ms, 5160000);
+  assert.equal(model.sessions[0].plays, 3);
+  assert.equal(model.intraSession.sessionsWithRepeats, 1);
+  assert.equal(model.intraSession.repeatedPlays, 2);
+});
+
+test('sessions use pauses between estimated intervals, including the 30 minute boundary', () => {
+  for (const [end, ms, count, duration] of [
+    [2400, 2220000, 1, 2400],
+    [2160, 180000, 1, 2160],
+    [2161, 180000, 2, 180],
+    [240, 360000, 1, 360]
+  ]) {
+    const model = aggregate(buildDataset([
+      { t: D0 + 180, m: 180000, track: 'A', artist: 'X' },
+      { t: D0 + end, m: ms, track: 'B', artist: 'Y' }
+    ]), { tz: UTC });
+    assert.equal(model.sessions.length, count, `end=${end}, ms=${ms}`);
+    assert.equal(model.sessions[0].duration, duration);
+    assert.equal(model.totals.ms, 180000 + ms);
+  }
+});
+
+test('sessions localize their estimated starts using the offset at that instant', () => {
+  const tz = offsetTable('ny', [[0, -240], [1730613600, -300]]);
+  const model = aggregate(buildDataset([
+    { t: 1730614200, m: 3600000, track: 'A', artist: 'X' }
+  ]), { tz });
+  const session = model.sessions[0];
+  assert.equal(session.startUtc, 1730610600);
+  assert.equal(session.start, 1730596200); // 01:10 EDT
+  assert.equal(session.end, 1730596200); // 01:10 EST
+  assert.equal(session.duration, 3600);
+  assert.equal(model.sessionsStats.startHour.get(1), 1);
+
+  const midnight = aggregate(buildDataset([
+    { t: D0 + 60, m: 180000, track: 'A', artist: 'X' }
+  ]), { tz: UTC });
+  assert.equal(midnight.sessionsStats.byMonth.get(202312), 1);
+  assert.equal(midnight.sessionsStats.startHour.get(23), 1);
+});
+
 test('sesiones: byWeekday usa lunes=0 (2024-01-01 lunes, 2024-01-07 domingo)', () => {
   // Ancla la convención de sessions.js:69 (misma fórmula que derive.js:52).
   const ds = buildDataset([
@@ -251,7 +315,7 @@ test('meta: firstTs/lastTs locales, tzId, records', () => {
   assert.equal(m.meta.datedEvents, 2);
 });
 
-test('DST fall-back: el orden local difiere del orden UTC (re-hora repetida)', () => {
+test('DST fall-back keeps UTC chronology and local range bounds separate', () => {
   // America/New_York 2024-11-03 06:00 UTC: EDT(-240) → EST(-300).
   const tz = offsetTable('ny', [[0, -240], [1730613600, -300]]);
   const ds = buildDataset([
@@ -259,12 +323,36 @@ test('DST fall-back: el orden local difiere del orden UTC (re-hora repetida)', (
     { t: 1730613660, track: 'B', artist: 'Y' } // 06:01 UTC → 01:01 EST
   ]);
   const m = aggregate(ds, { tz });
-  // Orden local: B (01:01 EST) antes que A (01:59 EDT), aunque UTC sea al revés.
-  assert.equal(m.cols.t[0], 1730613660);
-  assert.equal(m.cols.t[1], 1730613540);
-  // firstTs/lastTs son LOCALES: B local = 1730595660, A local = 1730599140.
+  assert.deepEqual([...m.cols.t], [1730613540, 1730613660]);
+  assert.deepEqual([...m.cols.loc], [1730599140, 1730595660]);
+  // Local bounds still cover both occurrences of the repeated hour.
   assert.equal(m.meta.firstTs, 1730595660);
   assert.equal(m.meta.lastTs, 1730599140);
+  assert.equal(m.sessions.length, 1);
+  assert.equal(m.sessions[0].duration, 120);
+  assert.equal([...m.dayFirst.values()][0], 4294967297);
+  assert.equal([...m.dayLast.values()][0], 8589934594);
+});
+
+test('DST changes preserve real session gaps, transitions and consecutive track runs', () => {
+  for (const [transition, before, after] of [
+    [1730613600, -240, -300],
+    [1710054000, -300, -240]
+  ]) {
+    const tz = offsetTable('ny', [[0, before], [transition, after]]);
+    const model = aggregate(buildDataset([
+      { t: transition - 600, m: 180000, track: 'A', artist: 'X' },
+      { t: transition + 600, m: 180000, track: 'B', artist: 'Y' },
+      { t: transition + 1200, m: 180000, track: 'A', artist: 'X' }
+    ]), { tz });
+    assert.equal(model.sessions.length, 1);
+    assert.equal(model.sessions[0].duration, 1980);
+    assert.equal(model.maxRun.get(4294967297), 1);
+    assert.equal(model.transitions.auto, 0);
+    assert.equal(model.transitions.pairs.get(4294967298), 1);
+    assert.equal(model.transitions.pairs.get(8589934593), 1);
+    assert.equal([...model.dayFirst.values()][0], 4294967297);
+  }
 });
 
 test('tables: tops por plays y ms, skip rate con mínimo, constancia, longevidad', () => {
@@ -291,7 +379,7 @@ test('hora local pre-1970 (offset negativo) → hora 20, sin TypeError', () => {
   const m = aggregate(ds, { tz: fixedTz('w4', -240) });
   assert.equal(m.cols.hour[0], 20);
   assert.equal(m.hour[20].plays, 1);
-  assert.equal(m.sessionsStats.startHour.get(20), 1);
+  assert.equal(m.sessionsStats.startHour.get(19), 1); // Estimated start: 19:59:59, end: 20:00.
   assert.equal(m.sessionsStats.byBlock.get(3), 1); // 20h → franja Noche
 });
 

@@ -11,9 +11,23 @@ import { emptyFilterState } from '../src/filters.js';
 import { analyze } from '../src/analyze.js';
 import { memoryBytes } from '../src/parse/adapters/memory-bytes.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
+import { offsetTable } from '../src/aggregate/adapters/offset-table.js';
 import { syntheticJSON } from '../src/synthetic.js';
 
 const UTC = fixedTz('utc', 0);
+
+test('wrapped first listen follows UTC chronology during a repeated local hour', async () => {
+  const model = await analyze(memoryBytes('dst.json', JSON.stringify([
+    ['2024-11-03T05:50:00Z', 'Earlier'],
+    ['2024-11-03T06:10:00Z', 'Later']
+  ].map(([ts, name]) => ({
+    ts, ms_played: 180000, master_metadata_track_name: name,
+    master_metadata_album_artist_name: 'Artist', spotify_track_uri: `spotify:track:${name}`
+  })))), { tz: offsetTable('ny', [[0, -240], [1730613600, -300]]), now: 1730617200 });
+  const html = renderView('wrapped', model);
+  assert.ok(html.includes('<span>Primera escucha</span><span>3 nov 2024, 01:50</span>'));
+  assert.equal([...model.artists.byId.values()][0].firstTrack, 'Earlier');
+});
 
 async function demoModel() {
   return analyze(memoryBytes('demo.json', syntheticJSON(800, 9)), { tz: UTC, now: 1704067200 });
@@ -606,7 +620,8 @@ test('traducciones: razones de inicio/fin en español', async () => {
   assert.ok(html.includes('Clic en pista'), 'clickrow');
   assert.ok(html.includes('Control remoto'), 'remote');
   assert.ok(html.includes('Cierre de sesión'), 'endplay/logout');
-  assert.ok(html.includes('Pausa de 30 min entre sesiones'), 'meta de sesiones sin "Gap"');
+  assert.ok(html.includes('Una pausa de más de 30 min inicia otra sesión'), 'session gap is explained');
+  assert.ok(html.includes('Duración estimada'), 'estimated duration is distinguished from listened time');
   const unknown = { ...model, starts: new Map([['weird-code', 3]]) };
   assert.ok(renderView('sessions', unknown).includes('weird-code'), 'código sin mapeo queda crudo');
 });

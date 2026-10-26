@@ -1,62 +1,86 @@
-// impl/sessions.js — sesiones (gap > 30 min inicia otra) + intraSession
-//
-// Port del v2: start/end en local, duration en segundos, artists/tracks como
-// contadores. Nuevo: intraSession = repeticiones de canciones dentro de una
-// misma sesión (repeatedPlays = plays extra de tracks repetidos;
-// sessionsWithRepeats = sesiones con al menos una repetición).
+// Sessions use estimated UTC intervals: Spotify timestamps mark playback ends.
+// start/end are local display values; duration is elapsed UTC seconds, while
+// ms sums listened time and can exceed duration when playback overlaps.
 
 import { civilFromDays } from './derive.js';
 import { trackKey } from './groups.js';
+import { SESSION_GAP_MINUTES } from '../../defaults.js';
 
-const SESSION_GAP_MINUTES = 30;
-
-export function createSessionsAcc() {
+export function createSessionsAcc({ tz }) {
   const sessions = [];
   let current = null;
   let intraSessionsWithRepeats = 0;
   let intraRepeatedPlays = 0;
 
-  function closeSession(s) {
-    s.duration = s.end - s.start;
+  function finalizeSession(s) {
+    s.duration = s.endUtc - s.startUtc;
     let reps = 0;
     for (const c of s.tracks.values()) {
       if (c > 1) reps += c - 1;
     }
     if (reps > 0) intraSessionsWithRepeats++;
     intraRepeatedPlays += reps;
-    sessions.push(s);
+  }
+
+  function mergeCounts(first, second) {
+    const [target, source] = first.size >= second.size ? [first, second] : [second, first];
+    for (const [key, count] of source) target.set(key, (target.get(key) || 0) + count);
+    return target;
   }
 
   return {
     onEvent(ev) {
       const tk = trackKey(ev.tr, ev.ar);
+      const startUtc = ev.t - ((ev.flags & 8) ? 0 : ev.ms / 1000);
+      const start = startUtc + tz.offsetMinutes(startUtc) * 60;
       if (!current) {
         current = {
-          start: ev.loc, end: ev.loc, duration: 0, ms: ev.ms, plays: 1,
+          start, end: ev.loc, startUtc, endUtc: ev.t,
+          duration: 0, ms: ev.ms, plays: 1,
           artists: new Map([[ev.ar, 1]]),
           tracks: new Map([[tk, 1]])
         };
         return;
       }
-      const gapMin = (ev.loc - current.end) / 60;
+      const gapMin = (startUtc - current.endUtc) / 60;
       if (gapMin > SESSION_GAP_MINUTES) {
-        closeSession(current);
+        sessions.push(current);
         current = {
-          start: ev.loc, end: ev.loc, duration: 0, ms: ev.ms, plays: 1,
+          start, end: ev.loc, startUtc, endUtc: ev.t,
+          duration: 0, ms: ev.ms, plays: 1,
           artists: new Map([[ev.ar, 1]]),
           tracks: new Map([[tk, 1]])
         };
       } else {
+        if (startUtc < current.startUtc) {
+          current.startUtc = startUtc;
+          current.start = start;
+        }
         current.end = ev.loc;
+        current.endUtc = ev.t;
         current.ms += ev.ms;
         current.plays++;
         current.artists.set(ev.ar, (current.artists.get(ev.ar) || 0) + 1);
         current.tracks.set(tk, (current.tracks.get(tk) || 0) + 1);
       }
+
+      // End-time order can reveal a long interval after an earlier split.
+      while (sessions.length && current.startUtc - sessions.at(-1).endUtc <= SESSION_GAP_MINUTES * 60) {
+        const previous = sessions.pop();
+        if (previous.startUtc < current.startUtc) {
+          current.startUtc = previous.startUtc;
+          current.start = previous.start;
+        }
+        current.ms += previous.ms;
+        current.plays += previous.plays;
+        current.artists = mergeCounts(current.artists, previous.artists);
+        current.tracks = mergeCounts(current.tracks, previous.tracks);
+      }
     },
 
     finalize() {
-      if (current) closeSession(current);
+      if (current) sessions.push(current);
+      for (const session of sessions) finalizeSession(session);
 
       const durations = sessions.map((s) => s.duration);
       const plays = sessions.map((s) => s.plays);
@@ -84,6 +108,7 @@ export function createSessionsAcc() {
       };
 
       const sessionsStats = {
+        gapMinutes: SESSION_GAP_MINUTES,
         count: sessions.length,
         avgDuration: durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0,
         medianDuration: median(durations),
