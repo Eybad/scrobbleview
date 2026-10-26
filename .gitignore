@@ -1,32 +1,25 @@
-# Node
 node_modules/
 npm-debug.log*
+*.log
+*.tap
 
-# Sistema
 .DS_Store
 Thumbs.db
 
-# Editores
 .vscode/
 .idea/
 *.swp
 
-# Descarga de Spotify: historial, identidad, cuenta, playlists, podcasts.
-# Fail-closed: se ignora TODO .json y se re-incluye solo lo que el proyecto
-# necesita versionar. Enumerar los nombres conocidos de la export deja pasar
-# cualquier archivo futuro o unexpected (p. ej. un ZIP descomprimido acá, que
-# trae PII directa: nombre, email, país, teléfono, y el historial completo).
+# JSON privados: solo se permiten el manifiesto y el fixture sintético.
 *.json
-!package.json
-!test/fixtures/*.json
-
-# Comprimidos: pueden contener la export completa dentro del árbol de trabajo.
+!/package.json
+!/test/fixtures/sample.json
+*.csv
 *.zip
 *.gz
-*.json.gz
 
-# Tests temporales (convención "_" = se borran al deploy)
+# Pruebas temporales locales.
 test/_*.test.js
 
-# Cuaderno local del agente: no se publica en el repo.
 AGENTS.md
+.agent-notes/
