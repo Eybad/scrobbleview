@@ -750,7 +750,7 @@ export function trackView(model, tk, ctx = {}) {
     ${kpis([
       { label: 'Reproducciones', value: fmtNum(tr.plays) },
       { label: 'Tiempo', value: fmtMs(tr.ms) },
-      { label: 'Duración media', value: fmtMs(tr.plays > 0 ? tr.ms / tr.plays : 0) },
+      { label: 'Duración media', value: tr.durationKnown ? fmtMs(tr.ms / tr.durationKnown) : '—', sub: `${fmtNum(tr.plays - tr.durationKnown)} duraciones desconocidas` },
       { label: 'Saltadas', value: fmtNum(tr.skips), sub: pctOf(tr.skips, tr.skipKnown) },
       { label: 'Racha máxima (seguidas)', value: fmtNum(run) },
       { label: 'Días activos', value: fmtNum(tr.days.size) },

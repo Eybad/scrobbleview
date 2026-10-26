@@ -107,7 +107,12 @@ test('unknown durations and flags stay separate from zero and false', async () =
   assert.equal(model.totals.playsSkipped, 1);
   assert.equal(model.totals.playsSignificant, 2);
   assert.equal(model.totals.offlineKnown, 2);
-  assert.equal([...model.tracks.byId.values()][0].skipKnown, 2);
+  const track = [...model.tracks.byId.values()][0];
+  assert.equal(track.skipKnown, 2);
+  assert.equal(track.durationKnown, 2);
+  const { trackView } = await import('../app/views.js');
+  assert.match(trackView(model, track.tk), /<dt>Duración media<\/dt>\s*<dd>30\.0s/);
+  assert.match(trackView(model, track.tk), /2 duraciones desconocidas/);
   for (const field of ['skip', 'shuffle', 'offline']) {
     assert.deepEqual([...applyFilters(ds, { ...emptyFilterState(), [field]: false }, UTC).indices], [1]);
     assert.deepEqual([...applyFilters(ds, { ...emptyFilterState(), [field]: true }, UTC).indices], [2]);
