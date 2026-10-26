@@ -193,15 +193,12 @@ function syncHash() {
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
-// Params del hash inicial → estado (deep-link a una vista filtrada). Con
-// query ausente no toca nada: navegar sin params no resetea filtros.
+// The URL is authoritative on load, Back/Forward and manual hash changes.
+// Restore state and its model together before any view reads either one.
 function applyHashParams() {
   const [, , query] = parseHash();
-  const fromParams = paramsToFilterState(query);
-  if (fromParams) {
-    state = fromParams;
-    refreshModel();
-  }
+  state = paramsToFilterState(query) ?? emptyFilterState();
+  refreshModel();
 }
 
 function navHTML(active) {
@@ -685,10 +682,8 @@ if (cacheAvailable()) {
 
 let lastView = parseHash()[0] || 'dashboard';
 window.addEventListener('hashchange', () => {
-  const [name, , query] = parseHash();
-  // Hash sin query = estado por defecto (entrada inicial o edición manual);
-  // con query, los params SON el estado (Back/Forward restauran filtros).
-  state = paramsToFilterState(query) ?? emptyFilterState();
+  const [name] = parseHash();
+  applyHashParams();
   render();
   if (name !== lastView) {
     lastView = name;
