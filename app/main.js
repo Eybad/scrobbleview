@@ -10,7 +10,7 @@ import { parse } from '../src/parse/parse.js';
 import { aggregate } from '../src/aggregate/aggregate.js';
 import { derive } from '../src/aggregate/impl/derive.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
-import { applyFilters, filterDataset, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
+import { applyFilters, countFiltered, emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText } from './views.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, previousRange, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
@@ -125,7 +125,7 @@ async function analyze(sources, { onProgress }) {
   ds = await parse(sources, { onProgress });
   tz = buildTz(ds);
   derived = derive(ds, tz);
-  model = await analyzeDataset(ds, { tz, now: Math.floor(Date.now() / 1000) });
+  model = await analyzeDataset(ds, { tz, derived, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
   current = model;
@@ -141,7 +141,7 @@ async function loadCached() {
   ds = cached;
   tz = buildTz(ds);
   derived = derive(ds, tz);
-  model = await analyzeDataset(ds, { tz, now: Math.floor(Date.now() / 1000) });
+  model = await analyzeDataset(ds, { tz, derived, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
   current = model;
@@ -165,8 +165,7 @@ function refreshModel() {
     return;
   }
   const { indices } = applyFilters(ds, state, tz, derived);
-  const subset = filterDataset(ds, indices);
-  current = aggregate(subset, { tz, now: model.meta.generatedAt, history: { tracks: model.tracks.byId, artists: model.artists.byId } });
+  current = aggregate(ds, { tz, derived, indices, now: model.meta.generatedAt, history: { tracks: model.tracks.byId, artists: model.artists.byId } });
 }
 
 // Totales del período inmediato anterior (comparación % en los KPIs del
@@ -174,9 +173,7 @@ function refreshModel() {
 // Solo para la vista dashboard: las demás no muestran comparación.
 function prevTotals() {
   if (!ds || !state.range) return null;
-  const prev = applyFilters(ds, { ...state, range: previousRange(state.range) }, tz, derived);
-  const prevModel = aggregate(filterDataset(ds, prev.indices), { tz, now: model.meta.generatedAt });
-  return prevModel.totals;
+  return countFiltered(ds, { ...state, range: previousRange(state.range) }, tz, derived);
 }
 
 function parseHash() {

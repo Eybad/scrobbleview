@@ -1,0 +1,33 @@
+// Synthetic benchmark; each invocation is a separate process.
+import { performance } from 'node:perf_hooks';
+import { createColumns } from '../src/parse/impl/columns.js';
+import { Interner } from '../src/parse/impl/intern.js';
+import { aggregate } from '../src/aggregate/aggregate.js';
+import { derive } from '../src/aggregate/impl/derive.js';
+import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
+import { applyFilters, countFiltered, emptyFilterState } from '../src/filters.js';
+const n = Number(process.argv[2] ?? 100000);
+if (!Number.isInteger(n) || n < 1000 || n > 1000000) throw new RangeError('Use 1000–1000000 events');
+const tracks = new Interner(), artists = new Interner(), albums = new Interner(), reasons = new Interner();
+const distinct = Math.min(50000, Math.floor(n / 10));
+for (let i = 0; i < distinct; i++) tracks.insert(`Track ${i}`);
+for (let i = 0; i < 500; i++) { artists.insert(`Artist ${i}`); albums.insert(`Album ${i}`); }
+const columns = createColumns();
+const epoch = Date.UTC(2020, 0, 1) / 1000;
+for (let i = 0; i < n; i++) columns.push(epoch + Math.floor(i / 100) * 40800 + (i % 100) * 120, 120000, 1 + i % distinct, 1 + i % 500, 1 + i % 500, 0, 0, 0);
+const ds = columns.finish(epoch, { tracks, artists, albums, reasons, sources: ['synthetic'], warnings: [], bytesRead: 0 });
+const tz = fixedTz('UTC-4', -240);
+global.gc?.();
+const start = performance.now();
+const derived = derive(ds, tz);
+const model = aggregate(ds, { tz, now: epoch, derived });
+const aggregateMs = performance.now() - start;
+const state = { ...emptyFilterState(), range: { from: (model.meta.firstTs + model.meta.lastTs) / 2, to: model.meta.lastTs } };
+const filteredStart = performance.now();
+const { indices } = applyFilters(ds, state, tz, derived);
+const filtered = aggregate(ds, { tz, now: epoch, derived, indices });
+const filterMs = Math.round(performance.now() - filteredStart);
+const countStart = performance.now();
+countFiltered(ds, state, tz, derived);
+const countMs = Math.round(performance.now() - countStart);
+console.log(JSON.stringify({ node: process.version, events: n, tracks: distinct, aggregateMs: Math.round(aggregateMs), filterMs, countMs, peakRSSMiB: Math.round(process.resourceUsage().maxRSS / 1024), records: filtered.totals.records }));

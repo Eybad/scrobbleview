@@ -268,3 +268,19 @@ test('filters: convención dow = lunes=0 (2024-01-01 lunes, 2024-01-07 domingo)'
   assert.equal(derived.dow[0], 0, '2024-01-01 (lunes) → dow 0');
   assert.equal(derived.dow[1], 6, '2024-01-07 (domingo) → dow 6');
 });
+
+test('cached derivation and selected aggregation preserve filtered statistics', async () => {
+  const { derive } = await import('../src/aggregate/impl/derive.js');
+  const ds = buildDataset([
+    { t: 1704067200, m: 60000, track: 'A', artist: 'X' },
+    { t: 1704153600, m: 120000, track: 'B', artist: 'Y' },
+    { t: 1704240000, m: 5000, track: 'A', artist: 'X', flags: 2 }
+  ]);
+  const derived = derive(ds, UTC);
+  const selected = applyFilters(ds, { ...emptyFilterState(), range: { from: 1704153600, to: 1704240000 } }, UTC, derived);
+  const expected = aggregate(filterDataset(ds, selected.indices), { tz: UTC, now: 1 });
+  const actual = aggregate(ds, { tz: UTC, now: 1, derived, indices: selected.indices });
+  assert.deepEqual(actual, expected);
+  const { countFiltered } = await import('../src/filters.js');
+  assert.equal(countFiltered(ds, { ...emptyFilterState(), skip: false }, UTC, derived).ms, 180000);
+});

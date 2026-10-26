@@ -4,7 +4,7 @@
 // sobre los eventos ordenados por timestamp UTC con objeto ev reutilizable;
 // post-proceso: streak, tables (rankings precalculados), resolución de nombres.
 
-import { derive, civilFromDays } from './impl/derive.js';
+import { derive, selectDerived, civilFromDays } from './impl/derive.js';
 import { computeTotals } from './impl/totals.js';
 import { createGroupsAcc, trackKey } from './impl/groups.js';
 import { createTemporalAcc } from './impl/temporal.js';
@@ -35,13 +35,14 @@ export function aggregate(ds, opts = {}) {
   const skipThresholdMs = opts.skipThresholdMs;
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
-  const derived = derive(ds, tz);
+  const baseDerived = opts.derived ?? derive(ds, tz);
+  const derived = opts.indices ? selectDerived(baseDerived, opts.indices) : baseDerived;
   const cols = {
     t: derived.t, loc: derived.loc, hour: derived.hour, dow: derived.dow,
     ymd: derived.ymd, day: derived.day, isSkipped: derived.isSkipped, ms: derived.ms
   };
   const order = derived.order;
-  const totals = computeTotals(ds, minMs, skipThresholdMs);
+  const totals = computeTotals(ds, minMs, skipThresholdMs, opts.indices);
 
   const groups = createGroupsAcc(ds);
   const temporal = createTemporalAcc(minMs, opts.history);
@@ -49,7 +50,7 @@ export function aggregate(ds, opts = {}) {
   const behavior = createBehaviorAcc();
   const transitions = createTransitionsAcc();
 
-  const n = ds.meta.count;
+  const n = cols.t.length;
   const ev = {};
   for (let k = 0; k < n; k++) {
     const i = order[k];
@@ -182,7 +183,7 @@ function longestStreak(days) {
 
 function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration }) {
   const { artists, tracks, albums } = groups;
-  const n = ds.meta.count;
+  const n = cols.t.length;
 
   const allDays = new Set(temporal.daily.keys());
   const streak = longestStreak(allDays);

@@ -16,8 +16,8 @@ const MS_BUCKETS = [
 
 const COMPLETED_REASONS = new Set(['trackdone']);
 
-export function computeTotals(ds, minMs, skipThresholdMs) {
-  const n = ds.meta.count;
+export function computeTotals(ds, minMs, skipThresholdMs, indices = null) {
+  const n = indices ? indices.length : ds.meta.count;
   let ms = 0;
   let durationKnown = 0, skippedKnown = 0, shuffleKnown = 0, offlineKnown = 0;
   let skipped = 0;
@@ -30,7 +30,8 @@ export function computeTotals(ds, minMs, skipThresholdMs) {
   const msDist = new Array(MS_BUCKETS.length).fill(0);
   const allMs = new Uint32Array(n);
 
-  for (let i = 0; i < n; i++) {
+  for (let k = 0; k < n; k++) {
+    const i = indices ? indices[k] : k;
     const m = ds.m[i];
     ms += m;
     if (!(ds.flags[i] & 32)) skippedKnown++;

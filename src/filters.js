@@ -77,7 +77,7 @@ function countRange(ds, order, localOrder, lo, hi) {
   return { records, ms, skipped, shuffle, offline };
 }
 
-export function applyFilters(ds, state, tz, derived = null) {
+export function applyFilters(ds, state, tz, derived = null, { collectIndices = true } = {}) {
   const d = derived ?? derive(ds, tz);
   const n = ds.meta.count;
   const { loc, hour, dow, ymd, day } = d;
@@ -107,8 +107,8 @@ export function applyFilters(ds, state, tz, derived = null) {
     skip != null || shuffle != null || offline != null;
 
   if (!hasCross) {
-    const indices = new Uint32Array(hi - lo);
-    for (let k = lo; k < hi; k++) indices[k - lo] = order[localOrder[k]];
+    const indices = collectIndices ? new Uint32Array(hi - lo) : null;
+    if (indices) for (let k = lo; k < hi; k++) indices[k - lo] = order[localOrder[k]];
     return { indices, counts: countRange(ds, order, localOrder, lo, hi) };
   }
 
@@ -131,7 +131,7 @@ export function applyFilters(ds, state, tz, derived = null) {
     if (!matchesFlag(ds.flags[i], skip, 2, 32)) continue;
     if (!matchesFlag(ds.flags[i], shuffle, 1, 16)) continue;
     if (!matchesFlag(ds.flags[i], offline, 4, 64)) continue;
-    tmp.push(i);
+    if (collectIndices) tmp.push(i);
     records++;
     ms += ds.m[i];
     if (ds.flags[i] & 2) skipped++;
@@ -139,7 +139,7 @@ export function applyFilters(ds, state, tz, derived = null) {
     if (ds.flags[i] & 4) offlineC++;
   }
   return {
-    indices: Uint32Array.from(tmp),
+    indices: collectIndices ? Uint32Array.from(tmp) : null,
     counts: { records, ms, skipped, shuffle: shuffleC, offline: offlineC }
   };
 }
@@ -172,4 +172,8 @@ export function filterDataset(ds, indices) {
     dicts: ds.dicts,
     meta: { ...ds.meta, count: n }
   };
+}
+
+export function countFiltered(ds, state, tz, derived = null) {
+  return applyFilters(ds, state, tz, derived, { collectIndices: false }).counts;
 }
