@@ -333,3 +333,22 @@ test('invalid timestamp digits and suffixes are reported as BAD_TS', async () =>
   assert.equal(ds.meta.count, 1);
   assert.equal(ds.meta.warnings.filter((w) => w.code === 'BAD_TS').length, invalid.length);
 });
+
+test('input budgets and cancellation fail atomically and close the source', async () => {
+  const json = '[{"ts":"2024-01-01T00:00:00Z","master_metadata_track_name":"T"}]';
+  for (const [options, code] of [
+    [{ maxBytes: 8 }, 'E_LIMIT_BYTES'], [{ maxEvents: 1 }, 'E_LIMIT_EVENTS'],
+    [{ maxTokenBytes: 3 }, 'E_LIMIT_TOKEN'], [{ maxDepth: 1 }, 'E_LIMIT_DEPTH']
+  ]) {
+    let closed = false;
+    const source = memoryBytes('limited', options.maxEvents ? json.replace('}]', '},{"ts":"2024-01-02T00:00:00Z","master_metadata_track_name":"U"}]') : json);
+    source.close = async () => { closed = true; };
+    await assert.rejects(parse(source, options), (err) => err.code === code);
+    assert.equal(closed, true);
+  }
+  const controller = new AbortController();
+  await assert.rejects(parse(memoryBytes('cancelled', json), {
+    signal: controller.signal,
+    onProgress() { controller.abort(); }
+  }), (err) => err.code === 'E_ABORT');
+});

@@ -1,6 +1,7 @@
 // Incremental JSON grammar. Only allowlisted event fields are retained;
 // unknown subtrees are validated without materializing their values.
-import { ParseError, SchemaError } from '../errors.js';
+import { DEFAULT_MAX_DEPTH, DEFAULT_MAX_TOKEN_BYTES } from '../../defaults.js';
+import { ParseError, SchemaError, FileError } from '../errors.js';
 import { decodeJSONString, utf8Encode } from '../text.js';
 
 const ALLOWLIST = new Map(Object.entries({
@@ -26,7 +27,7 @@ function matchKey(bytes) {
   return null;
 }
 
-export function createScanner({ onEvent, onError }) {
+export function createScanner({ onEvent, onError, maxDepth = DEFAULT_MAX_DEPTH, maxTokenBytes = DEFAULT_MAX_TOKEN_BYTES }) {
   const stack = [];
   let started = false, finished = false, events = 0, offset = 0;
   let token = null;
@@ -79,6 +80,8 @@ export function createScanner({ onEvent, onError }) {
     while (i < chunk.length) {
       const b = chunk[i];
       if (token) {
+        const ending = token.kind === 'string' ? b === 34 && !token.escape && !token.unicode : isDelimiter(b);
+        if (!ending && ++token.length > maxTokenBytes) throw new FileError('Un valor JSON excede el límite de bytes por campo.', { code: 'E_LIMIT_TOKEN' });
         if (token.kind === 'string') {
           if (token.unicode) {
             if (!isHex(b)) fail('Escape Unicode inválido', i);
@@ -151,21 +154,22 @@ export function createScanner({ onEvent, onError }) {
       if (frame.kind === 'object' && (frame.state === 'first' || frame.state === 'key')) {
         if (b === 125 && frame.state === 'first') { close(i); i++; continue; }
         if (b !== 34) fail('Se esperaba clave string', i);
-        token = { kind: 'string', key: true, capture: !!frame.event, parts: [], start: i + 1 };
+        token = { kind: 'string', length: 0, key: true, capture: !!frame.event, parts: [], start: i + 1 };
         i++; continue;
       }
       if (frame.kind === 'array' && frame.state === 'first' && b === 93) { close(i); i++; continue; }
       if (frame.root && b !== 123) fail('Se esperaba un objeto de reproducción', i);
       if (b === 123 || b === 91) {
         if (frame.spec) fail('Se esperaba un valor escalar', i, true);
+        if (stack.length >= maxDepth) throw new FileError('El JSON excede el límite de anidamiento.', { code: 'E_LIMIT_DEPTH' });
         stack.push({ kind: b === 123 ? 'object' : 'array', state: 'first', event: frame.root ? {} : null });
       } else if (b === 34) {
-        token = { kind: 'string', capture: !!frame.spec, parts: [], start: i + 1 };
+        token = { kind: 'string', length: 0, capture: !!frame.spec, parts: [], start: i + 1 };
       } else if (b === 45 || isDigit(b)) {
-        token = { kind: 'number', capture: !!frame.spec, parts: [], start: i,
+        token = { kind: 'number', length: 1, capture: !!frame.spec, parts: [], start: i,
           state: b === 45 ? 'sign' : b === 48 ? 'zero' : 'integer' };
       } else if (b === 116 || b === 102 || b === 110) {
-        token = { kind: 'literal', literal: b === 116 ? 'true' : b === 102 ? 'false' : 'null', position: 1 };
+        token = { kind: 'literal', length: 1, literal: b === 116 ? 'true' : b === 102 ? 'false' : 'null', position: 1 };
       } else fail('Se esperaba un valor JSON', i);
       i++;
     }

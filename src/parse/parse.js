@@ -14,7 +14,7 @@ import { Interner } from './impl/intern.js';
 import { createColumns } from './impl/columns.js';
 import { parseISOToEpoch } from './impl/ts.js';
 import { decodeJSONString, hasEscape, utf8Encode } from './text.js';
-import { EmptyFileError, SchemaError } from './errors.js';
+import { EmptyFileError, SchemaError, FileError, AbortError } from './errors.js';
 import { assertDataset } from './dataset.js';
 
 import { resolveOptions } from '../defaults.js';
@@ -40,6 +40,7 @@ export async function parse(src, opts = {}) {
 
   function onEvent(ev) {
     count++;
+    if (count > opts.maxEvents) throw new FileError('El historial excede el límite de eventos. Cargá menos archivos.', { code: 'E_LIMIT_EVENTS' });
     if (!ev.ts) { warnings.push({ code: 'NO_TS', index: count }); return; }
     const t = parseISOToEpoch(hasEscape(ev.ts) ? utf8Encode(decodeJSONString(ev.ts)) : ev.ts);
     if (t === null) { warnings.push({ code: 'BAD_TS', index: count }); return; }
@@ -85,13 +86,17 @@ export async function parse(src, opts = {}) {
   // Loop de archivos: scanner fresco por archivo (cada uno es un array JSON
   // completo), estado compartido (interners/columns/warnings).
   for (const s of sources) {
-    const scanner = createScanner({ onEvent });
+    const scanner = createScanner({ onEvent, maxDepth: opts.maxDepth, maxTokenBytes: opts.maxTokenBytes });
     let carry = null;
     try {
+      if (totalBytes > opts.maxBytes) throw new FileError('Los archivos exceden el límite de bytes. Cargá menos archivos.', { code: 'E_LIMIT_BYTES' });
       for (;;) {
+        if (opts.signal?.aborted) throw new AbortError();
         const r = await s.next();
         if (r.done) break;
+        if (opts.signal?.aborted) throw new AbortError();
         bytesRead += r.value.length;
+        if (bytesRead > opts.maxBytes) throw new FileError('La entrada excede el límite de bytes. Cargá menos archivos.', { code: 'E_LIMIT_BYTES' });
         readSoFar += r.value.length;
         if (carry) {
           const merged = new Uint8Array(carry.length + r.value.length);
@@ -109,6 +114,7 @@ export async function parse(src, opts = {}) {
           onProgress(Math.min(1, readSoFar / totalBytes), s.label);
         }
       }
+      if (opts.signal?.aborted) throw new AbortError();
       if (carry && carry.length > 0) scanner.push(carry);
       scanner.end();
     } catch (err) {

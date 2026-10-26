@@ -192,5 +192,18 @@ test('ZIP import explains the JSON alternative when deflate-raw is unsupported',
   t.mock.method(globalThis, 'DecompressionStream', class {
     constructor() { throw new TypeError('unsupported format'); }
   });
-  await assert.rejects(zipSources(new Blob([zip])), (err) => err.code === 'E_ZIP_UNSUPPORTED' && /JSON/.test(err.message));
+  const [source] = await zipSources(new Blob([zip]));
+  await assert.rejects(readAll(source), (err) => err.code === 'E_ZIP_UNSUPPORTED' && /JSON/.test(err.message));
+  await source.close();
+});
+
+test('ZIP budgets reject declared and actual expansion before parsing', async () => {
+  const bytes = craftZip({ payload: encoder.encode('a'.repeat(100)) });
+  await assert.rejects(zipSources(new Blob([bytes]), { maxBytes: 50 }), (err) => err.code === 'E_LIMIT_BYTES');
+  const directory = new DataView(bytes.buffer).getUint32(bytes.length - 6, true);
+  new DataView(bytes.buffer).setUint32(directory + 24, 1, true);
+  const [source] = await zipSources(new Blob([bytes]), { maxBytes: 50 });
+  await assert.rejects(readAll(source), (err) => err.code === 'E_LIMIT_BYTES' || err.code === 'E_ZIP_SIZE');
+  await source.close();
+  await assert.rejects(zipSources(new Blob([bytes]), { maxCentralBytes: 10 }), (err) => err.code === 'E_LIMIT_ZIP');
 });
