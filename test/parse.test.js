@@ -323,3 +323,13 @@ test('escaped field names and track identities use decoded JSON strings', async 
   assert.deepEqual(Array.from(ds.tr, (id) => ds.dicts.tracks.get(id)), names);
   assert.equal(new Set(ds.tr).size, names.length);
 });
+
+test('invalid timestamp digits and suffixes are reported as BAD_TS', async () => {
+  const invalid = ['2024-01-01Txx:03:00Z', '2024-01-01T10:xx:00Z',
+    '2024-01-01T10:03:xxZ', '2024-01-01T10:03:00Zjunk',
+    '2024-01-01T10:03:00+01:00junk', '2024-01-01T10:03:60Z'];
+  const events = [...invalid, '2024-01-01T10:03:00Z'].map((ts) => ({ ts, master_metadata_track_name: 'T' }));
+  const ds = await parse(memoryBytes('timestamps', JSON.stringify(events)), { chunkBytes: 1 });
+  assert.equal(ds.meta.count, 1);
+  assert.equal(ds.meta.warnings.filter((w) => w.code === 'BAD_TS').length, invalid.length);
+});

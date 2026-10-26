@@ -66,7 +66,7 @@ export function parseISOToEpoch(bytes, start = 0, end = bytes.length) {
   const mi = digits(bytes, start + 14, start + 16);
   const s = digits(bytes, start + 17, start + 19);
   if (y < 1970 || mo < 1 || mo > 12 || d < 1 || d > maxDay(y, mo)) return null;
-  if (h > 23 || mi > 59 || s > 60) return null;
+  if (h < 0 || h > 23 || mi < 0 || mi > 59 || s < 0 || s > 59) return null;
 
   let epoch = daysFromEpoch(y, mo, d) * 86400 + h * 3600 + mi * 60 + s;
 
@@ -82,10 +82,10 @@ export function parseISOToEpoch(bytes, start = 0, end = bytes.length) {
     if (p >= end) return epoch > MAX_EPOCH_I32 ? null : epoch;
   }
   const z = bytes[p];
-  if (z === 0x5a) return epoch > MAX_EPOCH_I32 ? null : epoch; // 'Z'
+  if (z === 0x5a) return p + 1 !== end || epoch > MAX_EPOCH_I32 ? null : epoch; // 'Z'
   if (z === 0x2b || z === 0x2d) { // '+' | '-'
     // Offset completo "+HH:MM": 6 bytes; exige ':' separador y rangos válidos.
-    if (end - p < 6 || bytes[p + 3] !== 0x3a) return null;
+    if (end - p !== 6 || bytes[p + 3] !== 0x3a) return null;
     const oh = digits(bytes, p + 1, p + 3);
     const om = digits(bytes, p + 4, p + 6);
     if (oh < 0 || oh > 23 || om < 0 || om > 59) return null;
