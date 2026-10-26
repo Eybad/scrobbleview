@@ -359,3 +359,17 @@ test('overlapping sources are reported without deleting legitimate events', asyn
   assert.equal(ds.meta.count, 2);
   assert.ok(ds.meta.warnings.some((warning) => warning.code === 'OVERLAPPING_SOURCES'));
 });
+
+test('invalid UTF-8 is rejected inside retained and ignored JSON strings', async () => {
+  const encoder = new TextEncoder();
+  for (const key of ['master_metadata_track_name', 'ignored']) {
+    for (const bytes of [[0xc0, 0xaf], [0xed, 0xa0, 0x80], [0xf4, 0x90, 0x80, 0x80], [0xc2, 0x22]]) {
+      const prefix = encoder.encode(`[{"ts":"2024-01-01T00:00:00Z","master_metadata_track_name":"T","${key}":"`);
+      const suffix = encoder.encode('"}]');
+      const input = Uint8Array.from([...prefix, ...bytes, ...suffix]);
+      for (const chunkBytes of [1, 262144]) {
+        await assert.rejects(parse(memoryBytes('utf8', input), { chunkBytes }), (error) => error.code === 'E_PARSE');
+      }
+    }
+  }
+});

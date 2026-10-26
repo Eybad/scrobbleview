@@ -83,6 +83,11 @@ export function createScanner({ onEvent, onError, maxDepth = DEFAULT_MAX_DEPTH, 
         const ending = token.kind === 'string' ? b === 34 && !token.escape && !token.unicode : isDelimiter(b);
         if (!ending && ++token.length > maxTokenBytes) throw new FileError('Un valor JSON excede el límite de bytes por campo.', { code: 'E_LIMIT_TOKEN' });
         if (token.kind === 'string') {
+          if (token.utf8Left) {
+            if (b < token.utf8Min || b > token.utf8Max) fail('UTF-8 inválido', i);
+            token.utf8Left--; token.utf8Min = 0x80; token.utf8Max = 0xbf;
+            i++; continue;
+          }
           if (token.unicode) {
             if (!isHex(b)) fail('Escape Unicode inválido', i);
             token.unicode--; i++; continue;
@@ -91,6 +96,13 @@ export function createScanner({ onEvent, onError, maxDepth = DEFAULT_MAX_DEPTH, 
             if (b === 117) token.unicode = 4;
             else if (![34, 92, 47, 98, 102, 110, 114, 116].includes(b)) fail('Escape JSON inválido', i);
             token.escape = false; i++; continue;
+          }
+          if (b >= 0x80) {
+            if (b < 0xc2 || b > 0xf4) fail('UTF-8 inválido', i);
+            token.utf8Left = b < 0xe0 ? 1 : b < 0xf0 ? 2 : 3;
+            token.utf8Min = b === 0xe0 ? 0xa0 : b === 0xf0 ? 0x90 : 0x80;
+            token.utf8Max = b === 0xed ? 0x9f : b === 0xf4 ? 0x8f : 0xbf;
+            i++; continue;
           }
           if (b === 34) { finishToken(chunk, i); i++; continue; }
           if (b < 32) fail('Carácter de control en string', i);
