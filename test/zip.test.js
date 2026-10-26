@@ -175,3 +175,22 @@ test('e2e: analyze sobre el zip produce el mismo modelo que el JSON directo', as
   assert.equal(fromZip.totals.ms, direct.totals.ms);
   assert.equal(fromZip.meta.sources[0], 'MyData/Streaming_History_Audio_2024.json');
 });
+
+test('ZIP export falls back to store when deflate-raw is unsupported', async (t) => {
+  t.mock.method(globalThis, 'CompressionStream', class {
+    constructor() { throw new TypeError('unsupported format'); }
+  });
+  const payload = encoder.encode('repeated '.repeat(200));
+  const zip = await buildZip([{ name: 'Streaming_History_Audio_0.json', bytes: payload }]);
+  assert.equal(new DataView(zip.buffer).getUint16(8, true), 0);
+  const [source] = await zipSources(new Blob([zip]));
+  assert.deepEqual(await readAll(source), payload);
+});
+
+test('ZIP import explains the JSON alternative when deflate-raw is unsupported', async (t) => {
+  const zip = await buildZip([{ name: 'Streaming_History_Audio_0.json', bytes: encoder.encode('repeated '.repeat(200)) }]);
+  t.mock.method(globalThis, 'DecompressionStream', class {
+    constructor() { throw new TypeError('unsupported format'); }
+  });
+  await assert.rejects(zipSources(new Blob([zip])), (err) => err.code === 'E_ZIP_UNSUPPORTED' && /JSON/.test(err.message));
+});

@@ -73,7 +73,17 @@ function readCentral(bytes, count) {
 // (deflate). El CRC corre sobre el dato DESCOMPRIMIDO (spec ZIP).
 function entrySource(blob, entry, dataStart) {
   let stream = blob.slice(dataStart, dataStart + entry.compSize).stream();
-  if (entry.method === 8) stream = stream.pipeThrough(new DecompressionStream('deflate-raw'));
+  if (entry.method === 8) {
+    let decompressor;
+    try {
+      if (typeof DecompressionStream !== 'function') throw new TypeError('unsupported format');
+      decompressor = new DecompressionStream('deflate-raw');
+    } catch (cause) {
+      if (!(cause instanceof TypeError)) throw cause;
+      throw new FileError('Este entorno no admite ZIP comprimido. Extraé el ZIP y cargá sus archivos JSON.', { code: 'E_ZIP_UNSUPPORTED', cause });
+    }
+    stream = stream.pipeThrough(decompressor);
+  }
   const reader = stream.getReader();
   let crc = 0xFFFFFFFF;
   return {

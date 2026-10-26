@@ -29,7 +29,14 @@ export function crc32Update(crc, bytes) {
 }
 
 async function deflateRaw(bytes) {
-  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  if (typeof CompressionStream !== 'function') return null;
+  let compressor;
+  try { compressor = new CompressionStream('deflate-raw'); }
+  catch (error) {
+    if (error instanceof TypeError) return null;
+    throw error;
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(compressor);
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -59,7 +66,7 @@ export async function buildZip(entries) {
     if (canCompress && bytes.length > 0) {
       const deflated = await deflateRaw(bytes);
       // Store si deflate no achica (ya comprimido o vacío): el zip no crece.
-      if (deflated.length < bytes.length) {
+      if (deflated && deflated.length < bytes.length) {
         payload = deflated;
         method = 8;
       }
