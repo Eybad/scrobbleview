@@ -7,7 +7,7 @@
 // al    Uint32Array  índice a dicts.albums
 // rs    Uint8Array   índice a dicts.reasons (set pequeño y cerrado)
 // re    Uint8Array   índice a dicts.reasons
-// flags Uint8Array   bit-packed: 1 shuffle, 2 skipped, 4 offline, 8 ms_unknown
+// flags Uint8Array   bit-packed: 1 shuffle, 2 skipped, 4 offline, 8 ms_unknown, 16 shuffle_unknown, 32 skipped_unknown, 64 offline_unknown
 
 const INITIAL_CAP = 1024;
 

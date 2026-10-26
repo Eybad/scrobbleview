@@ -79,3 +79,41 @@ test('sin tz → TypeError', async () => {
   const src = memoryBytes('s.json', syntheticJSON(10, 5));
   await assert.rejects(() => analyze(src, {}), /tz/);
 });
+test('unknown durations and flags stay separate from zero and false', async () => {
+  const { parse } = await import('../src/parse/parse.js');
+  const { aggregate } = await import('../src/aggregate/aggregate.js');
+  const { applyFilters, emptyFilterState } = await import('../src/filters.js');
+  const { peek } = await import('../src/parse/dataset.js');
+  const { filterParams, paramsToFilterState, filterBarHTML } = await import('../app/filter-ui.js');
+  const rows = [
+    { ms_played: null, offline: null, skipped: null, shuffle: null },
+    { ms_played: 0, offline: false, skipped: false, shuffle: false },
+    { ms_played: 60000, offline: true, skipped: true, shuffle: true },
+    { ms_played: -1 }
+  ].map((fields, i) => ({ ts: `2024-01-0${i + 1}T10:00:00Z`, master_metadata_track_name: 'T',
+    master_metadata_album_artist_name: 'A', ...fields }));
+  const ds = await parse(memoryBytes('unknown', JSON.stringify(rows)));
+  const model = aggregate(ds, { tz: UTC, minMs: 0 });
+  const { serialize, deserialize } = await import('../app/storage.js');
+  assert.equal(peek(deserialize(serialize(ds)), 0).offline, null);
+  assert.throws(() => deserialize({}), /Caché incompatible/);
+  assert.equal(peek(ds, 0).offline, null);
+  assert.equal(peek(ds, 1).offline, false);
+  assert.equal(model.totals.durationKnown, 2);
+  assert.equal(model.totals.durationUnknown, 2);
+  assert.equal(model.totals.avgMs, 30000);
+  assert.equal(model.totals.medianMs, 30000);
+  assert.equal(model.totals.msDist.reduce((n, b) => n + b.count, 0), 2);
+  assert.equal(model.totals.playsSkipped, 1);
+  assert.equal(model.totals.playsSignificant, 2);
+  assert.equal(model.totals.offlineKnown, 2);
+  assert.equal([...model.tracks.byId.values()][0].skipKnown, 2);
+  for (const field of ['skip', 'shuffle', 'offline']) {
+    assert.deepEqual([...applyFilters(ds, { ...emptyFilterState(), [field]: false }, UTC).indices], [1]);
+    assert.deepEqual([...applyFilters(ds, { ...emptyFilterState(), [field]: true }, UTC).indices], [2]);
+    const state = { ...emptyFilterState(), [field]: 'unknown' };
+    assert.deepEqual([...applyFilters(ds, state, UTC).indices], [0, 3]);
+    assert.equal(paramsToFilterState(filterParams(state))[field], 'unknown');
+    assert.match(filterBarHTML(model, state), /value="unknown" selected>Desconocido/);
+  }
+});

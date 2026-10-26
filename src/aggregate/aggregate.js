@@ -88,8 +88,8 @@ export function aggregate(ds, opts = {}) {
 
 function rankByLowSkipRate(entities) {
   return entities
-    .filter((entity) => entity.plays >= MIN_PLAYS_FOR_RATE)
-    .sort((first, second) => first.skips / first.plays - second.skips / second.plays || second.plays - first.plays || second.ms - first.ms)
+    .filter((entity) => entity.skipKnown >= MIN_PLAYS_FOR_RATE)
+    .sort((first, second) => first.skips / first.skipKnown - second.skips / second.skipKnown || second.plays - first.plays || second.ms - first.ms)
     .slice(0, TOP_RATE_N);
 }
 
@@ -284,8 +284,8 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
   const albumsTop = { byPlays: byPlays(albumList).slice(0, TOP_N), byMs: byMs(albumList).slice(0, TOP_N) };
 
   const rate = (list) => list
-    .filter((x) => x.plays >= MIN_PLAYS_FOR_RATE)
-    .sort((a, b) => b.skips / b.plays - a.skips / a.plays || b.plays - a.plays)
+    .filter((x) => x.skipKnown >= MIN_PLAYS_FOR_RATE)
+    .sort((a, b) => b.skips / b.skipKnown - a.skips / a.skipKnown || b.plays - a.plays)
     .slice(0, TOP_RATE_N);
   const skipRate = { artists: rate(artistList), tracks: rate(trackList) };
   const lowSkipRate = { artists: rankByLowSkipRate(artistList), tracks: rankByLowSkipRate(trackList) };

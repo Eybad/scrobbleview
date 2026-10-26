@@ -64,7 +64,7 @@ export async function parse(src, opts = {}) {
     // tal cual en Uint32Array (-1 → 4294967295, ~49,7 días en una pista).
     // Se acota a 0 con warning BAD_MS y el evento se conserva.
     let m = ev.ms ?? 0;
-    if (ev.ms != null && (!(ev.ms >= 0) || ev.ms > 86400000)) {
+    if (ev.ms != null && (!(ev.ms >= 0) || ev.ms > 86400000 || !Number.isInteger(ev.ms))) {
       warnings.push({ code: 'BAD_MS', index: count });
       m = 0;
     }
@@ -72,7 +72,10 @@ export async function parse(src, opts = {}) {
     if (ev.shuffle) flags |= 1;
     if (ev.skipped) flags |= 2;
     if (ev.offline) flags |= 4;
-    if (ev.ms === undefined || ev.ms === null) flags |= 8;
+    if (ev.ms == null || m !== ev.ms) flags |= 8;
+    if (ev.shuffle == null) flags |= 16;
+    if (ev.skipped == null) flags |= 32;
+    if (ev.offline == null) flags |= 64;
 
     cols.push(t, m, tr, ar, al, rs, re, flags);
     if (t < tsMin) tsMin = t;

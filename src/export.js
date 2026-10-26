@@ -67,18 +67,18 @@ export function modelToTables(model) {
   // tracks.album_id is 0 unless every event has the same known album.
   // album_tracks carries exact attribution; session duration_s is estimated,
   // start is local display time and start_utc/end_utc are epoch seconds.
-  const tables = [];
+  const tables = [{ name: 'totals', headers: ['metric', 'value'], rows: Object.entries(model.totals).filter(([, value]) => value === null || typeof value === 'number') }];
   const artists = [...model.artists.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
     name: 'artists',
-    headers: ['id', 'name', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts'],
-    rows: artists.map(([id, a]) => [id, a.name, a.plays, a.ms, a.skips, a.days.size, locISO(a.firstTs), locISO(a.lastTs)])
+    headers: ['id', 'name', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known'],
+    rows: artists.map(([id, a]) => [id, a.name, a.plays, a.ms, a.skips, a.days.size, locISO(a.firstTs), locISO(a.lastTs), a.skipKnown])
   });
   const tracks = [...model.tracks.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
     name: 'tracks',
-    headers: ['id', 'artist_id', 'name', 'artist', 'album_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts'],
-    rows: tracks.map(([tk, t]) => [tk, tk % TRACK_KEY_ARTIST, t.name, t.artist, t.ak, t.plays, t.ms, t.skips, t.days.size, locISO(t.firstTs), locISO(t.lastTs)])
+    headers: ['id', 'artist_id', 'name', 'artist', 'album_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known'],
+    rows: tracks.map(([tk, t]) => [tk, tk % TRACK_KEY_ARTIST, t.name, t.artist, t.ak, t.plays, t.ms, t.skips, t.days.size, locISO(t.firstTs), locISO(t.lastTs), t.skipKnown])
   });
   const albums = [...model.albums.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
@@ -88,10 +88,10 @@ export function modelToTables(model) {
   });
   tables.push({
     name: 'album_tracks',
-    headers: ['album_id', 'track_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts'],
+    headers: ['album_id', 'track_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known'],
     rows: albums.flatMap(([ak, album]) => [...album.trackStats.values()]
       .sort((first, second) => first.tk - second.tk)
-      .map(track => [ak, track.tk, track.plays, track.ms, track.skips, track.days.size, locISO(track.firstTs), locISO(track.lastTs)]))
+      .map(track => [ak, track.tk, track.plays, track.ms, track.skips, track.days.size, locISO(track.firstTs), locISO(track.lastTs), track.skipKnown]))
   });
   tables.push({
     name: 'sessions',

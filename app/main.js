@@ -473,7 +473,7 @@ function wireFilters() {
     sel.addEventListener('change', () => {
       const k = sel.dataset.toggle3;
       if (k !== 'skip' && k !== 'shuffle' && k !== 'offline') return;
-      state[k] = sel.value === '' ? null : sel.value === 'yes';
+      state[k] = sel.value === '' ? null : sel.value === 'unknown' ? 'unknown' : sel.value === 'yes';
       applyAndRenderView();
     });
   });

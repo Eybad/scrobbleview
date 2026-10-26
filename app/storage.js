@@ -30,11 +30,13 @@ export function serialize(ds) {
     rows[`dict:${name}:lengths`] = d.lengths.slice(0, d.count).buffer;
     rows[`dict:${name}:count`] = d.count;
   }
+  rows.schemaVersion = 2;
   rows.meta = JSON.stringify(ds.meta);
   return rows;
 }
 
 export function deserialize(rows) {
+  if (rows.schemaVersion !== 2) throw new Error('Caché incompatible: volvé a cargar los archivos');
   const ds = {};
   for (const f of FIELDS) {
     const buf = rows[`col:${f}`];

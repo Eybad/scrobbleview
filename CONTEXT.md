@@ -21,3 +21,6 @@ Una canción identificada por su título y el nombre del artista. Distintos URI 
 
 **Album track (canción dentro de un álbum)**:
 La parte del historial de una canción agrupada atribuida a un álbum. Sus totales y su evolución incluyen únicamente los registros que nombran ese álbum.
+
+**Unknown value (valor desconocido)**:
+Un campo ausente, nulo o una duración inválida. No equivale a cero ni a «no». Las medias, medianas y umbrales de duración usan solo duraciones conocidas; las tasas de banderas usan como denominador los registros donde esa bandera es conocida.

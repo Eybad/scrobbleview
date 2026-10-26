@@ -345,7 +345,7 @@ function recordsGridHTML(model) {
 export function listenerArchetype(model) {
   const t = model.totals;
   if (!t || t.records === 0) return null;
-  const skipRate = t.skipped / t.records;
+  const skipRate = t.skippedKnown ? t.skipped / t.skippedKnown : 0;
   const c = model.concentration.artists;
   const repeatRate = model.intraSession.repeatedPlays / t.records;
   let dom = 0;
@@ -354,7 +354,7 @@ export function listenerArchetype(model) {
   const when = dom === 0 || dom === 3 ? 'nocturno' : dom === 1 ? 'matutino' : 'vespertino';
   return {
     label: `${base} ${when}`,
-    detail: `${fmtPct(skipRate)} de saltos · ${fmtPct(c.hhi)} de concentración · ${fmtPct(repeatRate)} de repeticiones`
+    detail: `${pctOf(t.skipped, t.skippedKnown)} de saltos · ${fmtPct(c.hhi)} de concentración · ${fmtPct(repeatRate)} de repeticiones`
   };
 }
 
@@ -517,10 +517,10 @@ export function dashboard(model, ctx = {}) {
 
   const rankings = `<div id="rank-card">${rankCardHTML(model, ctx.rankUI)}</div>`;
 
-  const skipRate = t.records > 0 ? fmtPct(t.skipped / t.records) : '—';
-  const shuffleRate = t.records > 0 ? fmtPct(t.shuffle / t.records) : '—';
-  const offlineRate = t.records > 0 ? fmtPct(t.offline / t.records) : '—';
-  const avgDuration = t.records > 0 ? t.ms / t.records : 0;
+  const skipRate = t.skippedKnown > 0 ? fmtPct(t.skipped / t.skippedKnown) : '—';
+  const shuffleRate = t.shuffleKnown > 0 ? fmtPct(t.shuffle / t.shuffleKnown) : '—';
+  const offlineRate = t.offlineKnown > 0 ? fmtPct(t.offline / t.offlineKnown) : '—';
+  const avgDuration = t.avgMs;
 
   const obsLimit = resolveLimit(ctx, 'dash-obsession', 10);
   const bingeLimit = resolveLimit(ctx, 'dash-binge', 10);
@@ -544,7 +544,7 @@ export function dashboard(model, ctx = {}) {
       { label: 'Álbumes', value: fmtNum(model.albums.byId.size) },
       { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
-      { label: 'Duración promedio', value: fmtMs(avgDuration), sub: `mediana ${fmtMs(t.medianMs)}` },
+      { label: 'Duración promedio', value: avgDuration == null ? '—' : fmtMs(avgDuration), sub: `mediana ${t.medianMs == null ? '—' : fmtMs(t.medianMs)}` },
       { label: 'Completas', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} sin terminar` },
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
       { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
@@ -552,6 +552,7 @@ export function dashboard(model, ctx = {}) {
       { label: 'Escuchas válidas', value: fmtNum(t.playsSignificant), sub: `+${thresholdLabel(model.meta.minMs)}` },
       { label: 'Descartadas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` }
     ])}
+    <p class="view-meta">Duración desconocida: ${fmtNum(t.durationUnknown)} registros excluidos de medias, umbrales y distribución. Banderas desconocidas: saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan valores conocidos.</p>
     ${card('Récords', recordsGridHTML(model))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
@@ -581,14 +582,14 @@ export function dashboard(model, ctx = {}) {
         entityLink('artist', a.id, a.name),
         fmtNum(a.skips),
         fmtNum(a.plays),
-        fmtPct(a.skips / a.plays)
+        fmtPct(a.skips / a.skipKnown)
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto'))}
       ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['#', 'Canción', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr, i) => [
         String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
         fmtNum(tr.skips),
         fmtNum(tr.plays),
-        fmtPct(tr.skips / tr.plays)
+        fmtPct(tr.skips / tr.skipKnown)
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto'))}
     </div>
     <div class="grid-2">
@@ -597,14 +598,14 @@ export function dashboard(model, ctx = {}) {
         entityLink('artist', a.id, a.name),
         fmtNum(a.skips),
         fmtNum(a.plays),
-        fmtPct(a.skips / a.plays)
+        fmtPct(a.skips / a.skipKnown)
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto'))}
       ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['#', 'Canción', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr, i) => [
         String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
         fmtNum(tr.skips),
         fmtNum(tr.plays),
-        fmtPct(tr.skips / tr.plays)
+        fmtPct(tr.skips / tr.skipKnown)
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto'))}
     </div>
     <div class="grid-2">
@@ -678,7 +679,7 @@ export function artistView(model, ar, ctx = {}) {
       { label: 'Tiempo', value: fmtMs(a.ms) },
       { label: 'Canciones', value: fmtNum(a.tracks ? a.tracks.size : topTracks.length) },
       { label: 'Álbumes', value: fmtNum(a.albums.size) },
-      { label: 'Saltadas', value: fmtNum(a.skips), sub: pctOf(a.skips, a.plays) },
+      { label: 'Saltadas', value: fmtNum(a.skips), sub: pctOf(a.skips, a.skipKnown) },
       { label: 'Días activos', value: fmtNum(a.days.size) },
       { label: 'Meses activos', value: fmtNum(a.months.size), sub: `${fmtNum(a.years.size)} años` },
       { label: 'Primera canción', value: firstTr ? entityLink('track', a.firstTrackTk, firstTr.name) : '—', text: true },
@@ -750,7 +751,7 @@ export function trackView(model, tk, ctx = {}) {
       { label: 'Reproducciones', value: fmtNum(tr.plays) },
       { label: 'Tiempo', value: fmtMs(tr.ms) },
       { label: 'Duración media', value: fmtMs(tr.plays > 0 ? tr.ms / tr.plays : 0) },
-      { label: 'Saltadas', value: fmtNum(tr.skips), sub: pctOf(tr.skips, tr.plays) },
+      { label: 'Saltadas', value: fmtNum(tr.skips), sub: pctOf(tr.skips, tr.skipKnown) },
       { label: 'Racha máxima (seguidas)', value: fmtNum(run) },
       { label: 'Días activos', value: fmtNum(tr.days.size) },
       { label: 'Meses activos', value: fmtNum(tr.months ? tr.months.size : 0) },
@@ -1255,9 +1256,9 @@ export function habitsView(model, ctx = {}) {
       <p class="view-meta">Diversidad matemática del catálogo, comportamiento mensual, cadenas de Markov y curiosidades</p>
     </header>
     ${kpis([
-      { label: 'Tasa de salto', value: pctOf(t.skipped, t.records), sub: `${fmtNum(t.skipped)} saltadas` },
-      { label: 'Tasa de aleatorio', value: pctOf(t.shuffle, t.records), sub: `${fmtNum(t.shuffle)} en aleatorio` },
-      { label: 'Sin conexión', value: pctOf(t.offline, t.records), sub: `${fmtNum(t.offline)} sin conexión` },
+      { label: 'Tasa de salto', value: pctOf(t.skipped, t.skippedKnown), sub: `${fmtNum(t.skipped)} saltadas` },
+      { label: 'Tasa de aleatorio', value: pctOf(t.shuffle, t.shuffleKnown), sub: `${fmtNum(t.shuffle)} en aleatorio` },
+      { label: 'Sin conexión', value: pctOf(t.offline, t.offlineKnown), sub: `${fmtNum(t.offline)} sin conexión` },
       { label: 'Sesiones con repeticiones', value: fmtNum(model.intraSession.sessionsWithRepeats), sub: `${fmtNum(model.intraSession.repeatedPlays)} repeticiones` },
       { label: 'Mismo artista seguido', value: fmtNum(model.transitions.auto), sub: 'auto-transiciones' },
       { label: 'Artistas efectivos', value: `~${fmtNum(Math.max(1, Math.round(cArt.effective)))}`, sub: `HHI ${fmtPct(cArt.hhi)}` }
@@ -1372,9 +1373,9 @@ export function wrappedView(model, id, ctx) {
         <li><span>Canciones distintas</span><span>${fmtNum(model.tracks.byId.size)}</span></li>
         <li><span>Álbumes distintos</span><span>${fmtNum(model.albums.byId.size)}</span></li>
         <li><span>Sesiones de escucha</span><span>${fmtNum(model.sessionsStats.count)}</span></li>
-        <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.records)})</span></li>
-        <li><span>En aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.records)})</span></li>
-        <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.records)})</span></li>
+        <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.skippedKnown)})</span></li>
+        <li><span>En aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.shuffleKnown)})</span></li>
+        <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.offlineKnown)})</span></li>
         <li><span>Repetidas dentro de sesión</span><span>${fmtNum(model.intraSession.repeatedPlays)}</span></li>
         <li><span>Mismo artista seguido</span><span>${fmtNum(model.transitions.auto)}</span></li>
       </ul>

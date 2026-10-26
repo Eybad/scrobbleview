@@ -19,6 +19,12 @@
 
 import { derive, civilFromDays } from './aggregate/impl/derive.js';
 
+function matchesFlag(flags, filter, bit, unknownBit) {
+  if (filter == null) return true;
+  if (filter === 'unknown') return (flags & unknownBit) !== 0;
+  return !(flags & unknownBit) && ((flags & bit) !== 0) === filter;
+}
+
 export const RANGE_PRESETS = [
   { id: '4w', label: '4 semanas', days: 28 },
   { id: '6m', label: '6 meses', days: 182 },
@@ -122,9 +128,9 @@ export function applyFilters(ds, state, tz, derived = null) {
     if (artistId != null && ds.ar[i] !== artistId) continue;
     if (trackId != null && ds.tr[i] * 4294967296 + ds.ar[i] !== trackId) continue;
     if (albumId != null && ds.ar[i] * 4294967296 + ds.al[i] !== albumId) continue;
-    if (skip != null && ((ds.flags[i] & 2) !== 0) !== skip) continue;
-    if (shuffle != null && ((ds.flags[i] & 1) !== 0) !== shuffle) continue;
-    if (offline != null && ((ds.flags[i] & 4) !== 0) !== offline) continue;
+    if (!matchesFlag(ds.flags[i], skip, 2, 32)) continue;
+    if (!matchesFlag(ds.flags[i], shuffle, 1, 16)) continue;
+    if (!matchesFlag(ds.flags[i], offline, 4, 64)) continue;
     tmp.push(i);
     records++;
     ms += ds.m[i];

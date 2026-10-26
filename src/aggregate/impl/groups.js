@@ -40,7 +40,7 @@ export function createGroupsAcc(ds) {
           a = {
             id: ev.ar,
             name: ds.dicts.artists.get(ev.ar),
-            plays: 0, ms: 0, skips: 0,
+            plays: 0, ms: 0, skips: 0, skipKnown: 0,
             days: new Set(), months: new Set(), years: new Set(),
             albums: new Set(), // ak de los álbumes del artista
             tracks: new Set(),
@@ -53,6 +53,7 @@ export function createGroupsAcc(ds) {
         }
         a.plays++;
         a.ms += ev.ms;
+        if (!(ev.flags & 32)) a.skipKnown++;
         if (ev.isSkipped) a.skips++;
         a.days.add(ev.day);
         a.months.add(Math.floor(ev.ymd / 100));
@@ -80,7 +81,7 @@ export function createGroupsAcc(ds) {
           ar: ev.ar,
           name: ds.dicts.tracks.get(ev.tr),
           artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
-          plays: 0, ms: 0, skips: 0,
+          plays: 0, ms: 0, skips: 0, skipKnown: 0,
           days: new Set(), months: new Set(), years: new Set(),
           firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t
         };
@@ -90,6 +91,7 @@ export function createGroupsAcc(ds) {
       if (t.ak !== ak) t.ak = 0;
       if (ak > 0) t.albums.add(ak);
       t.ms += ev.ms;
+      if (!(ev.flags & 32)) t.skipKnown++;
       if (ev.isSkipped) t.skips++;
       t.days.add(ev.day);
       t.months.add(Math.floor(ev.ymd / 100));
@@ -124,13 +126,14 @@ export function createGroupsAcc(ds) {
         let albumTrack = al.trackStats.get(tk);
         if (!albumTrack) {
           albumTrack = {
-            tk, plays: 0, ms: 0, skips: 0, days: new Set(), monthly: new Map(),
+            tk, plays: 0, ms: 0, skips: 0, skipKnown: 0, days: new Set(), monthly: new Map(),
             firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t
           };
           al.trackStats.set(tk, albumTrack);
         }
         albumTrack.plays++;
         albumTrack.ms += ev.ms;
+        if (!(ev.flags & 32)) albumTrack.skipKnown++;
         if (ev.isSkipped) albumTrack.skips++;
         albumTrack.days.add(ev.day);
         albumTrack.lastTs = ev.loc;

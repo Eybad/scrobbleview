@@ -180,6 +180,11 @@ export function chipsHTML(model, state) {
   }
   for (const k of ['skip', 'shuffle', 'offline']) {
     if (state[k] == null) continue;
+    if (state[k] === 'unknown') {
+      const label = k === 'skip' ? 'Saltadas' : k === 'shuffle' ? 'Aleatorio' : 'Sin conexión';
+      chips.push({ unset: k, label: `${label}: desconocido` });
+      continue;
+    }
     // offline=false es "con conexión": el "Sin" genérico diría "Sin sin conexión".
     if (k === 'offline') {
       chips.push({ unset: k, label: state[k] ? 'Solo sin conexión' : 'Con conexión' });
@@ -220,9 +225,9 @@ export function filterParams(state) {
   if (state.range) parts.push(`r=${state.range.from}-${state.range.to}`);
   if (state.dows) parts.push(`d=${[...state.dows].sort((a, b) => a - b).join(',')}`);
   if (state.hours) parts.push(`h=${[...state.hours].sort((a, b) => a - b).join(',')}`);
-  if (state.skip != null) parts.push(`s=${state.skip ? 'yes' : 'no'}`);
-  if (state.shuffle != null) parts.push(`f=${state.shuffle ? 'yes' : 'no'}`);
-  if (state.offline != null) parts.push(`o=${state.offline ? 'yes' : 'no'}`);
+  if (state.skip != null) parts.push(`s=${state.skip === 'unknown' ? 'unknown' : state.skip ? 'yes' : 'no'}`);
+  if (state.shuffle != null) parts.push(`f=${state.shuffle === 'unknown' ? 'unknown' : state.shuffle ? 'yes' : 'no'}`);
+  if (state.offline != null) parts.push(`o=${state.offline === 'unknown' ? 'unknown' : state.offline ? 'yes' : 'no'}`);
   if (state.artistId != null) parts.push(`ar=${state.artistId}`);
   if (state.trackId != null) parts.push(`tk=${state.trackId}`);
   if (state.albumId != null) parts.push(`al=${state.albumId}`);
@@ -251,7 +256,7 @@ export function paramsToFilterState(search) {
     const hours = nums(p.get('h')).filter((h) => h >= 0 && h <= 23);
     if (hours.length) state.hours = new Set(hours);
   }
-  const tri = (v) => (v === 'yes' ? true : v === 'no' ? false : null);
+  const tri = (v) => (v === 'yes' ? true : v === 'no' ? false : v === 'unknown' ? 'unknown' : null);
   state.skip = tri(p.get('s'));
   state.shuffle = tri(p.get('f'));
   state.offline = tri(p.get('o'));
@@ -296,11 +301,12 @@ export function filterBarHTML(model, state) {
   // 3 estados: Todos (null) / Solo sí (true) / Excluir (false).
   const toggles = ['skip', 'shuffle', 'offline'].map((k) => {
     const label = k === 'skip' ? 'Saltadas' : k === 'shuffle' ? 'Aleatorio' : 'Sin conexión';
-    const v = state[k] === true ? 'yes' : state[k] === false ? 'no' : '';
+    const v = state[k] === true ? 'yes' : state[k] === false ? 'no' : state[k] === 'unknown' ? 'unknown' : '';
     return `<label class="chip">${label} <select name="toggle-${k}" autocomplete="off" data-toggle3="${k}" aria-label="${label}">
       <option value="" ${v === '' ? 'selected' : ''}>Todos</option>
       <option value="yes" ${v === 'yes' ? 'selected' : ''}>Solo sí</option>
-      <option value="no" ${v === 'no' ? 'selected' : ''}>Excluir</option>
+      <option value="no" ${v === 'no' ? 'selected' : ''}>Solo no</option>
+      <option value="unknown" ${v === 'unknown' ? 'selected' : ''}>Desconocido</option>
     </select></label>`;
   }).join('');
 

@@ -23,9 +23,9 @@ export function peek(ds, i) {
     album: ds.dicts.albums.get(ds.al[i]),
     reasonStart: ds.dicts.reasons.get(ds.rs[i]),
     reasonEnd: ds.dicts.reasons.get(ds.re[i]),
-    shuffle: (ds.flags[i] & 1) !== 0,
-    skipped: (ds.flags[i] & 2) !== 0,
-    offline: (ds.flags[i] & 4) !== 0,
+    shuffle: ds.flags[i] & 16 ? null : (ds.flags[i] & 1) !== 0,
+    skipped: ds.flags[i] & 32 ? null : (ds.flags[i] & 2) !== 0,
+    offline: ds.flags[i] & 64 ? null : (ds.flags[i] & 4) !== 0,
     msUnknown: (ds.flags[i] & 8) !== 0
   };
 }

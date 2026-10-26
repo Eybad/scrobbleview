@@ -126,7 +126,7 @@ export function createTemporalAcc(minMs = 0) {
       const b = blocks[block];
       b.plays++;
       b.ms += ev.ms;
-      if (ev.ms >= minMs) {
+      if (!(ev.flags & 8) && ev.ms >= minMs) {
         bump(b.artists, ev.ar, 1);
         bump(b.tracks, tk, 1);
       }
@@ -138,7 +138,7 @@ export function createTemporalAcc(minMs = 0) {
       bump(d.artists, ev.ar, 1);
       bump(d.tracks, tk, 1);
 
-      if (ev.ms >= minMs) {
+      if (!(ev.flags & 8) && ev.ms >= minMs) {
         const ht = hourTracks[ev.hour];
         ht.set(tk, (ht.get(tk) || 0) + 1);
         const htm = hourTracksMs[ev.hour];
