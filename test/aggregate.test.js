@@ -581,3 +581,28 @@ test('compact aggregation defers album details without changing overview statist
   const detail = aggregate(ds, { tz: UTC, now: 1, compact: true, albumDetails: albumId });
   assert.deepEqual(detail.albums.byId.get(albumId), full.albums.byId.get(albumId));
 });
+
+test('concentration excludes entities with no known duration', async () => {
+  const ds = buildDataset([
+    { t: D0, m: 60000, track: 'Known', artist: 'A', album: 'Known album' },
+    { t: D0 + 60, m: 0, track: 'Unknown', artist: 'B', album: 'Unknown album', flags: 8 }
+  ]);
+  const model = aggregate(ds, { tz: UTC });
+  for (const group of ['artists', 'tracks', 'albums']) {
+    assert.equal(model.concentration[group].gini, 0);
+    assert.equal(model.concentration[group].entropy, 1);
+    assert.equal(model.concentration[group].unknownEntities, 1);
+    assert.equal(model.concentration[group].knownEntities, 1);
+  }
+  const { modelToTables } = await import('../src/export.js');
+  for (const table of modelToTables(model).filter((table) => ['artists', 'tracks', 'albums', 'album_tracks'].includes(table.name))) {
+    const index = table.headers.indexOf('duration_known');
+    assert.ok(index >= 0);
+    assert.equal(table.rows.reduce((sum, row) => sum + row[index], 0), 1);
+  }
+  const { renderView, listenerArchetype } = await import('../app/views.js');
+  assert.match(renderView('habits', model), /Con duración conocida/);
+  const unknown = aggregate(buildDataset([{ t: D0, m: 0, track: 'Unknown', artist: 'B', flags: 8 }]), { tz: UTC });
+  assert.equal(listenerArchetype(unknown), null);
+  assert.match(renderView('wrapped', unknown), /Sin duraciones conocidas/);
+});

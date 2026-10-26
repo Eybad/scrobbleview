@@ -39,14 +39,18 @@ function stats(values) {
 }
 
 export function computeConcentration(groups) {
-  const msOf = (map) => {
-    const out = [];
-    for (const v of map.values()) out.push(v.ms);
-    return out;
-  };
+  function forEntities(entities) {
+    const values = [];
+    let unknownEntities = 0;
+    for (const entity of entities.values()) {
+      if (entity.durationKnown > 0) values.push(entity.ms);
+      else unknownEntities++;
+    }
+    return { ...stats(values), knownEntities: values.length, unknownEntities };
+  }
   return {
-    artists: stats(msOf(groups.artists)),
-    tracks: stats(msOf(groups.tracks)),
-    albums: stats(msOf(groups.albums))
+    artists: forEntities(groups.artists),
+    tracks: forEntities(groups.tracks),
+    albums: forEntities(groups.albums)
   };
 }

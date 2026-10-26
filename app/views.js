@@ -348,6 +348,7 @@ export function listenerArchetype(model) {
   if (!t || t.records === 0) return null;
   const skipRate = t.skippedKnown ? t.skipped / t.skippedKnown : 0;
   const c = model.concentration.artists;
+  if (!c.knownEntities) return null;
   const repeatRate = model.intraSession.repeatedPlays / t.records;
   let dom = 0;
   model.blocks.forEach((b, i) => { if (b.plays > model.blocks[dom].plays) dom = i; });
@@ -1172,11 +1173,11 @@ export function habitsView(model, ctx = {}) {
   const cTrk = model.concentration.tracks;
   const cAlb = model.concentration.albums;
 
-  const concRows = [
-    ['Artistas', fmtNum(model.artists.byId.size), fmtNum(Math.round(cArt.effective)), fmtPct(cArt.hhi), fmtPct(cArt.gini), fmtPct(cArt.entropy)],
-    ['Canciones', fmtNum(model.tracks.byId.size), fmtNum(Math.round(cTrk.effective)), fmtPct(cTrk.hhi), fmtPct(cTrk.gini), fmtPct(cTrk.entropy)],
-    ['Álbumes', fmtNum(model.albums.byId.size), fmtNum(Math.round(cAlb.effective)), fmtPct(cAlb.hhi), fmtPct(cAlb.gini), fmtPct(cAlb.entropy)]
-  ];
+  const concRows = [['Artistas', cArt], ['Canciones', cTrk], ['Álbumes', cAlb]].map(([label, concentration]) => [
+    label, fmtNum(concentration.knownEntities), fmtNum(concentration.unknownEntities),
+    concentration.knownEntities ? fmtNum(Math.round(concentration.effective)) : '—',
+    ...['hhi', 'gini', 'entropy'].map((field) => concentration.knownEntities ? fmtPct(concentration[field]) : '—')
+  ]);
 
   const paretoRows = [
     ['Artistas', paretoShare(model.artists.top[topKey], 1, byMs, totalVal), paretoShare(model.artists.top[topKey], 5, byMs, totalVal), paretoShare(model.artists.top[topKey], 10, byMs, totalVal), paretoShare(model.artists.top[topKey], 50, byMs, totalVal)],
@@ -1266,10 +1267,10 @@ export function habitsView(model, ctx = {}) {
       { label: 'Sin conexión', value: pctOf(t.offline, t.offlineKnown), sub: `${fmtNum(t.offline)} sin conexión` },
       { label: 'Sesiones con repeticiones', value: fmtNum(model.intraSession.sessionsWithRepeats), sub: `${fmtNum(model.intraSession.repeatedPlays)} repeticiones` },
       { label: 'Mismo artista seguido', value: fmtNum(model.transitions.auto), sub: 'auto-transiciones' },
-      { label: 'Artistas efectivos', value: `~${fmtNum(Math.max(1, Math.round(cArt.effective)))}`, sub: `HHI ${fmtPct(cArt.hhi)}` }
+      { label: 'Artistas efectivos', value: cArt.knownEntities ? `~${fmtNum(Math.max(1, Math.round(cArt.effective)))}` : '—', sub: cArt.knownEntities ? `HHI ${fmtPct(cArt.hhi)}` : 'Sin duraciones conocidas' }
     ])}
     <div class="grid-2">
-      ${card('Índices de concentración y diversidad', table(['Entidad', 'Únicos', 'Efectivos exp(H)', 'HHI', 'Gini', 'Entropía norm.'], concRows, '', ['', 'n', 'n', 'n', 'n', 'n'], null, 'Índices matemáticos de concentración y diversidad'))}
+      ${card('Índices de concentración y diversidad', table(['Entidad', 'Con duración conocida', 'Excluidos', 'Efectivos exp(H)', 'HHI', 'Gini', 'Entropía norm.'], concRows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n'], null, 'Índices matemáticos de concentración y diversidad'))}
       ${card(`Curva de Pareto (% acumulado por ${byMs ? 'tiempo' : 'reproducciones'})`, table(['Entidad', 'Top 1', 'Top 5', 'Top 10', 'Top 50'], paretoRows, '', ['', 'n', 'n', 'n', 'n'], null, 'Porcentaje acumulado del catálogo por los primeros N elementos'))}
     </div>
     <div class="grid-2">
@@ -1325,9 +1326,9 @@ export function wrappedView(model, id, ctx) {
 
   // Concentración legible: los efectivos redondeados como valor principal y
   // el HHI en porcentaje como dato secundario (el crudo 0.083 no dice nada).
-  const eff = Math.max(1, Math.round(c.effective));
+  const eff = c.knownEntities ? Math.max(1, Math.round(c.effective)) : 0;
   const effNoun = eff === 1 ? 'artista base' : 'artistas base';
-  const hhiPct = `${(c.hhi * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`;
+  const hhiPct = c.knownEntities ? `${(c.hhi * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %` : '—';
 
   const clockSrc = byMs ? model.dayHourMs : model.dayHour;
   const clockCells = [];
@@ -1356,7 +1357,7 @@ export function wrappedView(model, id, ctx) {
       { label: 'Tiempo total', value: fmtMs(t.ms) },
       { label: 'Reproducciones', value: fmtNum(t.records) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—' },
-      { label: 'Artistas efectivos', value: `~${eff} ${effNoun}`, sub: `Equivale a repartir tu tiempo en partes iguales entre ${eff} ${eff === 1 ? 'artista' : 'artistas'}`, text: true },
+      { label: 'Artistas efectivos', value: eff ? `~${eff} ${effNoun}` : '—', sub: eff ? `Equivale a repartir tu tiempo en partes iguales entre ${eff} ${eff === 1 ? 'artista' : 'artistas'}` : 'Sin duraciones conocidas', text: true },
       { label: 'Concentración (HHI)', value: hhiPct }
     ])}
     <div class="grid-2">

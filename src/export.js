@@ -71,27 +71,27 @@ export function modelToTables(model) {
   const artists = [...model.artists.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
     name: 'artists',
-    headers: ['id', 'name', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known'],
-    rows: artists.map(([id, a]) => [id, a.name, a.plays, a.ms, a.skips, a.days.size, locISO(a.firstTs), locISO(a.lastTs), a.skipKnown])
+    headers: ['id', 'name', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known', 'duration_known'],
+    rows: artists.map(([id, a]) => [id, a.name, a.plays, a.ms, a.skips, a.days.size, locISO(a.firstTs), locISO(a.lastTs), a.skipKnown, a.durationKnown])
   });
   const tracks = [...model.tracks.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
     name: 'tracks',
-    headers: ['id', 'artist_id', 'name', 'artist', 'album_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known'],
-    rows: tracks.map(([tk, t]) => [tk, tk % TRACK_KEY_ARTIST, t.name, t.artist, t.ak, t.plays, t.ms, t.skips, t.days.size, locISO(t.firstTs), locISO(t.lastTs), t.skipKnown])
+    headers: ['id', 'artist_id', 'name', 'artist', 'album_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known', 'duration_known'],
+    rows: tracks.map(([tk, t]) => [tk, tk % TRACK_KEY_ARTIST, t.name, t.artist, t.ak, t.plays, t.ms, t.skips, t.days.size, locISO(t.firstTs), locISO(t.lastTs), t.skipKnown, t.durationKnown])
   });
   const albums = [...model.albums.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
     name: 'albums',
-    headers: ['id', 'artist_id', 'name', 'artist', 'plays', 'ms', 'tracks', 'days', 'first_ts', 'last_ts'],
-    rows: albums.map(([ak, al]) => [ak, Math.floor(ak / TRACK_KEY_ARTIST), al.name, al.artist, al.plays, al.ms, al.tracks.size, al.days.size, locISO(al.firstTs), locISO(al.lastTs)])
+    headers: ['id', 'artist_id', 'name', 'artist', 'plays', 'ms', 'tracks', 'days', 'first_ts', 'last_ts', 'duration_known'],
+    rows: albums.map(([ak, al]) => [ak, Math.floor(ak / TRACK_KEY_ARTIST), al.name, al.artist, al.plays, al.ms, al.tracks.size, al.days.size, locISO(al.firstTs), locISO(al.lastTs), al.durationKnown])
   });
   tables.push({
     name: 'album_tracks',
-    headers: ['album_id', 'track_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known'],
+    headers: ['album_id', 'track_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts', 'skip_known', 'duration_known'],
     rows: albums.flatMap(([ak, album]) => [...album.trackStats.values()]
       .sort((first, second) => first.tk - second.tk)
-      .map(track => [ak, track.tk, track.plays, track.ms, track.skips, track.days.size, locISO(track.firstTs), locISO(track.lastTs), track.skipKnown]))
+      .map(track => [ak, track.tk, track.plays, track.ms, track.skips, track.days.size, locISO(track.firstTs), locISO(track.lastTs), track.skipKnown, track.durationKnown]))
   });
   tables.push({
     name: 'sessions',

@@ -108,7 +108,7 @@ export function createGroupsAcc(ds, { albumDetails } = {}) {
             id: ak,
             artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
             name: ds.dicts.albums.get(ev.al),
-            plays: 0, ms: 0,
+            plays: 0, ms: 0, durationKnown: 0,
             firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t,
             days: new Set(), // días con escucha del álbum
             tracks: new Set(), // tk de las canciones del álbum
@@ -119,6 +119,7 @@ export function createGroupsAcc(ds, { albumDetails } = {}) {
         }
         al.plays++;
         al.ms += ev.ms;
+        if (!(ev.flags & 8)) al.durationKnown++;
         al.lastTs = ev.loc;
         al.lastUtc = ev.t;
         al.days.add(ev.day);
