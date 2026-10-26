@@ -64,8 +64,9 @@ function locISO(loc) {
 const TRACK_KEY_ARTIST = 4294967296; // 2^32: tk = tr*2^32 + ar
 
 export function modelToTables(model) {
-  // Session duration_s is estimated; start is local display time and
-  // start_utc/end_utc are epoch seconds.
+  // tracks.album_id is 0 unless every event has the same known album.
+  // album_tracks carries exact attribution; session duration_s is estimated,
+  // start is local display time and start_utc/end_utc are epoch seconds.
   const tables = [];
   const artists = [...model.artists.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
@@ -84,6 +85,13 @@ export function modelToTables(model) {
     name: 'albums',
     headers: ['id', 'artist_id', 'name', 'artist', 'plays', 'ms', 'tracks', 'days', 'first_ts', 'last_ts'],
     rows: albums.map(([ak, al]) => [ak, Math.floor(ak / TRACK_KEY_ARTIST), al.name, al.artist, al.plays, al.ms, al.tracks.size, al.days.size, locISO(al.firstTs), locISO(al.lastTs)])
+  });
+  tables.push({
+    name: 'album_tracks',
+    headers: ['album_id', 'track_id', 'plays', 'ms', 'skips', 'days', 'first_ts', 'last_ts'],
+    rows: albums.flatMap(([ak, album]) => [...album.trackStats.values()]
+      .sort((first, second) => first.tk - second.tk)
+      .map(track => [ak, track.tk, track.plays, track.ms, track.skips, track.days.size, locISO(track.firstTs), locISO(track.lastTs)]))
   });
   tables.push({
     name: 'sessions',

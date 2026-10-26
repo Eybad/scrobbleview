@@ -257,19 +257,19 @@ function monthlySeries(monthMap, key) {
   }));
 }
 
-// Serie mensual (solo valores) para la sparkline de una fila de ranking.
-// Los álbumes no tienen serie propia en el modelo: se suma la de sus
-// canciones (mismo camino que la evolución de albumView).
+function albumSeries(model, monthly, metric) {
+  return fillMonths(sortedMonths(model.monthly)).map((mi) => ({
+    label: monthLabel(mi),
+    y: monthly.get(mi)?.[metric] ?? 0
+  }));
+}
+
+// Album series use their own attribution, including songs shared by releases.
 function rowSeries(model, tab, metric, id) {
   if (tab === 'albums') {
     const al = model.albums.byId.get(id);
     if (!al) return [];
-    const src = metric === 'ms' ? model.monthlyTrackMs : model.monthlyTrackPlays;
-    return fillMonths(sortedMonths(src)).map((mi) => {
-      let v = 0;
-      for (const tk of al.tracks) v += src.get(mi)?.get(tk) ?? 0;
-      return v;
-    });
+    return albumSeries(model, al.monthly, metric).map((point) => point.y);
   }
   const map = tab === 'artists'
     ? (metric === 'ms' ? model.monthlyArtistMs : model.monthlyArtistPlays)
@@ -729,7 +729,10 @@ export function trackView(model, tk, ctx = {}) {
   const byMs = (ctx?.metric ?? 'ms') === 'ms';
   const totalMs = model.totals.ms;
   const ar = tk % 4294967296;
-  const al = tr.ak > 0 ? model.albums.byId.get(tr.ak) : null;
+  const albumLinks = [...tr.albums]
+    .map((ak) => model.albums.byId.get(ak))
+    .map((album) => entityLink('album', album.id, album.name))
+    .join(' · ');
   const run = model.maxRun.get(tk) ?? 0;
   const evolution = lineChart({
     points: monthlySeries(byMs ? model.monthlyTrackMs : model.monthlyTrackPlays, tk),
@@ -740,7 +743,7 @@ export function trackView(model, tk, ctx = {}) {
     <header class="view-header">
       <p><a href="#/dashboard">← Volver al resumen</a></p>
       <h1>${esc(tr.name)}</h1>
-      <p class="view-meta">${entityLink('artist', ar, tr.artist)}${al ? ` · ${entityLink('album', al.id, al.name)}` : ''} · ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)} · ${pctOf(tr.ms, totalMs)} del total</p>
+      <p class="view-meta">${entityLink('artist', ar, tr.artist)}${albumLinks ? ` · ${albumLinks}` : ''} · ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)} · ${pctOf(tr.ms, totalMs)} del total</p>
       <p><button type="button" class="btn btn-secondary" data-filter-entity="track:${tk}">Filtrar todo por esta canción</button></p>
     </header>
     ${kpis([
@@ -768,19 +771,12 @@ export function albumView(model, ak, ctx = {}) {
   // ak = ar*2^32 + al: la parte alta es el artista (el residuo es el id del álbum).
   const ar = Math.floor(ak / 4294967296);
   const tracksLimit = resolveLimit(ctx, 'album-tracks', 25);
-  const songRows = [...al.tracks]
-    .map((tk) => model.tracks.byId.get(tk))
-    .filter(Boolean)
+  const songRows = [...al.trackStats.values()]
     .sort((x, y) => (byMs ? y.ms - x.ms || y.plays - x.plays : y.plays - x.plays || y.ms - x.ms))
     .slice(0, tracksLimit)
-    .map((tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk }));
-  const monthTrackMap = evoByMs ? model.monthlyTrackMs : model.monthlyTrackPlays;
+    .map((tr) => ({ name: model.tracks.byId.get(tr.tk).name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk }));
   const evolution = lineChart({
-    points: fillMonths(sortedMonths(model.monthly)).map((mi) => {
-      let sum = 0;
-      for (const tk of al.tracks) sum += monthTrackMap.get(mi)?.get(tk) ?? 0;
-      return { label: monthLabel(mi), y: sum };
-    }),
+    points: albumSeries(model, al.monthly, evoByMs ? 'ms' : 'plays'),
     format: evoByMs ? fmtMs : fmtNum
   });
   return `
@@ -808,7 +804,7 @@ export function albumView(model, ak, ctx = {}) {
           valueLabel: valLabel,
           link: (r) => `#/track/${r.id}`,
           caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
-          spark: (r) => rowSeries(model, 'tracks', byMs ? 'ms' : 'plays', r.id)
+          spark: (r) => albumSeries(model, al.trackStats.get(r.id).monthly, byMs ? 'ms' : 'plays').map((point) => point.y)
         })
         : '<p class="empty">Sin canciones registradas.</p>')}
     </div>`;

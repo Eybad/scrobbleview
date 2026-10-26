@@ -406,6 +406,28 @@ test('constancia interanual: oct-2023→mar-2024 activo da coverage 1', () => {
 // necesita); cada track guarda su ak (enlace canción→álbum, 0 si no hay
 // álbum); cada artista guarda sus ak (álbumes del artista) y su reloj
 // día×hora (listeningClock por artista, índice dow*24+hour como dayHour).
+test('album tracks retain their own totals and monthly history across shared titles', () => {
+  const model = aggregate(buildDataset([
+    { t: D0, m: 180000, track: 'Shared', artist: 'X', album: 'A' },
+    { t: D0 + 31 * 86400, m: 180000, track: 'Shared', artist: 'X', album: 'B' },
+    { t: D0 + 31 * 86400 + 180, m: 60000, track: 'Shared', artist: 'X', album: 'B', flags: 2 }
+  ]), { tz: UTC });
+  const track = [...model.tracks.byId.values()][0];
+  assert.equal(model.tracks.byId.size, 1);
+  assert.equal(track.plays, 3);
+  const [first, second] = [...model.albums.byId.values()];
+  const firstTrack = first.trackStats.get(track.tk);
+  const secondTrack = second.trackStats.get(track.tk);
+  assert.deepEqual([firstTrack.plays, firstTrack.ms, firstTrack.skips], [1, 180000, 0]);
+  assert.deepEqual([secondTrack.plays, secondTrack.ms, secondTrack.skips], [2, 240000, 1]);
+  assert.deepEqual([...firstTrack.monthly], [[202401, { plays: 1, ms: 180000 }]]);
+  assert.deepEqual([...secondTrack.monthly], [[202402, { plays: 2, ms: 240000 }]]);
+  assert.deepEqual([...first.monthly], [[202401, { plays: 1, ms: 180000 }]]);
+  assert.deepEqual([...second.monthly], [[202402, { plays: 2, ms: 240000 }]]);
+  assert.equal(track.ak, 0);
+  assert.deepEqual([...track.albums], [first.id, second.id]);
+});
+
 test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clock', () => {
   const ds = buildDataset([
     { t: D0, m: 1000, track: 'A1', artist: 'X', album: 'L' },

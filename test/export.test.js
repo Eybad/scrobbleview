@@ -143,3 +143,29 @@ test('export: artist_id de albums es el artista (parte alta de ak)', async () =>
   assert.ok(row, 'hay álbumes con artista ≠ id de álbum');
   assert.equal(row[1], Math.floor(row[0] / 4294967296), 'artist_id = ar');
 });
+
+test('CSV tables preserve album-track attribution without assigning global totals to one album', async () => {
+  const model = await analyze(memoryBytes('albums.json', JSON.stringify([
+    ['2024-01-01T12:00:00Z', 'Album A', 'spotify:track:1'],
+    ['2024-02-01T12:00:00Z', 'Album B', 'spotify:track:2']
+  ].map(([ts, album, spotify_track_uri]) => ({
+    ts, spotify_track_uri, ms_played: 180000,
+    master_metadata_track_name: 'Shared',
+    master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: album
+  })))), { tz: UTC, now: 1704067200 });
+  const tables = new Map(modelToTables(model).map(table => [table.name, table]));
+  const tracks = tables.get('tracks');
+  const record = Object.fromEntries(tracks.headers.map((header, index) => [header, tracks.rows[0][index]]));
+  assert.equal(record.plays, 2);
+  assert.equal(record.ms, 360000);
+  assert.equal(record.album_id, 0);
+  const albumTracks = tables.get('album_tracks');
+  assert.ok(albumTracks, 'album-track relation is exported');
+  const rows = albumTracks.rows.map(row => Object.fromEntries(albumTracks.headers.map((header, index) => [header, row[index]])));
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map(row => [row.album_id, row.track_id, row.plays, row.ms]), [
+    [4294967297, 4294967297, 1, 180000],
+    [4294967298, 4294967297, 1, 180000]
+  ]);
+});

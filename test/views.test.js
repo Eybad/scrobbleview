@@ -13,6 +13,7 @@ import { memoryBytes } from '../src/parse/adapters/memory-bytes.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { offsetTable } from '../src/aggregate/adapters/offset-table.js';
 import { syntheticJSON } from '../src/synthetic.js';
+import { lineChart, sparkline, fmtMs } from '../src/charts.js';
 
 const UTC = fixedTz('utc', 0);
 
@@ -155,6 +156,44 @@ test('track: racha máxima, enlace al álbum y botón de filtro', async () => {
   assert.ok(html.includes('Racha máxima'), 'maxRun visible');
   assert.ok(html.includes(`data-filter-entity="track:${tk}"`), 'botón de filtro por entidad');
   assert.ok(html.includes('#/artist/'), 'enlace al artista');
+});
+
+test('album views and sparklines isolate shared tracks by album for both metrics', async () => {
+  const json = JSON.stringify([
+    ['2024-01-01T12:00:00Z', 180000, 'Album A', 'spotify:track:1'],
+    ['2024-02-01T12:00:00Z', 180000, 'Album B', 'spotify:track:2'],
+    ['2024-02-01T12:03:00Z', 60000, 'Album B', 'spotify:track:2']
+  ].map(([ts, ms_played, album, spotify_track_uri]) => ({
+    ts, ms_played, spotify_track_uri,
+    master_metadata_track_name: 'Shared song',
+    master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: album
+  })));
+  const model = await analyze(memoryBytes('albums.json', json), { tz: UTC, now: 1704067200 });
+  assert.equal(model.tracks.byId.size, 1);
+  const albums = [...model.albums.byId.values()];
+  for (const [index, album] of albums.entries()) {
+    for (const metric of ['plays', 'ms']) {
+      const values = metric === 'plays'
+        ? (index === 0 ? [1, 0] : [0, 2])
+        : (index === 0 ? [180000, 0] : [0, 240000]);
+      const html = renderView('album', model, album.id, { metric });
+      const row = html.match(/<tr\b[^>]*>.*Shared song.*?<\/tr>/)?.[0];
+      assert.ok(row);
+      assert.ok(row.includes(`class="cell-metric-val">${metric === 'plays' ? (index === 0 ? '1' : '2') : (index === 0 ? '3 min 0s' : '4 min 0s')}</span>`));
+      assert.ok(row.includes(sparkline({ points: values, width: 80, height: 24 })), `${album.name}: track sparkline, ${metric}`);
+      assert.ok(html.includes(lineChart({
+        points: [{ label: 'ene 2024', y: values[0] }, { label: 'feb 2024', y: values[1] }],
+        format: metric === 'ms' ? fmtMs : String
+      })), `${album.name}: monthly evolution, ${metric}`);
+      const ranking = rankCardHTML(model, { tab: 'albums', metric });
+      const albumRow = (ranking.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/g) ?? [])
+        .find(value => value.includes(`href="#/album/${album.id}"`));
+      assert.ok(albumRow?.includes(sparkline({ points: values, width: 80, height: 24 })), `${album.name}: ranking sparkline, ${metric}`);
+    }
+  }
+  const trackHtml = renderView('track', model, [...model.tracks.byId.keys()][0]);
+  for (const album of albums) assert.ok(trackHtml.includes(`href="#/album/${album.id}"`));
 });
 
 test('album: canciones, fechas y botón de filtro', async () => {

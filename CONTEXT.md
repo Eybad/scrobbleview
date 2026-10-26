@@ -15,3 +15,9 @@ La suma de los milisegundos reproducidos conocidos. Las reproducciones solapadas
 
 **Estimated session duration (duración estimada de sesión)**:
 El tiempo transcurrido entre el inicio estimado más temprano y el final más tardío de una sesión. Incluye pausas cortas y no permite reconstruir pausas dentro de una reproducción ni demostrar escucha simultánea.
+
+**Grouped track (canción agrupada)**:
+Una canción identificada por su título y el nombre del artista. Distintos URI de Spotify pueden pertenecer a la misma canción agrupada.
+
+**Album track (canción dentro de un álbum)**:
+La parte del historial de una canción agrupada atribuida a un álbum. Sus totales y su evolución incluyen únicamente los registros que nombran ese álbum.

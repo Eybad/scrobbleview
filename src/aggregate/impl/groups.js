@@ -20,9 +20,17 @@ export function createGroupsAcc(ds) {
   const tracks = new Map(); // tk -> {id: tr, tk, ak, ar, name, artist, plays, ms, skips, days, years, firstTs, lastTs}
   const albums = new Map(); // ak -> {id: ak, artist, name, plays, ms, firstTs, lastTs, days, tracks}
 
+  function addMonthly(monthly, month, ms) {
+    let entry = monthly.get(month);
+    if (!entry) { entry = { plays: 0, ms: 0 }; monthly.set(month, entry); }
+    entry.plays++;
+    entry.ms += ms;
+  }
+
   return {
     onEvent(ev) {
       const year = Math.floor(ev.ymd / 10000);
+      const month = Math.floor(ev.ymd / 100);
       const tk = trackKey(ev.tr, ev.ar);
       const ak = ev.al > 0 ? albumKey(ev.ar, ev.al) : 0;
 
@@ -67,7 +75,8 @@ export function createGroupsAcc(ds) {
         t = {
           id: ev.tr,
           tk,
-          ak, // clave del álbum (0 si no hay); habilita el enlace canción→álbum
+          ak, // Unique attribution only; 0 also represents multiple albums.
+          albums: new Set(),
           ar: ev.ar,
           name: ds.dicts.tracks.get(ev.tr),
           artist: ev.ar > 0 ? ds.dicts.artists.get(ev.ar) : '(Desconocido)',
@@ -78,6 +87,8 @@ export function createGroupsAcc(ds) {
         tracks.set(tk, t);
       }
       t.plays++;
+      if (t.ak !== ak) t.ak = 0;
+      if (ak > 0) t.albums.add(ak);
       t.ms += ev.ms;
       if (ev.isSkipped) t.skips++;
       t.days.add(ev.day);
@@ -96,7 +107,9 @@ export function createGroupsAcc(ds) {
             plays: 0, ms: 0,
             firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t,
             days: new Set(), // días con escucha del álbum
-            tracks: new Set() // tk de las canciones del álbum
+            tracks: new Set(), // tk de las canciones del álbum
+            trackStats: new Map(),
+            monthly: new Map()
           };
           albums.set(ak, al);
         }
@@ -106,6 +119,23 @@ export function createGroupsAcc(ds) {
         al.lastUtc = ev.t;
         al.days.add(ev.day);
         al.tracks.add(tk);
+        addMonthly(al.monthly, month, ev.ms);
+
+        let albumTrack = al.trackStats.get(tk);
+        if (!albumTrack) {
+          albumTrack = {
+            tk, plays: 0, ms: 0, skips: 0, days: new Set(), monthly: new Map(),
+            firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t
+          };
+          al.trackStats.set(tk, albumTrack);
+        }
+        albumTrack.plays++;
+        albumTrack.ms += ev.ms;
+        if (ev.isSkipped) albumTrack.skips++;
+        albumTrack.days.add(ev.day);
+        albumTrack.lastTs = ev.loc;
+        albumTrack.lastUtc = ev.t;
+        addMonthly(albumTrack.monthly, month, ev.ms);
       }
     },
 
