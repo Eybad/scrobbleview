@@ -178,6 +178,7 @@ function prevTotals() {
 }
 
 function parseHash() {
+  if (location.hash === '#main-content') return ['dashboard', null, ''];
   const h = location.hash.replace(/^#\/?/, '');
   const [path, query] = h.split('?');
   const [name, id] = path.split('/');
@@ -681,7 +682,17 @@ if (cacheAvailable()) {
 }
 
 let lastView = parseHash()[0] || 'dashboard';
+function focusMainContent() {
+  const main = document.getElementById('main-content');
+  main.focus({ preventScroll: true });
+  main.scrollIntoView({ block: 'start' });
+}
+document.querySelector('.skip-link').addEventListener('click', (event) => {
+  event.preventDefault();
+  focusMainContent();
+});
 window.addEventListener('hashchange', () => {
+  if (location.hash === '#main-content') { focusMainContent(); return; }
   const [name] = parseHash();
   applyHashParams();
   render();

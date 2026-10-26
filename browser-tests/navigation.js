@@ -70,6 +70,10 @@ async function run() {
   element('[data-preset="4w"]').click();
   assert(kpiValue('Reproducciones') === '2', 'El rango de 4 semanas debe mostrar 2 reproducciones');
   const filteredHash = appWindow.location.hash;
+  element('.skip-link').click();
+  assert(appWindow.location.hash === filteredHash, 'Saltar al contenido debe conservar la ruta y los filtros');
+  assert(frame.contentDocument.activeElement === element('#main-content'), 'Saltar al contenido debe mover el foco');
+  assert(kpiValue('Reproducciones') === '2', 'Saltar al contenido debe conservar las cifras');
   element('.app-nav a[href="#/sessions"]').click();
   await waitFor(() => element('#view-root h1').textContent === 'Sesiones de escucha', 'abrir Sesiones');
   element('[data-preset="all"]').click();
