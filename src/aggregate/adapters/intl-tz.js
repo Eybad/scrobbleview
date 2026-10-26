@@ -17,7 +17,7 @@
 // Fail-fast: endSec < startSec o rangos fuera de Int32 (1901-2038, el límite
 // del Int32Array de offset-table) lanzan RangeError — nunca tabla corrupta.
 //
-// Node ≥ 18.13 trae ICU completo (full-icu): las zonas IANA funcionan.
+// Requires Intl.DateTimeFormat with IANA time zone data.
 
 import { offsetTable } from './offset-table.js';
 

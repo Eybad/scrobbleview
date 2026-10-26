@@ -1,6 +1,6 @@
-// app/views.js — render de las 7 vistas desde StatsModel
+// Pure HTML views for sections and entity details.
 //
-// Funciones puras: (model, ctx) → string HTML. ctx = { tz } (por ahora).
+// ctx supplies the effective range, metrics, table limits and ranking state.
 // Navegación entre vistas por hash (#/artist/123, #/track/…, #/album/…).
 // Los gráficos son componentes SVG puros de src/charts.js.
 
@@ -445,7 +445,9 @@ export function footerMetaText(model) {
   const filesLabel = sourcesCount === 1 ? 'archivo' : 'archivos';
   const parts = [`${fmtNum(sourcesCount)} ${filesLabel}`, fmtBytes(model.meta.bytesRead)];
   const warnings = model.meta.warnings ?? [];
-  const ignored = warnings.filter((warning) => warning.code !== 'OVERLAPPING_SOURCES');
+  const ignored = warnings.filter((warning) => warning.code !== 'OVERLAPPING_SOURCES' && warning.code !== 'BAD_MS');
+  const invalidDurations = warnings.filter((warning) => warning.code === 'BAD_MS').length;
+  if (invalidDurations) parts.push(`${fmtNum(invalidDurations)} duraciones inválidas tratadas como desconocidas`);
   if (ignored.length) {
     const byCode = new Map();
     for (const warning of ignored) byCode.set(warning.code, (byCode.get(warning.code) || 0) + 1);

@@ -217,7 +217,7 @@ export function advancedFilterCount(state, lastTs = 0) {
 }
 
 // Serialización del estado de filtros a query de URL (deep-link + reload).
-// Solo lo que la UI puede producir: rango, días, franjas, toggles 3-estado y
+// Solo lo que la UI puede producir: rango, días, franjas, toggles con desconocidos y
 // entidad. years/months son paths muertos de la API pura: no se serializan.
 // Los valores (dígitos, coma, guión, yes/no) son URL-safe: sin encodeo.
 export function filterParams(state) {
@@ -298,7 +298,7 @@ export function filterBarHTML(model, state) {
     return `<button type="button" class="chip-toggle" data-block="${b.id}" aria-pressed="${on}">${b.label}</button>`;
   }).join('');
 
-  // 3 estados: Todos (null) / Solo sí (true) / Excluir (false).
+  // All values, explicit true/false, or unknown.
   const toggles = ['skip', 'shuffle', 'offline'].map((k) => {
     const label = k === 'skip' ? 'Saltadas' : k === 'shuffle' ? 'Aleatorio' : 'Sin conexión';
     const v = state[k] === true ? 'yes' : state[k] === false ? 'no' : state[k] === 'unknown' ? 'unknown' : '';

@@ -1,7 +1,7 @@
 // src/export.js — modelo procesado → JSON plano (backup) y tablas CSV (análisis)
 //
 // Seam puro: modelToJSON(model, { now }) → objeto sin Map/Set/typed arrays,
-// listo para JSON.stringify. Exporta el modelo COMPLETO (ignora filtros).
+// listo para JSON.stringify. Serializa el modelo recibido; el caller elige su alcance.
 // Las claves de Map numéricas se serializan como strings de objeto (igual
 // que JSON haría de todos modos); los Set salen como arrays ordenados.
 // modelToTables(model) aplana los maps a filas relacionales para el export

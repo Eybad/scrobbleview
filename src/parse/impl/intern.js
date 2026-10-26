@@ -117,7 +117,7 @@ export class Interner {
   // Rehidrata un Interner desde partes serializadas (caché IndexedDB).
   // keys/offsets/lengths pueden tener capacidad mayor que el uso real: count
   // define las claves válidas. Reconstruye table (hash → ids) y strings.
-  // count se acota contra la longitud real de los arrays y los rangos de bytes
+  // count se valida contra la longitud real de los arrays y los rangos de bytes
   // se validan: un count fabricado o un rango corrupto (caché manipulada) lanzan
   // en vez de recortar en silencio, que produciría entidades truncadas.
   // El llamador (storage.js) convierte la excepción en un miss de caché.

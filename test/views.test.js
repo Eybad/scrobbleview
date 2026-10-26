@@ -1022,7 +1022,7 @@ test('home page UI: conditional storage hierarchy, cache card with metadata & tr
   assert.ok(html.includes('<details class="home-help">'), 'collapsible guide for downloading Spotify history');
   assert.ok(html.includes('¿Cómo descargo mi historial de Spotify?'), 'onboarding summary text present');
   assert.ok(html.includes('Historial de reproducción ampliado'), 'guide mentions extended streaming history');
-  assert.ok(html.includes('100% local y offline:'), 'concise privacy pill copy');
+  assert.ok(html.includes('100% local:') && html.includes('cargá antes la página o servila localmente'), 'concise privacy pill copy');
 
   const blockOf = (sel) => {
     const idx = css.indexOf(sel);
@@ -1049,4 +1049,11 @@ test('wrapped titles identify the selected year or effective period', async () =
   const month = renderView('wrapped', model, null, { range: rangeFromMonth(202502) });
   assert.match(month, /Tu período en resumen/);
   assert.match(month, /feb 2025/);
+});
+
+test('invalid durations are described as unknown without claiming event removal', async () => {
+  const model = await demoModel();
+  const changed = { ...model, meta: { ...model.meta, warnings: [{ code: 'BAD_MS', index: 1 }] } };
+  assert.match(footerMetaText(changed), /duraciones inválidas tratadas como desconocidas/);
+  assert.doesNotMatch(footerMetaText(changed), /ignorad/);
 });

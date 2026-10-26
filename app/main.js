@@ -499,7 +499,7 @@ function wireFilters() {
     });
   });
 
-  // Toggles skip/shuffle/offline de 3 estados (Todos / Solo sí / Excluir).
+  // Flag filters distinguish all, true, false and unknown values.
   appRoot.querySelectorAll('[data-toggle3]').forEach((sel) => {
     sel.addEventListener('change', () => {
       const k = sel.dataset.toggle3;

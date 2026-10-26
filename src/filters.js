@@ -15,7 +15,7 @@
 //   years: Set<year> | null, months: Set<yyyymm> | null
 //   hours: Set<hour> | null, dows: Set<dow> | null
 //   artistId: ar | null, trackId: tk (tr*2^32+ar) | null, albumId: ak | null
-//   skip/shuffle/offline: boolean | null (null = sin filtro)
+//   skip/shuffle/offline: boolean | 'unknown' | null (null = sin filtro)
 
 import { derive, civilFromDays } from './aggregate/impl/derive.js';
 
@@ -145,7 +145,7 @@ export function applyFilters(ds, state, tz, derived = null, { collectIndices = t
 }
 
 // Subconjunto del Dataset: mismas columnas y dicts, count recortado.
-// El subconjunto de un dataset ya ordenado por local conserva el orden.
+// El subconjunto conserva el orden de los índices recibidos.
 export function filterDataset(ds, indices) {
   const n = indices.length;
   const t = new Int32Array(n);
