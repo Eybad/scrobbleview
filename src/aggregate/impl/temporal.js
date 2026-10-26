@@ -6,7 +6,7 @@
 
 import { trackKey, albumKey } from './groups.js';
 
-export function createTemporalAcc(minMs = 0, history = null) {
+export function createTemporalAcc(minMs = 0, history = null, { compact = false } = {}) {
   const yearly = new Map(); // year -> ver abajo
   const monthly = new Map(); // monthIndex -> {plays, ms}
   const monthlyDiscovery = new Map(); // monthIndex -> {plays, new, rep, unknown}
@@ -134,11 +134,10 @@ export function createTemporalAcc(minMs = 0, history = null) {
       }
 
       let d = daily.get(ev.day);
-      if (!d) { d = { plays: 0, ms: 0, artists: new Map(), tracks: new Map() }; daily.set(ev.day, d); }
+      if (!d) { d = { plays: 0, ms: 0, artists: compact ? null : new Map(), tracks: compact ? null : new Map() }; daily.set(ev.day, d); }
       d.plays++;
       d.ms += ev.ms;
-      bump(d.artists, ev.ar, 1);
-      bump(d.tracks, tk, 1);
+      if (!compact) { bump(d.artists, ev.ar, 1); bump(d.tracks, tk, 1); }
 
       if (!(ev.flags & 8) && ev.ms >= minMs) {
         const ht = hourTracks[ev.hour];

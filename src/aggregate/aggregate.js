@@ -13,6 +13,7 @@ import { createBehaviorAcc } from './impl/behavior.js';
 import { createTransitionsAcc } from './impl/transitions.js';
 import { computeConcentration } from './impl/concentration.js';
 
+import { AbortError } from '../parse/errors.js';
 import { resolveOptions } from '../defaults.js';
 
 const TOP_N = 100;
@@ -35,6 +36,8 @@ export function aggregate(ds, opts = {}) {
   const skipThresholdMs = opts.skipThresholdMs;
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
+  if (opts.signal?.aborted) throw new AbortError();
+  opts.onProgress?.(0, 'Ordenando eventos');
   const baseDerived = opts.derived ?? derive(ds, tz);
   const derived = opts.indices ? selectDerived(baseDerived, opts.indices) : baseDerived;
   const cols = {
@@ -44,15 +47,19 @@ export function aggregate(ds, opts = {}) {
   const order = derived.order;
   const totals = computeTotals(ds, minMs, skipThresholdMs, opts.indices);
 
-  const groups = createGroupsAcc(ds);
-  const temporal = createTemporalAcc(minMs, opts.history);
-  const sessions = createSessionsAcc({ tz, gapMinutes: opts.sessionGapMinutes });
+  const groups = createGroupsAcc(ds, opts);
+  const temporal = createTemporalAcc(minMs, opts.history, opts);
+  const sessions = createSessionsAcc({ tz, gapMinutes: opts.sessionGapMinutes, compact: opts.compact });
   const behavior = createBehaviorAcc();
   const transitions = createTransitionsAcc();
 
   const n = cols.t.length;
   const ev = {};
   for (let k = 0; k < n; k++) {
+    if (k % 4096 === 0) {
+      if (opts.signal?.aborted) throw new AbortError();
+      opts.onProgress?.(0.1 + 0.7 * k / n, 'Calculando estadísticas');
+    }
     const i = order[k];
     ev.k = k;
     ev.t = cols.t[k];
@@ -83,11 +90,15 @@ export function aggregate(ds, opts = {}) {
   const tr = transitions.finalize();
   const concentration = computeConcentration(g);
 
-  return buildStats({
+  if (opts.signal?.aborted) throw new AbortError();
+  opts.onProgress?.(0.9, 'Preparando rankings');
+  const model = buildStats({
     ds, tz, now, minMs, skipThresholdMs,
     cols, localOrder: derived.localOrder, totals, groups: g, temporal: t, sessions: s, behavior: b,
     transitions: tr, concentration
   });
+  opts.onProgress?.(1, 'Estadísticas listas');
+  return model;
 }
 
 function rankByLowSkipRate(entities) {

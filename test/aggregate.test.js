@@ -564,3 +564,20 @@ test('historical first appearances survive filtering', async () => {
   assert.equal(filtered.monthlyDiscovery.get(202402).rep, 1);
   assert.equal(filtered.yearly.get(2024).newArtists, 1);
 });
+
+test('compact aggregation defers album details without changing overview statistics', () => {
+  const ds = buildDataset([
+    { t: D0, m: 60000, track: 'T', artist: 'A', album: 'Album' },
+    { t: D0 + 60, m: 60000, track: 'T', artist: 'A', album: 'Album' }
+  ]);
+  const full = aggregate(ds, { tz: UTC, now: 1 });
+  const compact = aggregate(ds, { tz: UTC, now: 1, compact: true, albumDetails: null });
+  assert.deepEqual(compact.totals, full.totals);
+  assert.deepEqual(compact.sessionsStats, full.sessionsStats);
+  assert.deepEqual(compact.intraSession, full.intraSession);
+  assert.equal([...compact.albums.byId.values()][0].trackStats.size, 0);
+  assert.equal(compact.sessions[0].tracks, undefined);
+  const albumId = [...full.albums.byId.keys()][0];
+  const detail = aggregate(ds, { tz: UTC, now: 1, compact: true, albumDetails: albumId });
+  assert.deepEqual(detail.albums.byId.get(albumId), full.albums.byId.get(albumId));
+});

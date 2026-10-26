@@ -6,7 +6,7 @@ import { civilFromDays } from './derive.js';
 import { trackKey } from './groups.js';
 import { SESSION_GAP_MINUTES } from '../../defaults.js';
 
-export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES }) {
+export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compact = false }) {
   const sessions = [];
   let current = null;
   let intraSessionsWithRepeats = 0;
@@ -20,6 +20,7 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES }) {
     }
     if (reps > 0) intraSessionsWithRepeats++;
     intraRepeatedPlays += reps;
+    if (compact) { delete s.tracks; delete s.artists; }
   }
 
   function mergeCounts(first, second) {

@@ -15,7 +15,7 @@ export function albumKey(ar, al) {
   return ar * 4294967296 + al;
 }
 
-export function createGroupsAcc(ds) {
+export function createGroupsAcc(ds, { albumDetails } = {}) {
   const artists = new Map(); // ar -> {id, name, plays, ms, skips, days, months, years, firstTs, firstTrack, lastTs, albums, clock}
   const tracks = new Map(); // tk -> {id: tr, tk, ak, ar, name, artist, plays, ms, skips, days, years, firstTs, lastTs}
   const albums = new Map(); // ak -> {id: ak, artist, name, plays, ms, firstTs, lastTs, days, tracks}
@@ -125,6 +125,7 @@ export function createGroupsAcc(ds) {
         al.tracks.add(tk);
         addMonthly(al.monthly, month, ev.ms);
 
+        if (albumDetails !== undefined && albumDetails !== ak) return;
         let albumTrack = al.trackStats.get(tk);
         if (!albumTrack) {
           albumTrack = {
