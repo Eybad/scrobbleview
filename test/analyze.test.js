@@ -122,3 +122,20 @@ test('unknown durations and flags stay separate from zero and false', async () =
     assert.match(filterBarHTML(model, state), /value="unknown" selected>Desconocido/);
   }
 });
+
+test('facade and aggregation share defaults and session options for parsed datasets', async () => {
+  const { parse } = await import('../src/parse/parse.js');
+  const ds = await parse(memoryBytes('options', JSON.stringify([
+    { ts: '2024-01-01T10:00:00Z', ms_played: 2000, master_metadata_track_name: 'T' },
+    { ts: '2024-01-01T10:05:00Z', ms_played: 2000, master_metadata_track_name: 'T' }
+  ])));
+  const defaults = await analyze(ds, { tz: UTC });
+  assert.equal(defaults.sessionsStats.count, 1);
+  assert.equal(defaults.totals.playsSignificant, 0);
+  const custom = await analyze(ds, { tz: UTC, sessionGapMinutes: 1, minMs: 1000, skipThresholdMs: 1000 });
+  assert.equal(custom.sessionsStats.count, 2);
+  assert.equal(custom.sessionsStats.gapMinutes, 1);
+  assert.equal(custom.totals.playsSignificant, 2);
+  assert.equal(custom.totals.playsSkipped, 0);
+  await assert.rejects(analyze(memoryBytes('invalid', '[]'), { tz: UTC, chunkBytes: 0 }), /chunkBytes/);
+});

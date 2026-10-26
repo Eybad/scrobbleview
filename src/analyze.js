@@ -5,21 +5,17 @@
 
 import { parse } from './parse/parse.js';
 import { aggregate } from './aggregate/aggregate.js';
-import { DEFAULT_MIN_MS, DEFAULT_SKIP_THRESHOLD_MS, DEFAULT_CHUNK_BYTES } from './defaults.js';
+import { assertDataset } from './parse/dataset.js';
+import { resolveOptions } from './defaults.js';
 
-export async function analyze(sources, opts = {}) {
-  const tz = opts.tz;
-  if (!tz || typeof tz.offsetMinutes !== 'function') {
+// Accepting a parsed dataset lets the composition root construct its time zone
+// from the actual range before crossing the same aggregation seam.
+export async function analyze(input, options = {}) {
+  const opts = resolveOptions(options);
+  if (!opts.tz || typeof opts.tz.offsetMinutes !== 'function') {
     throw new TypeError('analyze: se requiere tz (puerto offsetMinutes(t))');
   }
-  const ds = await parse(sources, {
-    chunkBytes: opts.chunkBytes ?? DEFAULT_CHUNK_BYTES,
-    onProgress: opts.onProgress ?? null
-  });
-  return aggregate(ds, {
-    tz,
-    now: opts.now,
-    minMs: opts.minMs ?? DEFAULT_MIN_MS,
-    skipThresholdMs: opts.skipThresholdMs ?? DEFAULT_SKIP_THRESHOLD_MS
-  });
+  const ds = ArrayBuffer.isView(input?.t) ? input : await parse(input, opts);
+  assertDataset(ds);
+  return aggregate(ds, opts);
 }

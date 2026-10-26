@@ -17,12 +17,13 @@ import { decodeJSONString, hasEscape, utf8Encode } from './text.js';
 import { EmptyFileError, SchemaError } from './errors.js';
 import { assertDataset } from './dataset.js';
 
-const DEFAULT_CHUNK = 262144;
+import { resolveOptions } from '../defaults.js';
 
 export async function parse(src, opts = {}) {
   const sources = Array.isArray(src) ? src : [src];
   if (sources.length === 0) throw new TypeError('parse: al menos un ByteSource');
-  const chunkBytes = opts.chunkBytes ?? DEFAULT_CHUNK;
+  opts = resolveOptions(opts);
+  const chunkBytes = opts.chunkBytes;
   const onProgress = opts.onProgress ?? null;
 
   const tracks = new Interner();

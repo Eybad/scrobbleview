@@ -5,6 +5,7 @@
 // #/artist/123, #/calendar/2024, …). Los filtros re-agregan sobre un subconjunto
 // del dataset (nunca se re-parsea).
 
+import { analyze as analyzeDataset } from '../src/analyze.js';
 import { parse } from '../src/parse/parse.js';
 import { aggregate } from '../src/aggregate/aggregate.js';
 import { derive } from '../src/aggregate/impl/derive.js';
@@ -124,7 +125,7 @@ async function analyze(sources, { onProgress }) {
   ds = await parse(sources, { onProgress });
   tz = buildTz(ds);
   derived = derive(ds, tz);
-  model = aggregate(ds, { tz, now: Math.floor(Date.now() / 1000) });
+  model = await analyzeDataset(ds, { tz, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
   current = model;
@@ -140,7 +141,7 @@ async function loadCached() {
   ds = cached;
   tz = buildTz(ds);
   derived = derive(ds, tz);
-  model = aggregate(ds, { tz, now: Math.floor(Date.now() / 1000) });
+  model = await analyzeDataset(ds, { tz, now: Math.floor(Date.now() / 1000) });
   state = emptyFilterState();
   rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
   current = model;

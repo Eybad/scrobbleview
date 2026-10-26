@@ -13,6 +13,8 @@ import { createBehaviorAcc } from './impl/behavior.js';
 import { createTransitionsAcc } from './impl/transitions.js';
 import { computeConcentration } from './impl/concentration.js';
 
+import { resolveOptions } from '../defaults.js';
+
 const TOP_N = 100;
 const TOP_RATE_N = 100;
 const TOP_OBSESSION_N = 100;
@@ -24,12 +26,13 @@ const MIN_MONTHS_FOR_CONSTANCY = 6;
 const MIN_ONE_HIT_SHARE = 0.8;
 
 export function aggregate(ds, opts = {}) {
+  opts = resolveOptions(opts);
   const tz = opts.tz;
   if (!tz || typeof tz.offsetMinutes !== 'function') {
     throw new TypeError('aggregate: se requiere tz (puerto offsetMinutes(t))');
   }
-  const minMs = opts.minMs ?? 30000;
-  const skipThresholdMs = opts.skipThresholdMs ?? 10000;
+  const minMs = opts.minMs;
+  const skipThresholdMs = opts.skipThresholdMs;
   const now = opts.now ?? Math.floor(Date.now() / 1000);
 
   const derived = derive(ds, tz);
@@ -42,7 +45,7 @@ export function aggregate(ds, opts = {}) {
 
   const groups = createGroupsAcc(ds);
   const temporal = createTemporalAcc(minMs, opts.history);
-  const sessions = createSessionsAcc({ tz });
+  const sessions = createSessionsAcc({ tz, gapMinutes: opts.sessionGapMinutes });
   const behavior = createBehaviorAcc();
   const transitions = createTransitionsAcc();
 

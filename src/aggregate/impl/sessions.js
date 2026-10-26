@@ -6,7 +6,7 @@ import { civilFromDays } from './derive.js';
 import { trackKey } from './groups.js';
 import { SESSION_GAP_MINUTES } from '../../defaults.js';
 
-export function createSessionsAcc({ tz }) {
+export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES }) {
   const sessions = [];
   let current = null;
   let intraSessionsWithRepeats = 0;
@@ -43,7 +43,7 @@ export function createSessionsAcc({ tz }) {
         return;
       }
       const gapMin = (startUtc - current.endUtc) / 60;
-      if (gapMin > SESSION_GAP_MINUTES) {
+      if (gapMin > gapMinutes) {
         sessions.push(current);
         current = {
           start, end: ev.loc, startUtc, endUtc: ev.t,
@@ -65,7 +65,7 @@ export function createSessionsAcc({ tz }) {
       }
 
       // End-time order can reveal a long interval after an earlier split.
-      while (sessions.length && current.startUtc - sessions.at(-1).endUtc <= SESSION_GAP_MINUTES * 60) {
+      while (sessions.length && current.startUtc - sessions.at(-1).endUtc <= gapMinutes * 60) {
         const previous = sessions.pop();
         if (previous.startUtc < current.startUtc) {
           current.startUtc = previous.startUtc;
@@ -108,7 +108,7 @@ export function createSessionsAcc({ tz }) {
       };
 
       const sessionsStats = {
-        gapMinutes: SESSION_GAP_MINUTES,
+        gapMinutes,
         count: sessions.length,
         avgDuration: durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0,
         medianDuration: median(durations),
