@@ -39,6 +39,12 @@ test('real worker preserves filters, historical discovery and deferred album att
     onProgress: (fraction, label) => progress.push([fraction, label])
   });
   assert.equal(model.totals.records, 2);
+  assert.equal(model.cols, undefined);
+  assert.equal(model.meta.firstEventLocal, Date.parse('2024-01-01T12:00:00Z') / 1000);
+  const { renderView } = await import('../app/views.js');
+  for (const view of ['dashboard', 'hours', 'habits', 'sessions', 'discovery', 'yearly', 'calendar', 'wrapped']) {
+    assert.doesNotMatch(renderView(view, model), /NaN|undefined/);
+  }
   assert.ok(progress.some(([, label]) => label === 'Calculando estadísticas'));
   const albumId = [...model.albums.byId.keys()][0];
   assert.equal(model.albums.byId.get(albumId).trackStats.size, 0);

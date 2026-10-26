@@ -1367,7 +1367,7 @@ export function wrappedView(model, id, ctx) {
     </div>
     <div class="grid-2">
       ${card('Así empezó', `<ul class="receipt">
-        <li><span>Primera escucha</span><span>${esc(fmtLocal(model.cols.loc[0] ?? null))}</span></li>
+        <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstEventLocal ?? model.cols?.loc[0] ?? null))}</span></li>
         ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
         ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
       </ul>`)}

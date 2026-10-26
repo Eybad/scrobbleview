@@ -32,6 +32,7 @@ export function createAnalysisEngine() {
   }
 
   async function initialize(dataset, timeZone, report) {
+    report(0, 'Preparando zona horaria');
     const nextTz = timeZoneForDataset(dataset, timeZone);
     const nextDerived = derive(dataset, nextTz);
     const now = Math.floor(Date.now() / 1000);
@@ -39,6 +40,7 @@ export function createAnalysisEngine() {
     ds = dataset; tz = nextTz; derived = nextDerived; generatedAt = now;
     const firstAppearances = (entities) => new Map([...entities].map(([key, entity]) => [key, { firstUtc: entity.firstUtc }]));
     history = { tracks: firstAppearances(model.tracks.byId), artists: firstAppearances(model.artists.byId) };
+    delete model.cols;
     return { model };
   }
 
@@ -69,6 +71,7 @@ export function createAnalysisEngine() {
         const state = payload.state ?? emptyFilterState();
         const model = isFilterActive(state) ? await aggregateSelection(state, { onProgress: report }) : null;
         const prev = state.range ? countFiltered(ds, { ...state, range: previousRange(state.range) }, tz, derived) : null;
+        if (model) delete model.cols;
         return { model, prev };
       }
       if (type === 'album') {
