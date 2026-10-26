@@ -625,15 +625,15 @@ test('calendario: los días filtran al tocar (selector de rango)', async () => {
 test('traducciones: KPIs de umbral con sub debajo del número y nombres naturales', async () => {
   const model = await demoModel();
   const html = renderView('dashboard', model);
-  assert.ok(html.includes('<dt>Escuchas válidas</dt>'), 'nombre natural para plays >= minMs');
-  assert.ok(html.includes(`<dd>${model.totals.playsSignificant.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">+30 s</span></dd>`), '+30 s debajo del número');
-  assert.ok(html.includes('<dt>Descartadas</dt>'), 'nombre natural para plays < skipThresholdMs');
+  assert.ok(html.includes('<dt>Reproducciones significativas</dt>'), 'nombre natural para plays >= minMs');
+  assert.ok(html.includes(`<dd>${model.totals.playsSignificant.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">≥30 s</span></dd>`), '+30 s debajo del número');
+  assert.ok(html.includes('<dt>Reproducciones cortas</dt>'), 'nombre natural para plays < skipThresholdMs');
   assert.ok(html.includes(`<dd>${model.totals.playsSkipped.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}<span class="kpi-sub">&lt;10 s</span></dd>`), '<10 s debajo del número');
-  assert.ok(html.includes('<dt>Final con código trackdone</dt>') && html.includes('otros finales'), 'Completas con sin terminar debajo');
+  assert.ok(html.includes('<dt>Final con código trackdone</dt>') && html.includes('otros finales'), 'end codes are labeled explicitly');
   assert.ok(html.includes('<dt>En aleatorio</dt>'), 'En aleatorio en vez de Con aleatorio');
   const custom = { ...model, meta: { ...model.meta, minMs: 1500, skipThresholdMs: 500 } };
   const htmlCustom = renderView('dashboard', custom);
-  assert.ok(htmlCustom.includes('<span class="kpi-sub">+1,5 s</span>'), 'sub-segundo con coma decimal debajo');
+  assert.ok(htmlCustom.includes('<span class="kpi-sub">≥1,5 s</span>'), 'sub-segundo con coma decimal debajo');
   assert.ok(htmlCustom.includes('<span class="kpi-sub">&lt;500 ms</span>'), 'menos de 1 s en ms debajo');
 });
 

@@ -549,3 +549,18 @@ test('end codes separate trackdone, other endings and missing reasons', () => {
   assert.equal(full.totals.endReasonUnknown, 1);
   assert.equal(full.totals.interrupted, 1);
 });
+
+test('historical first appearances survive filtering', async () => {
+  const { filterDataset } = await import('../src/filters.js');
+  const ds = buildDataset([
+    { t: Date.parse('2024-01-01T00:00:00Z') / 1000, m: 1000, track: 'T', artist: 'A', reasonEnd: 'endplay' },
+    { t: Date.parse('2024-02-01T00:00:00Z') / 1000, m: 60000, track: 'T', artist: 'A', reasonEnd: 'trackdone' },
+    { t: Date.parse('2024-02-02T00:00:00Z') / 1000, m: 60000, track: 'New', artist: 'B' }
+  ]);
+  const full = aggregate(ds, { tz: UTC });
+  const filtered = aggregate(filterDataset(ds, [1, 2]), { tz: UTC,
+    history: { tracks: full.tracks.byId, artists: full.artists.byId } });
+  assert.equal(filtered.monthlyDiscovery.get(202402).new, 1);
+  assert.equal(filtered.monthlyDiscovery.get(202402).rep, 1);
+  assert.equal(filtered.yearly.get(2024).newArtists, 1);
+});

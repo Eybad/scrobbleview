@@ -164,7 +164,7 @@ function refreshModel() {
   }
   const { indices } = applyFilters(ds, state, tz, derived);
   const subset = filterDataset(ds, indices);
-  current = aggregate(subset, { tz, now: model.meta.generatedAt });
+  current = aggregate(subset, { tz, now: model.meta.generatedAt, history: { tracks: model.tracks.byId, artists: model.artists.byId } });
 }
 
 // Totales del período inmediato anterior (comparación % en los KPIs del

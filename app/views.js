@@ -334,7 +334,7 @@ function recordsGridHTML(model) {
   tiles.push({
     label: 'Días con escucha',
     val: esc(`${fmtNum(model.daily.size)} días`),
-    meta: esc(`${fmtNum(model.zeroDays.length)} días sin actividad`)
+    meta: esc(`${fmtNum(model.zeroDays.length)} días sin registros entre primera y última escucha`)
   });
   return `<div class="records-grid">${tiles.map((t) => `<div class="record-item"><span class="record-label">${esc(t.label)}</span><span class="record-value">${t.val}</span><span class="record-sub">${t.meta}</span></div>`).join('')}</div>`;
 }
@@ -549,10 +549,10 @@ export function dashboard(model, ctx = {}) {
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
       { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
       { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },
-      { label: 'Escuchas válidas', value: fmtNum(t.playsSignificant), sub: `+${thresholdLabel(model.meta.minMs)}` },
-      { label: 'Descartadas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` }
+      { label: 'Reproducciones significativas', value: fmtNum(t.playsSignificant), sub: `≥${thresholdLabel(model.meta.minMs)}` },
+      { label: 'Reproducciones cortas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` }
     ])}
-    <p class="view-meta">Duración desconocida: ${fmtNum(t.durationUnknown)} registros excluidos de medias, umbrales y distribución. Banderas desconocidas: saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan valores conocidos.</p>
+    <p class="view-meta">Duración desconocida: ${fmtNum(t.durationUnknown)} registros excluidos de medias, umbrales y distribución. Banderas desconocidas: saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan valores conocidos. Todas las reproducciones, incluidas las cortas, participan en los totales y rankings.</p>
     ${card('Récords', recordsGridHTML(model))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
@@ -893,12 +893,12 @@ export function discoveryView(model, ctx = {}) {
   return `
     <header class="view-header">
       <h1>Descubrimiento</h1>
-      <p class="view-meta">Canciones nuevas por mes</p>
+      <p class="view-meta">Primeras apariciones en todo el historial cargado; no indica cuándo conociste una canción.</p>
     </header>
     ${kpis([
-      { label: 'Canciones descubiertas', value: fmtNum(totalNewTracks) },
+      { label: 'Primeras apariciones', value: fmtNum(totalNewTracks) },
       { label: 'Escuchas de catálogo', value: fmtNum(totalRepTracks), sub: `${pctOf(totalRepTracks, model.totals.records)} de las reproducciones` },
-      { label: 'Promedio mensual', value: `${avgNewPerMonth} nuevas` },
+      { label: 'Promedio por mes activo', value: `${avgNewPerMonth} nuevas` },
       { label: 'Artistas únicos', value: fmtNum(model.artists.byId.size) }
     ])}
     ${card('Canciones nuevas por mes', scrollChart(line, 'Canciones nuevas por mes'))}
@@ -994,13 +994,13 @@ export function calendarView(model, year, ctx = {}) {
     <header class="view-header">
       <p><a href="#/calendar">← Todos los años</a></p>
       <h1>Calendario ${esc(String(year))}</h1>
-      <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin escuchar · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
+      <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin registros dentro del período observado · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
     ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(year))}">${calendarGrid({
       days,
       year,
       colorScale: makeScale(maxVal),
-      cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin actividad'}`,
+      cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin registros'}`,
       dataRange,
       interactive: true
     })}</div>` + heatLegend() + calendarTable(days, year, byMs))}
@@ -1026,7 +1026,7 @@ export function calendarIndexView(model, ctx = {}) {
     return calendarGrid({
       days, year: y,
       colorScale: makeScale(maxVal),
-      cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin actividad'}`,
+      cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin registros'}`,
       dataRange,
       interactive: true
     }) + heatLegend() + calendarTable(days, y, byMs);
@@ -1035,7 +1035,7 @@ export function calendarIndexView(model, ctx = {}) {
   return `
     <header class="view-header">
       <h1>Calendario</h1>
-      <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin escuchar en total · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
+      <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin registros entre primera y última escucha · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
     ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${yearGrid(last)}</div>`, '', true) : ''}
     ${prev.map((y) => {

@@ -41,7 +41,7 @@ export function aggregate(ds, opts = {}) {
   const totals = computeTotals(ds, minMs, skipThresholdMs);
 
   const groups = createGroupsAcc(ds);
-  const temporal = createTemporalAcc(minMs);
+  const temporal = createTemporalAcc(minMs, opts.history);
   const sessions = createSessionsAcc({ tz });
   const behavior = createBehaviorAcc();
   const transitions = createTransitionsAcc();

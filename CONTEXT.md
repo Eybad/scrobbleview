@@ -27,3 +27,12 @@ Un campo ausente, nulo o una duración inválida. No equivale a cero ni a «no»
 
 **Trackdone ending (final con código trackdone)**:
 Un registro cuyo motivo de fin es literalmente `trackdone`. Los demás códigos, incluido `endplay`, se cuentan aparte; un motivo ausente es desconocido. Este conteo no acredita por sí solo que se haya escuchado toda la canción.
+
+**Historical first appearance (primera aparición histórica)**:
+La primera reproducción de una canción o artista en todo el historial cargado, conservada al filtrar. No demuestra cuándo la persona conoció esa música. Los promedios por mes activo excluyen meses sin registros.
+
+**Day without records (día sin registros)**:
+Un día sin eventos dentro del intervalo entre la primera y última escucha del subconjunto. No cubre automáticamente todo el rango seleccionado ni demuestra ausencia de escucha.
+
+**Short play (reproducción corta)**:
+Un registro con duración conocida menor que el umbral corto configurado (10 segundos por defecto). Se incluye en los totales y rankings. Una reproducción significativa alcanza al menos el umbral configurado (30 segundos por defecto); estas definiciones no replican toda la metodología de Spotify.
