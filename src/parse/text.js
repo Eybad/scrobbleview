@@ -19,18 +19,5 @@ export function hasEscape(bytes, start = 0, end = bytes.length) {
 export function decodeJSONString(bytes, start = 0, end = bytes.length) {
   const s = textDecoder.decode(bytes.subarray(start, end));
   if (s.indexOf('\\') === -1) return s;
-  return s.replace(/\\(["\\/bfnrt]|u[0-9a-fA-F]{4})/g, (m, p1) => {
-    if (p1[0] === 'u') return String.fromCharCode(parseInt(p1.slice(1), 16));
-    switch (p1) {
-      case '"': return '"';
-      case '\\': return '\\';
-      case '/': return '/';
-      case 'b': return '\b';
-      case 'f': return '\f';
-      case 'n': return '\n';
-      case 'r': return '\r';
-      case 't': return '\t';
-      default: return m;
-    }
-  });
+  return JSON.parse(`"${s}"`);
 }

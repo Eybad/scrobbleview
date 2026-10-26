@@ -284,3 +284,32 @@ test('progreso: onProgress reporta avance', async () => {
   assert.equal(seen[seen.length - 1][0], 1);
   assert.equal(seen[seen.length - 1][1], 'prog');
 });
+
+test('strict JSON grammar agrees with JSON.parse across chunk boundaries', async () => {
+  const event = '{"ts":"2024-01-01T10:03:00Z","master_metadata_track_name":"T","ms_played":1000}';
+  const invalid = [
+    `[,${event}]`, `[${event}${event}]`, `[${event},,${event}]`,
+    `[${event.replace('1000', '1x')}]`, `[${event.replace('1000', '01')}]`,
+    `[${event.replace('1000', '1.')}]`, `[${event.replace('1000', '1e+')}]`,
+    `[${event.replace('"T"', '"\\q"')}]`, `[${event.replace('"T"', '"\\u00xz"')}]`,
+    `[${event.replace('"T"', '"line\nbreak"')}]`,
+    `[${event.slice(0, -1)},"ignored": {"x": [1 2]}}]`,
+    `[${event.slice(0, -1)},"ignored": {"x": [1,]}}]`,
+    `[${event.slice(0, -1)},"ignored": {"x": tru}}]`,
+    `[${event.slice(0, -1)},"ignored": "\\q"}]`
+  ];
+  for (const json of invalid) {
+    assert.throws(() => JSON.parse(json), SyntaxError);
+    for (const chunkBytes of [1, 7, 262144]) {
+      await assert.rejects(parse(memoryBytes('invalid', json), { chunkBytes }),
+        (err) => err.code === 'E_PARSE' && Number.isInteger(err.byteOffset), json);
+    }
+  }
+  for (const value of [null, false, -1.25e2, [], {}, { nested: [true, null, 'x\\y', '\ud800'] }]) {
+    const json = `[${event.slice(0, -1)},"ignored":${JSON.stringify(value)}}]`;
+    assert.equal(JSON.parse(json).length, 1);
+    const ds = await parse(memoryBytes('valid', json), { chunkBytes: 1 });
+    assert.equal(ds.meta.count, 1);
+    assert.equal(ds.m[0], 1000);
+  }
+});

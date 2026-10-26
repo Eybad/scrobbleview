@@ -1,359 +1,181 @@
-// scan.js — scanner JSON incremental (state machine sobre bytes)
-//
-// Procesa un array de objetos JSON: [{"ts":"...","ms_played":123,...}, ...].
-// - Emite eventos completos (objetos con campos allowlist) al cerrar cada objeto.
-// - Skip de claves no permitidas SIN alocar (ip_addr/conn_country nunca se materializan).
-// - Maneja valores que cruzan límites de chunk (rangeCarry).
-// - Fail-fast: JSON malformado → ParseError, tipo incorrecto → SchemaError, con byteOffset.
-//
-// El test de split-invariance (mismo dataset para todo tamaño de chunk) es la red
-// de seguridad de este módulo.
-
+// Incremental JSON grammar. Only allowlisted event fields are retained;
+// unknown subtrees are validated without materializing their values.
 import { ParseError, SchemaError } from '../errors.js';
-import { utf8Encode } from '../text.js';
+import { decodeJSONString, utf8Encode } from '../text.js';
 
-const S = {
-  ARRAY_START: 0,
-  ARRAY_ITEM: 1,
-  OBJECT_KEY: 2,
-  OBJECT_COLON: 3,
-  OBJECT_VALUE: 4,
-  OBJECT_COMMA: 5,
-  STRING: 6,
-  STRING_ESCAPE: 7,
-  NUMBER: 8,
-  LITERAL: 9,
-  SKIP_STRING: 10,
-  SKIP_STRING_ESCAPE: 11,
-  SKIP_VALUE: 12,
-  SKIP_NESTED: 13,
-  SKIP_NESTED_STRING: 14,
-  SKIP_NESTED_STRING_ESCAPE: 15,
-  END: 16
-};
-
-const SP = 0x20, TAB = 0x09, LF = 0x0a, CR = 0x0d;
-const QUOTE = 0x22, BACKSLASH = 0x5c, COMMA = 0x2c, COLON = 0x3a;
-const LBRACE = 0x7b, RBRACE = 0x7d, LBRACKET = 0x5b, RBRACKET = 0x5d;
-const MINUS = 0x2d;
-const ZERO = 0x30, NINE = 0x39;
-
-function isWS(b) { return b === SP || b === TAB || b === LF || b === CR; }
-function isDigit(b) { return b >= ZERO && b <= NINE; }
-
-// Allowlist: nombre crudo → {type, name}. Los campos fuera de esta lista se
-// saltan sin alocar (privacidad por tipo: ip_addr/conn_country/etc. no existen).
-const ALLOWLIST = {
-  ts: { type: 'string', name: 'ts' },
-  ms_played: { type: 'number', name: 'ms' },
-  master_metadata_track_name: { type: 'string', name: 'track' },
-  master_metadata_album_artist_name: { type: 'string', name: 'artist' },
-  master_metadata_album_album_name: { type: 'string', name: 'album' },
-  spotify_track_uri: { type: 'string', name: 'uri' },
-  reason_start: { type: 'string', name: 'reasonStart' },
-  reason_end: { type: 'string', name: 'reasonEnd' },
-  shuffle: { type: 'boolean', name: 'shuffle' },
-  skipped: { type: 'boolean', name: 'skipped' },
-  offline: { type: 'boolean', name: 'offline' }
-};
-
-// Keys pre-codificadas para comparación por bytes (sin materializar strings de keys).
-const ALLOWLIST_KEYS = Object.entries(ALLOWLIST).map(([raw, spec]) => ({
-  bytes: utf8Encode(raw),
-  spec
+const ALLOWLIST = new Map(Object.entries({
+  ts: ['string', 'ts'], ms_played: ['number', 'ms'],
+  master_metadata_track_name: ['string', 'track'],
+  master_metadata_album_artist_name: ['string', 'artist'],
+  master_metadata_album_album_name: ['string', 'album'],
+  spotify_track_uri: ['string', 'uri'], reason_start: ['string', 'reasonStart'],
+  reason_end: ['string', 'reasonEnd'], shuffle: ['boolean', 'shuffle'],
+  skipped: ['boolean', 'skipped'], offline: ['boolean', 'offline']
 }));
+const KEYS = [...ALLOWLIST].map(([key, spec]) => [utf8Encode(key), spec]);
+const isWhitespace = (b) => b === 32 || b === 9 || b === 10 || b === 13;
+const isDigit = (b) => b >= 48 && b <= 57;
+const isHex = (b) => isDigit(b) || (b >= 65 && b <= 70) || (b >= 97 && b <= 102);
+const isDelimiter = (b) => isWhitespace(b) || b === 44 || b === 125 || b === 93;
 
 function matchKey(bytes) {
-  for (const { bytes: kb, spec } of ALLOWLIST_KEYS) {
-    if (bytes.length === kb.length) {
-      let eq = true;
-      for (let i = 0; i < kb.length; i++) {
-        if (bytes[i] !== kb[i]) { eq = false; break; }
-      }
-      if (eq) return spec;
-    }
+  if (bytes.includes(92)) return ALLOWLIST.get(decodeJSONString(bytes)) ?? null;
+  for (const [key, spec] of KEYS) {
+    if (bytes.length === key.length && bytes.every((b, i) => b === key[i])) return spec;
   }
   return null;
 }
 
-function concat(a, b) {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
-}
-
 export function createScanner({ onEvent, onError }) {
-  let state = S.ARRAY_START;
-  let afterString = S.OBJECT_COLON; // estado al cerrar un string (key → colon, value → comma)
-  let currentKey = null; // spec de la key actual, o null (no permitida / sin key)
-  let currentEvent = null;
-  let rangeStart = -1; // inicio del rango (string/number/literal) en el chunk actual
-  let rangeCarry = null; // bytes acumulados de chunks previos
-  let chunkStart = 0; // offset del chunk actual en el stream
-  let events = 0;
-  let expectKey = false; // tras "," en objeto: la próxima key es obligatoria (JSON estricto)
-  let expectItem = false; // tras "," en array: el próximo item es obligatorio
-  let skipDepth = 0; // profundidad del subárbol salteado (claves fuera de ALLOWLIST)
+  const stack = [];
+  let started = false, finished = false, events = 0, offset = 0;
+  let token = null;
 
-  function fail(code, msg, i) {
-    const err = code === 'E_PARSE'
-      ? new ParseError(msg, { byteOffset: chunkStart + i })
-      : new SchemaError(msg, { byteOffset: chunkStart + i });
-    if (onError) onError(err);
+  function fail(message, i, schema = false) {
+    const ErrorType = schema ? SchemaError : ParseError;
+    const err = new ErrorType(message, { byteOffset: offset + i, field: stack.at(-1)?.spec?.[1] });
+    onError?.(err);
     throw err;
   }
 
-  function closeRange(chunk, i) {
-    if (rangeCarry) {
-      const b = concat(rangeCarry, chunk.subarray(rangeStart, i));
-      rangeCarry = null;
-      return b;
+  function complete(type, value, i) {
+    const frame = stack.at(-1);
+    if (!frame) { finished = true; return; }
+    if (frame.spec) {
+      const [expected, name] = frame.spec;
+      if (type !== 'null' && type !== expected) fail(`Campo "${name}": se esperaba ${expected}`, i, true);
+      frame.event[name] = value;
+      frame.spec = null;
     }
-    return chunk.subarray(rangeStart, i);
+    frame.state = 'comma';
   }
 
-  function beginRange(i) {
-    rangeStart = i;
-    rangeCarry = null;
+  function close(i) {
+    const frame = stack.pop();
+    if (frame.event) { onEvent(frame.event); events++; }
+    complete(frame.kind, undefined, i);
   }
 
-  function closeObject(i) {
-    if (currentEvent && Object.keys(currentEvent).length > 0) {
-      onEvent(currentEvent);
-      events++;
+  function finishToken(chunk, i) {
+    let bytes;
+    if (token.capture) {
+      token.parts.push(chunk.subarray(token.start, i));
+      bytes = new Uint8Array(token.parts.reduce((n, part) => n + part.length, 0));
+      let at = 0;
+      for (const part of token.parts) { bytes.set(part, at); at += part.length; }
     }
-    currentEvent = null;
-    currentKey = null;
-    state = S.ARRAY_ITEM;
-  }
-
-  function setStringValue(bytes, i) {
-    if (afterString === S.OBJECT_COLON) {
-      currentKey = matchKey(bytes);
-      state = S.OBJECT_COLON;
-    } else {
-      if (currentKey) {
-        if (currentKey.type !== 'string') {
-          fail('E_SCHEMA', `Campo "${currentKey.name}": se esperaba ${currentKey.type}`, i);
-        }
-        currentEvent[currentKey.name] = bytes;
-      }
-      currentKey = null;
-      state = S.OBJECT_COMMA;
-    }
-  }
-
-  function setNumberValue(bytes, i) {
-    const s = decodeJSONString(bytes);
-    const v = parseFloat(s);
-    if (!Number.isFinite(v)) fail('E_PARSE', 'Número inválido', i);
-    if (currentKey) {
-      if (currentKey.type !== 'number') {
-        fail('E_SCHEMA', `Campo "${currentKey.name}": se esperaba ${currentKey.type}`, i);
-      }
-      currentEvent[currentKey.name] = v;
-    }
-    currentKey = null;
-    state = S.OBJECT_COMMA;
-  }
-
-  function setLiteralValue(bytes, i) {
-    let v;
-    if (bytes.length === 4 && bytes[0] === 0x74 && bytes[1] === 0x72 && bytes[2] === 0x75 && bytes[3] === 0x65) v = true;
-    else if (bytes.length === 5 && bytes[0] === 0x66 && bytes[1] === 0x61 && bytes[2] === 0x6c && bytes[3] === 0x73 && bytes[4] === 0x65) v = false;
-    else if (bytes.length === 4 && bytes[0] === 0x6e && bytes[1] === 0x75 && bytes[2] === 0x6c && bytes[3] === 0x6c) v = null;
-    else fail('E_PARSE', 'Literal inválido', i);
-    if (currentKey) {
-      if (v === null) {
-        // null = ausente (campos opcionales; ts null → NO_TS, ms null → 0, etc.)
-      } else if (currentKey.type !== 'boolean') {
-        fail('E_SCHEMA', `Campo "${currentKey.name}": se esperaba ${currentKey.type}`, i);
-      } else {
-        currentEvent[currentKey.name] = v;
-      }
-    }
-    currentKey = null;
-    state = S.OBJECT_COMMA;
+    if (token.key) {
+      const frame = stack.at(-1);
+      frame.spec = bytes ? matchKey(bytes) : null;
+      frame.state = 'colon';
+    } else if (token.kind === 'string') complete('string', bytes, i);
+    else if (token.kind === 'number') complete('number', bytes ? Number(new TextDecoder().decode(bytes)) : undefined, i);
+    else complete(token.literal === 'null' ? 'null' : 'boolean', token.literal === 'null' ? null : token.literal === 'true', i);
+    token = null;
   }
 
   function push(chunk) {
     let i = 0;
-    const n = chunk.length;
-    while (i < n) {
+    while (i < chunk.length) {
       const b = chunk[i];
-      switch (state) {
-        case S.ARRAY_START:
-          if (b === LBRACKET) { state = S.ARRAY_ITEM; i++; }
-          else if (isWS(b)) i++;
-          else fail('E_PARSE', 'Se esperaba "["', i);
-          break;
-
-        case S.ARRAY_ITEM:
-          if (b === LBRACE) { currentEvent = {}; expectItem = false; state = S.OBJECT_KEY; i++; }
-          else if (b === RBRACKET) {
-            if (expectItem) fail('E_PARSE', 'Coma final en array', i);
-            state = S.END; i++;
+      if (token) {
+        if (token.kind === 'string') {
+          if (token.unicode) {
+            if (!isHex(b)) fail('Escape Unicode inválido', i);
+            token.unicode--; i++; continue;
           }
-          else if (b === COMMA) { expectItem = true; i++; }
-          else if (isWS(b)) i++;
-          else fail('E_PARSE', 'Se esperaba "{" o "]"', i);
-          break;
-
-        case S.OBJECT_KEY:
-          if (b === QUOTE) { afterString = S.OBJECT_COLON; expectKey = false; beginRange(i + 1); state = S.STRING; i++; }
-          else if (b === RBRACE) {
-            if (expectKey) fail('E_PARSE', 'Coma final en objeto', i);
-            closeObject(i); i++;
+          if (token.escape) {
+            if (b === 117) token.unicode = 4;
+            else if (![34, 92, 47, 98, 102, 110, 114, 116].includes(b)) fail('Escape JSON inválido', i);
+            token.escape = false; i++; continue;
           }
-          else if (isWS(b)) i++;
-          else fail('E_PARSE', 'Se esperaba clave string o "}"', i);
-          break;
-
-        case S.OBJECT_COLON:
-          if (b === COLON) { state = S.OBJECT_VALUE; i++; }
-          else if (isWS(b)) i++;
-          else fail('E_PARSE', 'Se esperaba ":"', i);
-          break;
-
-        case S.OBJECT_VALUE:
-          if (b === QUOTE) {
-            if (currentKey) { afterString = S.OBJECT_COMMA; beginRange(i + 1); state = S.STRING; }
-            else state = S.SKIP_STRING;
-            i++;
-          } else if (isDigit(b) || b === MINUS) {
-            if (currentKey) { beginRange(i); state = S.NUMBER; }
-            else state = S.SKIP_VALUE;
-            i++;
-          } else if (b === 0x74 || b === 0x66 || b === 0x6e) { // t/f/n
-            if (currentKey) { beginRange(i); state = S.LITERAL; }
-            else state = S.SKIP_VALUE;
-            i++;
-          } else if (b === LBRACE || b === LBRACKET) {
-            // Objeto/array en clave fuera de ALLOWLIST: se salta el subárbol
-            // completo (compatibilidad hacia adelante con campos nuevos de la
-            // export). Con clave conocida sigue siendo error (fail-fast).
-            if (currentKey) fail('E_PARSE', 'Se esperaba valor', i);
-            skipDepth = 1;
-            state = S.SKIP_NESTED;
-            i++;
-          } else if (isWS(b)) i++;
-          else fail('E_PARSE', 'Se esperaba valor', i);
-          break;
-
-        case S.OBJECT_COMMA:
-          if (b === COMMA) { expectKey = true; state = S.OBJECT_KEY; i++; }
-          else if (b === RBRACE) { closeObject(i); i++; }
-          else if (isWS(b)) i++;
-          else fail('E_PARSE', 'Se esperaba "," o "}"', i);
-          break;
-
-        case S.STRING:
-          if (b === QUOTE) {
-            const bytes = closeRange(chunk, i);
-            setStringValue(bytes, i);
-            i++;
-          } else if (b === BACKSLASH) {
-            state = S.STRING_ESCAPE;
-            i++;
-          } else {
-            i++;
+          if (b === 34) { finishToken(chunk, i); i++; continue; }
+          if (b < 32) fail('Carácter de control en string', i);
+          if (b === 92) token.escape = true;
+          i++; continue;
+        }
+        if (isDelimiter(b)) {
+          if (token.kind === 'number' && !['zero', 'integer', 'fraction', 'exponentDigits'].includes(token.state)) fail('Número inválido', i);
+          if (token.kind === 'literal' && token.position !== token.literal.length) fail('Literal inválido', i);
+          finishToken(chunk, i); continue;
+        }
+        if (token.kind === 'literal') {
+          if (b !== token.literal.charCodeAt(token.position++)) fail('Literal inválido', i);
+        } else {
+          switch (token.state) {
+            case 'sign':
+              if (!isDigit(b)) fail('Número inválido', i);
+              token.state = b === 48 ? 'zero' : 'integer'; break;
+            case 'zero': case 'integer':
+              if (b === 46) token.state = 'dot';
+              else if (b === 101 || b === 69) token.state = 'exponent';
+              else if (!isDigit(b) || token.state === 'zero') fail('Número inválido', i);
+              break;
+            case 'dot':
+              if (!isDigit(b)) fail('Número inválido', i);
+              token.state = 'fraction'; break;
+            case 'fraction':
+              if (b === 101 || b === 69) token.state = 'exponent';
+              else if (!isDigit(b)) fail('Número inválido', i);
+              break;
+            case 'exponent':
+              if (b === 43 || b === 45) token.state = 'exponentSign';
+              else if (isDigit(b)) token.state = 'exponentDigits';
+              else fail('Número inválido', i);
+              break;
+            case 'exponentSign': case 'exponentDigits':
+              if (!isDigit(b)) fail('Número inválido', i);
+              token.state = 'exponentDigits'; break;
           }
-          break;
-
-        case S.STRING_ESCAPE:
-          state = S.STRING;
-          i++;
-          break;
-
-        case S.NUMBER:
-          if (b === COMMA || b === RBRACE || isWS(b)) {
-            const bytes = closeRange(chunk, i);
-            setNumberValue(bytes, i);
-            // el byte actual se procesa en OBJECT_COMMA (no avanzar)
-          } else {
-            i++;
-          }
-          break;
-
-        case S.LITERAL:
-          if (b === COMMA || b === RBRACE || isWS(b)) {
-            const bytes = closeRange(chunk, i);
-            setLiteralValue(bytes, i);
-          } else {
-            i++;
-          }
-          break;
-
-        case S.SKIP_STRING:
-          if (b === QUOTE) { state = S.OBJECT_COMMA; i++; }
-          else if (b === BACKSLASH) { state = S.SKIP_STRING_ESCAPE; i++; }
-          else i++;
-          break;
-
-        case S.SKIP_STRING_ESCAPE:
-          state = S.SKIP_STRING;
-          i++;
-          break;
-
-        case S.SKIP_VALUE:
-          if (b === COMMA) { state = S.OBJECT_KEY; i++; }
-          else if (b === RBRACE) { closeObject(i); i++; }
-          else if (isWS(b)) i++;
-          else i++;
-          break;
-
-        case S.SKIP_NESTED:
-          // Salto de un subárbol completo, char por char (sin acumular rango:
-          // el estado + skipDepth viven en el closure y sobreviven a los
-          // cortes entre chunks). Los strings se respetan para que una llave
-          // o escape interno no altere la profundidad.
-          if (b === QUOTE) { state = S.SKIP_NESTED_STRING; i++; }
-          else if (b === LBRACE || b === LBRACKET) { skipDepth++; i++; }
-          else if (b === RBRACE || b === RBRACKET) {
-            skipDepth--;
-            if (skipDepth === 0) { currentKey = null; state = S.OBJECT_COMMA; }
-            i++;
-          }
-          else i++;
-          break;
-
-        case S.SKIP_NESTED_STRING:
-          if (b === QUOTE) { state = S.SKIP_NESTED; i++; }
-          else if (b === BACKSLASH) { state = S.SKIP_NESTED_STRING_ESCAPE; i++; }
-          else i++;
-          break;
-
-        case S.SKIP_NESTED_STRING_ESCAPE:
-          state = S.SKIP_NESTED_STRING;
-          i++;
-          break;
-
-        case S.END:
-          if (isWS(b)) i++;
-          else fail('E_PARSE', 'Contenido después del cierre del array', i);
-          break;
+        }
+        i++; continue;
       }
+      if (isWhitespace(b)) { i++; continue; }
+      if (finished) fail('Contenido después del cierre del array', i);
+      if (!started) {
+        if (b !== 91) fail('Se esperaba "["', i);
+        stack.push({ kind: 'array', state: 'first', root: true });
+        started = true; i++; continue;
+      }
+      const frame = stack.at(-1);
+      if (frame.state === 'comma') {
+        if (b === 44) frame.state = frame.kind === 'array' ? 'value' : 'key';
+        else if (b === (frame.kind === 'array' ? 93 : 125)) close(i);
+        else fail('Se esperaba una coma o el cierre', i);
+        i++; continue;
+      }
+      if (frame.state === 'colon') {
+        if (b !== 58) fail('Se esperaba ":"', i);
+        frame.state = 'value'; i++; continue;
+      }
+      if (frame.kind === 'object' && (frame.state === 'first' || frame.state === 'key')) {
+        if (b === 125 && frame.state === 'first') { close(i); i++; continue; }
+        if (b !== 34) fail('Se esperaba clave string', i);
+        token = { kind: 'string', key: true, capture: !!frame.event, parts: [], start: i + 1 };
+        i++; continue;
+      }
+      if (frame.kind === 'array' && frame.state === 'first' && b === 93) { close(i); i++; continue; }
+      if (frame.root && b !== 123) fail('Se esperaba un objeto de reproducción', i);
+      if (b === 123 || b === 91) {
+        if (frame.spec) fail('Se esperaba un valor escalar', i, true);
+        stack.push({ kind: b === 123 ? 'object' : 'array', state: 'first', event: frame.root ? {} : null });
+      } else if (b === 34) {
+        token = { kind: 'string', capture: !!frame.spec, parts: [], start: i + 1 };
+      } else if (b === 45 || isDigit(b)) {
+        token = { kind: 'number', capture: !!frame.spec, parts: [], start: i,
+          state: b === 45 ? 'sign' : b === 48 ? 'zero' : 'integer' };
+      } else if (b === 116 || b === 102 || b === 110) {
+        token = { kind: 'literal', literal: b === 116 ? 'true' : b === 102 ? 'false' : 'null', position: 1 };
+      } else fail('Se esperaba un valor JSON', i);
+      i++;
     }
-
-    // Fin del chunk: si quedó un rango abierto (string/number/literal), acumular.
-    if (state === S.STRING || state === S.STRING_ESCAPE || state === S.NUMBER || state === S.LITERAL) {
-      const from = rangeStart >= 0 ? rangeStart : 0;
-      const part = chunk.subarray(from);
-      rangeCarry = rangeCarry ? concat(rangeCarry, part) : part;
-      rangeStart = 0;
-    }
-    chunkStart += n;
+    if (token?.capture) { token.parts.push(chunk.slice(token.start)); token.start = 0; }
+    offset += chunk.length;
   }
 
   function end() {
-    if (state === S.STRING || state === S.STRING_ESCAPE) fail('E_PARSE', 'String sin cerrar', 0);
-    if (state === S.NUMBER || state === S.LITERAL) fail('E_PARSE', 'Valor sin cerrar', 0);
-    if (state !== S.END) fail('E_PARSE', 'JSON incompleto', 0);
+    if (!finished || token) fail('JSON incompleto', 0);
     return events;
   }
-
   return { push, end };
 }
-
-import { decodeJSONString } from '../text.js';

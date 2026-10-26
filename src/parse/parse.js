@@ -13,7 +13,7 @@ import { createScanner } from './impl/scan.js';
 import { Interner } from './impl/intern.js';
 import { createColumns } from './impl/columns.js';
 import { parseISOToEpoch } from './impl/ts.js';
-import { decodeJSONString } from './text.js';
+import { decodeJSONString, hasEscape, utf8Encode } from './text.js';
 import { EmptyFileError, SchemaError } from './errors.js';
 import { assertDataset } from './dataset.js';
 
@@ -40,7 +40,7 @@ export async function parse(src, opts = {}) {
   function onEvent(ev) {
     count++;
     if (!ev.ts) { warnings.push({ code: 'NO_TS', index: count }); return; }
-    const t = parseISOToEpoch(ev.ts);
+    const t = parseISOToEpoch(hasEscape(ev.ts) ? utf8Encode(decodeJSONString(ev.ts)) : ev.ts);
     if (t === null) { warnings.push({ code: 'BAD_TS', index: count }); return; }
 
     if (ev.uri) {
