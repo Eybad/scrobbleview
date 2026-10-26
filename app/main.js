@@ -275,6 +275,7 @@ cacheToast.addEventListener('click', async (e) => {
 function buildViewContext(viewName) {
   return {
     years: state.years,
+    range: state.range,
     prev: viewName === 'dashboard' ? prevTotals() : null,
     limits: tableLimits,
     rankUI

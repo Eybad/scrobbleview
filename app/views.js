@@ -9,6 +9,7 @@ import {
   calendarGrid, listeningClock, stackedBar, heatLegend, NO_DATA,
   esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
 } from '../src/charts.js';
+import { matchRangeShortcut, rangeChipLabel } from './filter-ui.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
@@ -1305,8 +1306,10 @@ export function wrappedView(model, id, ctx) {
   const topTrack = model.tracks.top[evoByMs ? 'byMs' : 'byPlays'][0];
   const c = model.concentration.artists;
   const archetype = listenerArchetype(model);
-  const onlyYear = ctx?.years && ctx.years.size === 1 ? [...ctx.years][0] : null;
-  const title = onlyYear != null ? `Tu ${onlyYear} en resumen` : 'Tu año en resumen';
+  const onlyYear = ctx?.range ? matchRangeShortcut(ctx.range).year
+    : ctx?.years?.size === 1 ? [...ctx.years][0] : null;
+  const period = ctx?.range ? rangeChipLabel(ctx.range) : `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`;
+  const title = onlyYear != null ? `Tu ${onlyYear} en resumen` : 'Tu período en resumen';
 
   // Evolución del artista top: ms por mes.
   const sprint = topArtist
@@ -1340,12 +1343,12 @@ export function wrappedView(model, id, ctx) {
   return `
     <header class="view-header">
       <h1>${esc(title)}</h1>
-      <p class="view-meta">generado ${new Date(model.meta.generatedAt * 1000).toLocaleString('es-ES')}</p>
+      <p class="view-meta">${esc(period)} · generado ${new Date(model.meta.generatedAt * 1000).toLocaleString('es-ES')}</p>
     </header>
     ${heroHTML}
     ${kpis([
-      { label: 'Artista del año', value: topArtist ? entityLink('artist', topArtist.id, topArtist.name) : '—', text: true },
-      { label: 'Canción del año', value: topTrack ? entityLink('track', topTrack.tk, topTrack.name) : '—', text: true },
+      { label: onlyYear != null ? 'Artista del año' : 'Artista del período', value: topArtist ? entityLink('artist', topArtist.id, topArtist.name) : '—', text: true },
+      { label: onlyYear != null ? 'Canción del año' : 'Canción del período', value: topTrack ? entityLink('track', topTrack.tk, topTrack.name) : '—', text: true },
       { label: 'Tiempo total', value: fmtMs(t.ms) },
       { label: 'Reproducciones', value: fmtNum(t.records) },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—' },

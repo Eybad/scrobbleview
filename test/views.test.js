@@ -55,7 +55,7 @@ test('wrapped: la canción del año enlaza por tk (no por tr)', async () => {
 
 test('wrapped: título según año filtrado', async () => {
   const model = await demoModel();
-  assert.ok(renderView('wrapped', model).includes('Tu año en resumen'));
+  assert.ok(renderView('wrapped', model).includes('Tu período en resumen'));
   assert.ok(renderView('wrapped', model, null, { years: new Set([2024]) }).includes('Tu 2024 en resumen'));
 });
 
@@ -130,7 +130,7 @@ test('meta de vistas: rango destacado en dashboard y metadatos de carga en foote
   assert.ok(footerHtml.indexOf('id="footer-meta"') < footerHtml.indexOf('Tus datos se procesan localmente'), 'metadatos justo encima del aviso de privacidad');
 
   const wrapped = renderView('wrapped', model);
-  assert.ok(wrapped.includes('view-meta">generado '), 'el meta de wrapped empieza en "generado" (sin tz)');
+  assert.ok(wrapped.includes(' · generado '), 'wrapped identifies its period and generation date');
 });
 
 test('discovery: constancia y longevidad', async () => {
@@ -1035,4 +1035,18 @@ test('home page UI: conditional storage hierarchy, cache card with metadata & tr
   assert.ok(blockOf('.drop-zone-icon {').includes('var(--accent)'), 'drop-zone icon uses green accent');
   assert.ok(blockOf('.privacy-note {').includes('text-align: left'), 'privacy pill left-aligned with lock on the left');
   assert.ok(!blockOf('#view-home {').includes('margin: auto'), '#view-home uses controlled top margin instead of margin: auto');
+});
+
+test('wrapped titles identify the selected year or effective period', async () => {
+  const model = await demoModel();
+  const all = renderView('wrapped', model);
+  assert.match(all, /Tu período en resumen/);
+  assert.match(all, /Artista del período/);
+  assert.doesNotMatch(all, /del año/);
+  const { rangeFromYear, rangeFromMonth } = await import('../app/filter-ui.js');
+  const year = renderView('wrapped', model, null, { range: rangeFromYear(2025) });
+  assert.match(year, /Tu 2025 en resumen/);
+  const month = renderView('wrapped', model, null, { range: rangeFromMonth(202502) });
+  assert.match(month, /Tu período en resumen/);
+  assert.match(month, /feb 2025/);
 });
