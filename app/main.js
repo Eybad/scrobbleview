@@ -62,6 +62,7 @@ const initialLimits = loadStoredLimits();
 let model = null; // modelo completo (sin filtros)
 let current = null; // modelo activo (filtrado o completo)
 let currentPrev = null;
+let currentDetail = null, detailContext = null, detailPage = 1, detailPageSize = 25;
 let initializing = false;
 let state = emptyFilterState();
 let activeMetric = resolveMetric(null, typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null);
@@ -147,6 +148,7 @@ async function initializeAnalysis(result) {
   model = result.model;
   current = model;
   currentPrev = null;
+  currentDetail = null; detailContext = null; detailPage = 1; detailPageSize = 25;
   analysisState.initialize(model);
   rankUI = { tab: 'artists', metric: activeMetric, topN: rankUI.topN, query: '' };
   initializing = true;
@@ -195,15 +197,22 @@ async function clearCached() {
 async function refreshModel() {
   if (!model) return false;
   const [view, id] = parseHash();
+  const nextDetailContext = (view === 'day' || view === 'session') ? JSON.stringify([view, id, filterParams(state)]) : null;
+  if (nextDetailContext !== detailContext) {
+    detailContext = nextDetailContext;
+    detailPage = 1;
+    detailPageSize = 25;
+  }
   const requestedHash = location.hash;
   const job = beginProcessing('Actualizando estadísticas', 'filter');
   appRoot.setAttribute('aria-busy', 'true');
   appRoot.classList.add('app--updating');
   try {
-    const result = await analysisState.update(state, { view, id, onProgress: job.progress });
+    const result = await analysisState.update(state, { view, id, page: detailPage, pageSize: detailPageSize, onProgress: job.progress });
     if (!result || requestedHash !== location.hash) return false;
     current = result.model;
     currentPrev = result.prev;
+    currentDetail = result.detail;
     return true;
   } catch (error) {
     if (error.code !== 'E_ABORT') {
@@ -445,6 +454,8 @@ function buildViewContext(viewName) {
     rankUI,
     query: queryStr,
     exploreState,
+    detail: currentDetail,
+    detailRequested: viewName === 'day' || viewName === 'session',
     normalizeYears: state.normalizeYears ?? false,
     month: state.calMonth?.month,
     comparePreset: state.comparePreset || 'equal_previous'
@@ -938,6 +949,18 @@ function wireView() {
   wireExploreView();
   syncTallTables(appRoot);
 
+  appRoot.querySelectorAll('[data-detail-page]').forEach((button) => {
+    button.addEventListener('click', () => {
+      detailPage = Number(button.dataset.detailPage);
+      applyAndRenderView('[data-detail-size]');
+    });
+  });
+  appRoot.querySelector('[data-detail-size]')?.addEventListener('change', (event) => {
+    detailPageSize = Number(event.target.value);
+    detailPage = 1;
+    applyAndRenderView('[data-detail-size]');
+  });
+
   appRoot.querySelectorAll('select[data-table-limit]').forEach((sel) => {
     sel.addEventListener('change', () => {
       const key = sel.dataset.tableLimit;
@@ -1222,7 +1245,7 @@ cancelProcessing.addEventListener('click', () => {
   }
   analysisState.clear();
   analysisClient.cancel();
-  model = null; current = null; currentPrev = null; cacheOffer = null;
+  model = null; current = null; currentPrev = null; currentDetail = null; detailContext = null; cacheOffer = null;
   appRoot.replaceChildren();
   jobs.clear(); processingError = null;
   appRoot.setAttribute('aria-busy', 'false');
@@ -1376,12 +1399,19 @@ appRoot.addEventListener('click', (e) => {
       const selDate = appRoot.querySelector('#cal-selected-date');
       const selVal = appRoot.querySelector('#cal-selected-value');
       const btnFilter = appRoot.querySelector('#btn-cal-filter-day');
+      const detailLink = appRoot.querySelector('#cal-day-detail');
       const btnStart = appRoot.querySelector('#btn-cal-set-start');
       const btnEnd = appRoot.querySelector('#btn-cal-set-end');
       const fromInput = appRoot.querySelector('#cal-range-from');
       const toInput = appRoot.querySelector('#cal-range-to');
 
       if (selDate) selDate.textContent = iso;
+      if (detailLink) {
+        const params = new URLSearchParams(filterParams(state).replace(/^\?/, ''));
+        params.set('m', activeMetric);
+        detailLink.href = formatSemanticRoute('day', iso, `?${params}`);
+        detailLink.hidden = false;
+      }
       if (selVal) selVal.textContent = valLabel ? `· ${valLabel}` : '';
       if (btnFilter) btnFilter.disabled = false;
       if (btnStart) btnStart.disabled = false;

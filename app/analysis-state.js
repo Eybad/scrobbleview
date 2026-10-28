@@ -3,21 +3,21 @@ import { filterParams } from './filter-ui.js';
 // A response can replace visible statistics only while its requested state is
 // still current. Reusing a result also avoids recalculation for table controls.
 export function createAnalysisState(client) {
-  let revision = 0, full = null, current = null, prev = null, appliedKey = null, albumDetail = null;
+  let revision = 0, full = null, current = null, prev = null, appliedKey = null, albumDetail = null, detail = null, detailKey = null;
   function releaseAlbum() {
     if (albumDetail) albumDetail.trackStats = new Map();
     albumDetail = null;
   }
   return {
-    initialize(model) { revision++; releaseAlbum(); full = model; current = model; prev = null; appliedKey = null; },
-    clear() { revision++; releaseAlbum(); full = null; current = null; prev = null; appliedKey = null; },
+    initialize(model) { revision++; releaseAlbum(); full = model; current = model; prev = null; appliedKey = null; detail = null; detailKey = null; },
+    clear() { revision++; releaseAlbum(); full = null; current = null; prev = null; appliedKey = null; detail = null; detailKey = null; },
     getConfirmed() { return { model: current, prev, key: appliedKey }; },
     cancelUpdate() {
       revision++;
       client.cancelUpdate?.();
       return { model: current, prev, key: appliedKey };
     },
-    async update(state, { view, id, onProgress } = {}) {
+    async update(state, { view, id, page = 1, pageSize = 25, onProgress } = {}) {
       const requestedRevision = ++revision;
       const isCurrent = () => revision === requestedRevision;
       const progress = (fraction, label) => { if (isCurrent()) onProgress?.(fraction, label); };
@@ -38,8 +38,18 @@ export function createAnalysisState(client) {
           if (!isCurrent()) return null;
           if (detail) { album.trackStats = detail.trackStats; albumDetail = album; }
         }
+        let nextDetail = null, nextDetailKey = null;
+        if (view === 'day' || view === 'session') {
+          nextDetailKey = JSON.stringify([key, view, id, page, pageSize]);
+          if (detailKey === nextDetailKey) nextDetail = detail;
+          else {
+            nextDetail = await client.request(view === 'day' ? 'dayDetail' : 'sessionDetail', { state, id, page, pageSize }, { onProgress: progress });
+            if (!isCurrent()) return null;
+          }
+        }
+        detail = nextDetail; detailKey = nextDetailKey;
         current = next; prev = nextPrev; appliedKey = key;
-        return { model: current, prev };
+        return { model: current, prev, detail };
       } catch (error) {
         if (!isCurrent()) return null;
         throw error;

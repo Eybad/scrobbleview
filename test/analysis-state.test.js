@@ -47,3 +47,21 @@ test('album details are fetched on demand and released when leaving the album', 
   assert.equal(album.trackStats.size, 0);
   assert.deepEqual(requests, ['filter', 'album']);
 });
+
+test('event details discard stale responses and are released on navigation', async () => {
+  const pending = [];
+  const state = createAnalysisState({ request(type) {
+    if (type === 'filter') return Promise.resolve({ model: null, prev: null });
+    return new Promise(resolve => pending.push(resolve));
+  } });
+  state.initialize(result(3));
+  const first = state.update(emptyFilterState(), { view: 'day', id: '2024-01-01' });
+  await Promise.resolve();
+  const second = state.update(emptyFilterState(), { view: 'day', id: '2024-01-02' });
+  await Promise.resolve();
+  pending[1]({ rows: ['new'] });
+  assert.deepEqual((await second).detail.rows, ['new']);
+  pending[0]({ rows: ['old'] });
+  assert.equal(await first, null);
+  assert.equal((await state.update(emptyFilterState(), { view: 'dashboard' })).detail, null);
+});

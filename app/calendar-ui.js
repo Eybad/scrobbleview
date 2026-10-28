@@ -18,6 +18,7 @@ export function calendarInspectorHTML({ year = null, byMs = true } = {}) {
         <span class="cal-inspector-value" id="cal-selected-value"></span>
       </div>
       <div class="calendar-inspector__actions">
+        <a class="btn btn-secondary btn-sm" id="cal-day-detail" hidden>Ver detalle del día</a>
         <button type="button" class="btn btn-secondary btn-sm" data-cal-action="filter-day" id="btn-cal-filter-day" disabled>Filtrar este día</button>
         <button type="button" class="btn btn-secondary btn-sm" data-cal-action="set-start" id="btn-cal-set-start" disabled>Fijar como inicio</button>
         <button type="button" class="btn btn-secondary btn-sm" data-cal-action="set-end" id="btn-cal-set-end" disabled>Fijar como fin</button>

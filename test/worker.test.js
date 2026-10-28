@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { Worker } from 'node:worker_threads';
 import { createAnalysisClient } from '../app/analysis-client.js';
 import { emptyFilterState } from '../src/filters.js';
+import { createAnalysisState } from '../app/analysis-state.js';
+import { renderView } from '../app/views.js';
 
 function clientForTest(t) {
   const client = createAnalysisClient({ createWorker() {
@@ -68,6 +70,20 @@ test('worker errors are localized and a later request can recover', async (t) =>
   await assert.rejects(client.request('load', { files: [{ name: 'bad.json', blob: new Blob(['[{]']) }] }),
     (error) => error.code === 'E_PARSE' && Number.isInteger(error.byteOffset) && /bad.json/.test(error.message));
   assert.equal((await client.request('load', { files: [file(events)], timeZone: 'UTC' })).model.totals.records, 2);
+});
+
+test('worker client and controller deliver a day detail to the view', async (t) => {
+  const client = clientForTest(t);
+  const { model } = await client.request('load', { files: [file(events)], timeZone: 'UTC' });
+  const controller = createAnalysisState(client);
+  controller.initialize(model);
+  const result = await controller.update(emptyFilterState(), { view: 'day', id: '2024-01-01' });
+  assert.equal(result.detail.total, 1);
+  assert.equal(result.detail.rows[0].track, 'T');
+  assert.equal(result.model.cols, undefined);
+  const html = renderView('day', result.model, '2024-01-01', { detail: result.detail, detailRequested: true });
+  assert.match(html, /Mostrando 1–1 de 1/);
+  assert.match(html, /First/);
 });
 
 test('worker cancellation rejects pending work and permits a fresh load', async (t) => {

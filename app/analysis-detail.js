@@ -65,6 +65,7 @@ export function getEventDetail(ds, derived, tz, type, id, page, pageSize) {
   return {
     total, ms, page, pageSize, startRow: total ? (page - 1) * pageSize + 1 : 0,
     endRow: Math.min(page * pageSize, total), rows, artists: top(artists), tracks: top(tracks), albums: top(albums),
+    distinctTracks: tracks.size, distinctArtists: artists.size - Number(artists.has(0)), repeatedPlays: total - tracks.size,
     sessionCount: sessionIds.size, sessions: [...sessionIds].slice(0, 15).map(index => sessions.sessions[index]),
     summary: type === 'session' ? sessions.sessions[sessionId] : null,
     order: 'utc'

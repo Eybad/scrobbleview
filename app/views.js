@@ -967,7 +967,58 @@ export function sessionsView(model, ctx = {}) {
     </div>`;
 }
 
+function eventDetailView(model, id, ctx, type) {
+  const detail = ctx.detail;
+  const isSession = type === 'session';
+  const title = isSession ? `Sesión #${Number(id) + 1}` : `Día: ${id}`;
+  const previous = isSession ? 'sessions' : 'calendar';
+  const summary = detail.summary;
+  const rows = detail.rows.map(row => [
+    fmtLocal(row.local), trackSubLink(row.trackId, row.track, row.artist), esc(row.album),
+    row.durationKnown ? fmtMs(row.ms) : '—'
+  ]);
+  const topRows = (items, kind) => items.map(item => [
+    kind === 'track' ? trackSubLink(item.id, item.name, model.tracks.byId.get(item.id)?.artist ?? '(Desconocido)')
+      : kind === 'artist' && item.id ? entityLink('artist', item.id, item.name)
+        : kind === 'album' && item.id ? entityLink('album', item.id, item.name) : esc(item.name),
+    fmtNum(item.plays), fmtMs(item.ms)
+  ]);
+  const pages = Math.max(1, Math.ceil(detail.total / detail.pageSize));
+  return `
+    <header class="view-header">
+      <p><a href="#/${previous}${esc(ctx.query ?? '')}">← Volver</a></p>
+      <h1>${esc(title)}</h1>
+      <p class="view-meta">${fmtNum(detail.total)} reproducciones · ${fmtMs(detail.ms)} tiempo escuchado</p>
+      ${isSession ? `<p class="view-meta">Inicio estimado: ${fmtLocal(summary.start)} · Fin: ${fmtLocal(summary.end)} · Amplitud estimada: ${fmtMs(summary.duration * 1000)}. Los solapamientos y las pausas internas no pueden reconstruirse.</p>` : ''}
+      ${!isSession && typeof id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(id) ? `<p><button type="button" class="btn btn-secondary" data-filter-range="${esc(id)}:${esc(id)}">Filtrar solo este día</button></p>` : ''}
+    </header>
+    ${kpis([
+      { label: 'Canciones distintas', value: fmtNum(detail.distinctTracks) },
+      { label: 'Artistas distintos', value: fmtNum(detail.distinctArtists) },
+      { label: isSession ? 'Reproducciones repetidas' : 'Sesiones relacionadas', value: fmtNum(isSession ? detail.repeatedPlays : detail.sessionCount) }
+    ])}
+    <div class="grid-2">
+      ${card('Canciones principales', table(['Canción', 'Reproducciones', 'Tiempo'], topRows(detail.tracks, 'track'), '', ['', 'n', 'n'], null, 'Canciones principales'))}
+      ${card('Artistas principales', table(['Artista', 'Reproducciones', 'Tiempo'], topRows(detail.artists, 'artist'), '', ['', 'n', 'n'], null, 'Artistas principales'))}
+      ${card('Álbumes principales', table(['Álbum', 'Reproducciones', 'Tiempo'], topRows(detail.albums, 'album'), '', ['', 'n', 'n'], null, 'Álbumes principales'))}
+      ${!isSession && detail.sessions.length ? card('Sesiones relacionadas', table(['Inicio estimado', 'Reproducciones', 'Tiempo'], detail.sessions.map(session => [`<a href="#/session/${session.id}${esc(ctx.query ?? '')}">${fmtLocal(session.start)}</a>`, fmtNum(session.plays), fmtMs(session.ms)]), '', ['', 'n', 'n'], null, 'Sesiones relacionadas')) : ''}
+    </div>
+    ${card('Reproducciones', `${table(['Final local', 'Canción', 'Álbum', 'Tiempo'], rows, '', ['', '', '', 'n'], null, 'Reproducciones por orden UTC')}
+      <nav class="pagination" aria-label="Paginación de reproducciones">
+        <div class="pagination-info" aria-live="polite">Mostrando ${fmtNum(detail.startRow)}–${fmtNum(detail.endRow)} de ${fmtNum(detail.total)}</div>
+        <div class="pagination-actions">
+          <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page - 1}"${detail.page <= 1 ? ' disabled' : ''}>Anterior</button>
+          <span class="pagination-current">Página ${fmtNum(detail.page)} de ${fmtNum(pages)}</span>
+          <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page + 1}"${detail.page >= pages ? ' disabled' : ''}>Siguiente</button>
+          <label class="pagination-size-label">Por página <select class="pagination-select" data-detail-size>${[25, 50, 100].map(size => `<option value="${size}"${size === detail.pageSize ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
+        </div>
+      </nav>`)}
+  `;
+}
+
 export function sessionView(model, id, ctx = {}) {
+  if (ctx.detail) return eventDetailView(model, id, ctx, 'session');
+  if (ctx.detailRequested) return '<p class="empty">Sesión no encontrada en la selección actual.</p>';
   const idx = Number(id);
   const s = model.sessions?.[idx];
   if (!s) return `<p class="empty">Sesión no encontrada.</p>`;
@@ -1020,6 +1071,8 @@ export function sessionView(model, id, ctx = {}) {
 }
 
 export function dayView(model, id, ctx = {}) {
+  if (ctx.detail) return eventDetailView(model, id, ctx, 'day');
+  if (ctx.detailRequested) return '<p class="empty">No se pudo consultar el día.</p>';
   let dayNum = null;
   let isoDate = null;
   if (typeof id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(id)) {
