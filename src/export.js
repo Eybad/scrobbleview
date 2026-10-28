@@ -8,6 +8,8 @@
 // de análisis (un CSV por tabla, clave foránea artist_id en tracks/albums).
 
 import { civilFromDays } from './aggregate/impl/derive.js';
+import { queryCatalog } from './query.js';
+import { toCSV } from './export/csv.js';
 
 export const EXPORT_FORMAT = 'scrobbleview-export';
 export const EXPORT_VERSION = 1;
@@ -104,4 +106,66 @@ export function modelToTables(model) {
     rows: [...model.monthly.entries()].sort((a, b) => a[0] - b[0]).map(([mi, v]) => [mi, v.plays, v.ms])
   });
   return tables;
+}
+
+export function exportExploreTableCSV(items, queryOpts = {}, tab = 'artists') {
+  const result = queryCatalog(items, { ...queryOpts, page: 1, pageSize: 10000000 });
+  let headers = [];
+  let rows = [];
+
+  if (tab === 'artists') {
+    headers = ['#', 'Artista', 'Tiempo (ms)', 'Reproducciones', 'Cuota (%)', 'Días activos', 'Meses activos', 'Primera escucha', 'Última escucha'];
+    rows = result.rows.map((entry, idx) => {
+      const a = entry.item;
+      return [
+        idx + 1,
+        a.name,
+        a.ms,
+        a.plays,
+        (entry.share * 100).toFixed(2),
+        a.days?.size ?? a.days ?? 0,
+        a.months?.size ?? a.months ?? 0,
+        locISO(a.firstTs),
+        locISO(a.lastTs)
+      ];
+    });
+  } else if (tab === 'tracks') {
+    headers = ['#', 'Canción', 'Artista', 'Tiempo (ms)', 'Reproducciones', 'Cuota (%)', 'Días activos', 'Primera escucha', 'Última escucha'];
+    rows = result.rows.map((entry, idx) => {
+      const tr = entry.item;
+      return [
+        idx + 1,
+        tr.name,
+        tr.artist,
+        tr.ms,
+        tr.plays,
+        (entry.share * 100).toFixed(2),
+        tr.days?.size ?? tr.days ?? 0,
+        locISO(tr.firstTs),
+        locISO(tr.lastTs)
+      ];
+    });
+  } else {
+    headers = ['#', 'Álbum', 'Artista', 'Tiempo (ms)', 'Reproducciones', 'Cuota (%)', 'Canciones', 'Días activos', 'Primera escucha', 'Última escucha'];
+    rows = result.rows.map((entry, idx) => {
+      const al = entry.item;
+      return [
+        idx + 1,
+        al.name,
+        al.artist,
+        al.ms,
+        al.plays,
+        (entry.share * 100).toFixed(2),
+        al.tracks?.size ?? al.tracks ?? 0,
+        al.days?.size ?? al.days ?? 0,
+        locISO(al.firstTs),
+        locISO(al.lastTs)
+      ];
+    });
+  }
+
+  return {
+    totalMatches: result.totalMatches,
+    csv: `\uFEFF${toCSV(headers, rows)}`
+  };
 }

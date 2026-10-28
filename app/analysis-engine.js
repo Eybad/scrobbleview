@@ -82,10 +82,40 @@ export function createAnalysisEngine() {
         return model.albums.byId.get(id) ?? null;
       }
       if (type === 'export') {
-        const model = await aggregateSelection(emptyFilterState(), { albumDetails: undefined, onProgress: report });
+        const scope = payload.scope === 'selection' ? 'selection' : 'all';
+        const filterState = scope === 'selection' && payload.filterState ? payload.filterState : emptyFilterState();
+        const model = await aggregateSelection(filterState, { albumDetails: undefined, onProgress: report });
         report(0, 'Exportando tablas');
         const encoder = new TextEncoder();
-        const entries = modelToTables(model).map(({ name, headers, rows }) => ({
+        const tables = modelToTables(model);
+
+        const metaRows = [
+          ['format', 'scrobbleview-aggregated-export'],
+          ['export_version', 1],
+          ['schema_version', 2],
+          ['exported_at_utc', new Date().toISOString()],
+          ['timezone', tz?.id ?? timeZone],
+          ['scope', scope],
+          ['total_records', model.totals.records],
+          ['total_ms', model.totals.ms],
+          ['first_event_local', model.meta?.firstEventLocal ?? ''],
+          ['last_event_local', model.meta?.lastEventLocal ?? ''],
+          ['is_filtered', scope === 'selection' && payload.filterState && isFilterActive(payload.filterState) ? 'true' : 'false'],
+          ['note', 'Agregados para analisis estadistico. No reimportar como historial original de Spotify.']
+        ];
+        if (payload.filterState && scope === 'selection') {
+          if (payload.filterState.range) metaRows.push(['filter_range', `${payload.filterState.range.start}..${payload.filterState.range.end}`]);
+          if (payload.filterState.years?.size) metaRows.push(['filter_years', [...payload.filterState.years].join(';')]);
+          if (payload.filterState.dow?.size) metaRows.push(['filter_dow', [...payload.filterState.dow].join(';')]);
+          if (payload.filterState.hours?.size) metaRows.push(['filter_hours', [...payload.filterState.hours].join(';')]);
+        }
+        tables.unshift({
+          name: 'metadata',
+          headers: ['key', 'value'],
+          rows: metaRows
+        });
+
+        const entries = tables.map(({ name, headers, rows }) => ({
           name: `${name}.csv`, bytes: encoder.encode(`\uFEFF${toCSV(headers, rows)}`)
         }));
         const bytes = await buildZip(entries);
