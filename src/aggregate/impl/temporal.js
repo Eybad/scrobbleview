@@ -35,6 +35,8 @@ export function createTemporalAcc(minMs = 0, history = null, { compact = false }
         plays: 0, ms: 0, skips: 0, shuffle: 0, newTracks: 0, newArtists: 0,
         blocks: [0, 0, 0, 0], // franjas [madrugada, mañana, tarde, noche] del año
         blocksMs: [0, 0, 0, 0],
+        unknownArtistPlays: 0,
+        unknownArtistMs: 0,
         artistsC: new Map(), tracksC: new Map(), albumsC: new Map(),
         artistsMs: new Map(), tracksMs: new Map(), albumsMs: new Map()
       };
@@ -63,8 +65,13 @@ export function createTemporalAcc(minMs = 0, history = null, { compact = false }
       y.blocksMs[block] += ev.ms;
       if (ev.isSkipped) y.skips++;
       if (ev.flags & 1) y.shuffle++;
-      bump(y.artistsC, ev.ar, 1);
-      y.artistsMs.set(ev.ar, (y.artistsMs.get(ev.ar) || 0) + ev.ms);
+      if (ev.ar > 0) {
+        bump(y.artistsC, ev.ar, 1);
+        y.artistsMs.set(ev.ar, (y.artistsMs.get(ev.ar) || 0) + ev.ms);
+      } else {
+        y.unknownArtistPlays++;
+        y.unknownArtistMs += ev.ms;
+      }
       bump(y.tracksC, tk, 1);
       y.tracksMs.set(tk, (y.tracksMs.get(tk) || 0) + ev.ms);
       if (ev.al > 0) {
