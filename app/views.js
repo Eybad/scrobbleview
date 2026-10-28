@@ -14,6 +14,7 @@ import { civilFromDays } from '../src/aggregate/impl/derive.js';
 import { queryCatalog } from '../src/query.js';
 import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsPickerHTML } from './catalog-table.js';
 import { calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML } from './calendar-ui.js';
+import { compareView } from './compare-view.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -1592,6 +1593,7 @@ export function exploreView(model, ctx = {}) {
 export const VIEWS = {
   dashboard: (model, id, ctx) => dashboard(model, ctx),
   explore: (model, id, ctx) => exploreView(model, ctx),
+  compare: (model, id, ctx) => compareView(model, id, ctx),
   artist: (model, id, ctx) => artistView(model, Number(id), ctx),
   track: (model, id, ctx) => trackView(model, Number(id), ctx),
   album: (model, id, ctx) => albumView(model, Number(id), ctx),

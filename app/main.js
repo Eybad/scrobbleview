@@ -266,6 +266,7 @@ function navHTML(active) {
   return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('explore', 'Explorar', 'explore')}
+    ${link('compare', 'Comparar', 'compare')}
     ${link('hours', 'Horarios', 'hours')}
     ${link('habits', 'Hábitos', 'habits')}
     ${link('sessions', 'Sesiones', 'sessions')}
@@ -377,7 +378,8 @@ function buildViewContext(viewName) {
     query: queryStr,
     exploreState,
     normalizeYears: state.normalizeYears ?? false,
-    month: state.calMonth?.month
+    month: state.calMonth?.month,
+    comparePreset: state.comparePreset || 'equal_previous'
   };
 }
 
@@ -1212,6 +1214,13 @@ appRoot.addEventListener('click', (e) => {
   const scaleToggle = e.target.closest?.('[data-action="toggle-cal-scale"]');
   if (scaleToggle && appRoot.contains(scaleToggle)) {
     state.normalizeYears = scaleToggle.dataset.normalize === 'true';
+    render();
+    return;
+  }
+
+  const compPresetBtn = e.target.closest?.('[data-compare-preset]');
+  if (compPresetBtn && appRoot.contains(compPresetBtn)) {
+    state.comparePreset = compPresetBtn.dataset.comparePreset;
     render();
     return;
   }
