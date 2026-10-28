@@ -13,7 +13,7 @@
 
 ### Suite de pruebas unitarias y de integración (`node --test`)
 - **Baseline inicial**: 235 pruebas (13,29 s).
-- **Estado actual tras Etapa 1**: 240 pruebas aprobadas, 0 fallidas (10,60 s).
+- **Estado actual tras Etapa 3**: 276 pruebas aprobadas, 0 fallidas (10,44 s).
 
 ### Benchmark base (100.000 eventos compactos)
 - Comando: `node --expose-gc bench/aggregate.js 100000 --compact`
@@ -89,7 +89,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **0** | Reconocimiento, base y seguimiento | **Completada** |
 | **1** | Correcciones de lectura y definiciones | **Completada** |
 | **2** | Contexto, rutas, espera y cancelación | **Completada** |
-| **3** | Catálogo completo y tablas reutilizables | Pendiente |
+| **3** | Catálogo completo y tablas reutilizables | **Completada** |
 | **4** | Gráficos y calendario accesibles | Pendiente |
 | **5** | Comparación A/B y evolución | Pendiente |
 | **6** | Día, sesiones y secuencias explicables | Pendiente |
@@ -122,24 +122,35 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 7. **Captura y restauración de historial**: En `app/history-state.js`, se implementó la captura de `scrollY`, `scrollX`, selector del elemento con foco y scroll de tablas/gráficos en `history.state` (`returnState`). Al pulsar Atrás (`popstate`), se restauran exactamente fila, scroll y foco con `preventScroll: true` (criterio A10).
 8. **Franja contextual compacta**: En `app/context-bar.js` y `css/style.css`, se implementó una franja contextual (`.context-bar`) de ≤ 2 filas que resume el período activo, chips de filtros aplicados y switch de métrica unificado respetando safe-areas móviles.
 
-## 7. Criterios de Aceptación Verificados (Etapas 1 y 2)
+## 7. Detalle de Cambios — Etapa 3
+
+1. **Motor de consulta puro (`src/query.js`)**: Extracción de funciones puras de normalización de texto sin diacríticos (`normalizeSearchText`), búsqueda sin fusionar identidades (`matchesQuery`), asignación de ordinal métrico determinista y cálculo de cuota analítica global (`rankEntities`), y consulta paginada con desempates estables (`queryCatalog`). Cero dependencias de DOM o Worker.
+2. **Componente de tabla reutilizable y paginación accesible (`app/catalog-table.js`)**: Renderizado semántico con `aria-sort`, paginación accesible con selector de tamaño (25/50/100 filas), selector de densidad (cómoda/compacta), selector de columnas secundarias (`columnsPickerHTML`), estado vacío explicativo con botón para limpiar búsqueda, y desambiguación obligatoria de canciones homónimas por artista.
+3. **Identidad fija y expansión de nombres**: Encabezados y celdas sticky para retener identidad en scroll horizontal; botón de expansión de nombres completos (`.btn-name-expand`) para visualización íntegra en pantallas táctiles y teclado sin navegar.
+4. **Vista de catálogo completo (`Explorar`)**: Incorporación de sección `Explorar` (`#/v1/explore`) en navegación principal (`app/main.js`, `app/views.js`), tabs para Artistas, Canciones y Álbumes con todas las columnas analíticas (tiempo, reproducciones, cuota del subconjunto, días, meses, fechas extremas, intensidad, tasa de salto con denominador conocido y sparklines mensuales de la página activa).
+5. **Enlaces contextuales desde tarjetas auxiliares**: Acceso directo desde las tarjetas de Obsesión, Saltos (artistas y canciones), Fidelidad, Constancia y Longevidad hacia `Explorar` transportando filtros analíticos, ordenamiento y umbrales configurables con validación de rango.
+6. **Consultas locales sin re-agregación**: Las operaciones de tabla (búsqueda con preservación de caret, paginación, ordenamiento y filtros de umbral) operan sobre el modelo confirmado en memoria sin disparar tareas al Worker ni re-agregar el dataset.
+
+## 8. Criterios de Aceptación Verificados (Etapas 1, 2 y 3)
 
 - **A01 / A02**: Cascada móvil y KPIs responsivos probados y colocados tras las definiciones base.
 - **A03**: Redondeo consistente en `fmtMs` sin unidades `60s`.
 - **A04**: Tasas de salto con base conocida y desconocidos separados.
 - **A05**: Coincidencia de artistas identificados entre Resumen y Años.
 - **A06**: Constancia separa continuidad activa de cobertura del período observado.
+- **A07**: Recorrido completo con paginación sobre >150 entidades y >100 coincidencias (`test/acceptance-etapa3.test.js`).
+- **A08**: Orden global estable previo a la paginación y cuota analítica invariante frente a página o búsqueda.
+- **A09**: Canciones homónimas de artistas distintos con identidad visible y enlaces semánticos diferenciados.
 - **A10**: Ida y vuelta desde fila de tabla restaura scroll de página, tabla y foco exacto.
 - **A11**: Navegación entre entidades y apertura en nueva pestaña transporta contexto analítico en `href`.
 - **A12**: Inversión de orden de archivos en la carga resuelve idénticamente las rutas semánticas.
 - **A13**: Ráfaga de 5 filtros con Worker ocupado produce ≤ 2 solicitudes efectivas y modelo final correcto.
 - **A14**: Cancelación lógica de filtro y exportación no termina el Worker ni borra el dataset.
 
-## 8. Siguiente Tarea Exacta
+## 9. Siguiente Tarea Exacta
 
-- Iniciar **Etapa 3 — Catálogo completo y tablas reutilizables**:
-  1. Extraer funciones puras de consulta sobre entidades y rankings (filtro de texto, orden, desempate, total, offset, límite).
-  2. Implementar vista `Explorar` para Artistas/Canciones/Álbumes con cuota sobre el universo analítico total.
-  3. Búsqueda normalizada sobre todo el catálogo sin reiniciar caret de búsqueda.
-  4. Paginación accesible (25/50/100 filas) y desempate determinista.
-  5. Controles accionados y scroll conservados.
+- Iniciar **Etapa 4 — Gráficos y calendario accesibles**:
+  1. Definir contrato común de gráfico (título, unidad/base, rango, resumen accesible, selección, tabla exacta).
+  2. Implementar inspector táctil persistente y accesible por teclado.
+  3. Incorporar tabla de datos paginada para cada gráfico.
+  4. Rediseñar calendario anual y vista mensual interactiva.
