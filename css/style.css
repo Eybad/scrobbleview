@@ -1094,6 +1094,65 @@ main.container {
   transition: opacity 150ms ease;
 }
 
+/* Franja contextual compacta (Etapa 2) */
+.context-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: var(--sp-2) var(--sp-4);
+  padding-left: max(var(--sp-4), env(safe-area-inset-left));
+  padding-right: max(var(--sp-4), env(safe-area-inset-right));
+  margin-bottom: var(--sp-4);
+}
+
+.context-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  max-width: var(--max-w);
+  margin: 0 auto;
+}
+
+.context-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  font-size: var(--fs-xs);
+}
+
+.context-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: 500;
+  border: 1px solid var(--border);
+}
+
+.context-filter-btn {
+  cursor: pointer;
+  color: var(--accent);
+  background: var(--surface-3);
+}
+
+.context-controls .metric-switch {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+
+@media (max-width: 640px) {
+  .context-bar {
+    padding-top: max(var(--sp-2), env(safe-area-inset-top));
+  }
+  .context-bar-inner {
+    gap: var(--sp-2);
+  }
+}
+
 .grid-2 .card {
   margin-bottom: 0;
 }

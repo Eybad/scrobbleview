@@ -10,6 +10,8 @@ import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToIS
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
 import { parseRoute, resolveRoute, formatSemanticRoute } from './routes.js';
+import { captureHistoryState, restoreHistoryState } from './history-state.js';
+import { contextBarHTML } from './context-bar.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -64,6 +66,7 @@ let rankUI = { tab: 'artists', metric: activeMetric, topN: initialLimits.rankTop
 const tableLimits = initialLimits.map;
 let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
 let advState = null;
+let popReturnState = null;
 
 // Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
 // re-renders porque vive fuera de #app-root; el texto va por textContent).
@@ -357,7 +360,7 @@ function render() {
   } else {
     viewContent = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
   }
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${viewContent}</div>`;
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + `<div id="view-root">${viewContent}</div>`;
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -805,15 +808,33 @@ document.querySelector('.skip-link').addEventListener('click', (event) => {
   event.preventDefault();
   focusMainContent();
 });
+window.addEventListener('popstate', (event) => {
+  if (event.state?.returnState) {
+    popReturnState = event.state.returnState;
+  }
+});
+
 window.addEventListener('hashchange', async () => {
   if (location.hash === '#main-content') { focusMainContent(); return; }
   if (initializing || !model) return;
   const [name] = parseHash();
   if (!await applyHashParams()) return;
   render();
-  if (name !== lastView) {
+  if (popReturnState) {
+    restoreHistoryState(popReturnState);
+    popReturnState = null;
+  } else if (name !== lastView) {
     lastView = name;
-    window.scrollTo(0, 0);
+    if (name === 'artist' || name === 'track' || name === 'album') {
+      const h = appRoot.querySelector('.view-header h1, .view-header');
+      if (h) {
+        h.setAttribute('tabindex', '-1');
+        h.focus({ preventScroll: true });
+      }
+      window.scrollTo(0, 0);
+    } else {
+      window.scrollTo(0, 0);
+    }
   }
 });
 
@@ -839,11 +860,37 @@ appRoot.addEventListener('click', (e) => {
   document.getElementById('filter-chips')?.focus();
 });
 
+// Context bar: selector de métrica compartido con el ranking y foco a filtros
+appRoot.addEventListener('click', (e) => {
+  const metricBtn = e.target.closest?.('.context-bar [data-metric]');
+  if (metricBtn && appRoot.contains(metricBtn)) {
+    activeMetric = metricBtn.dataset.metric;
+    rankUI.metric = activeMetric;
+    try { localStorage.setItem(METRIC_STORAGE_KEY, activeMetric); } catch (_) {}
+    syncHash();
+    render();
+    const newBtn = appRoot.querySelector(`.context-bar [data-metric="${activeMetric}"]`);
+    if (newBtn) newBtn.focus();
+    return;
+  }
+  const focusBtn = e.target.closest?.('[data-action="focus-filters"]');
+  if (focusBtn && appRoot.contains(focusBtn)) {
+    const chips = document.getElementById('filter-chips');
+    if (chips) chips.focus();
+    return;
+  }
+});
+
 // Los enlaces internos llevan los filtros y métrica vigentes en el hash: el click los
 // reescribe antes de navegar (deep-link y Back coherentes entre vistas).
+// Captura el estado de retorno en history.state antes de navegar.
 appRoot.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[href^="#/"]');
   if (!a || !appRoot.contains(a)) return;
+  const returnState = captureHistoryState();
+  if (returnState) {
+    history.replaceState({ ...history.state, returnState }, '', location.href);
+  }
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
