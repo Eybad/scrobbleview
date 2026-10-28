@@ -11,6 +11,12 @@ export function createAnalysisState(client) {
   return {
     initialize(model) { revision++; releaseAlbum(); full = model; current = model; prev = null; appliedKey = null; },
     clear() { revision++; releaseAlbum(); full = null; current = null; prev = null; appliedKey = null; },
+    getConfirmed() { return { model: current, prev, key: appliedKey }; },
+    cancelUpdate() {
+      revision++;
+      client.cancelUpdate?.();
+      return { model: current, prev, key: appliedKey };
+    },
     async update(state, { view, id, onProgress } = {}) {
       const requestedRevision = ++revision;
       const isCurrent = () => revision === requestedRevision;
@@ -21,7 +27,7 @@ export function createAnalysisState(client) {
         let next = current, nextPrev = prev;
         if (key !== appliedKey) {
           const result = await client.request('filter', { state }, { onProgress: progress });
-          if (!isCurrent()) return null;
+          if (!isCurrent() || !result) return null;
           next = result.model ?? full;
           nextPrev = result.prev;
         }

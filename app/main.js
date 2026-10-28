@@ -113,20 +113,26 @@ function updateProcessing() {
   cancelProcessing.hidden = !job;
 }
 
-function beginProcessing(label) {
+function beginProcessing(label, type = 'general') {
   const id = ++nextJob;
   processingError = null;
-  jobs.set(id, { label, fraction: 0 });
+  jobs.set(id, { label, fraction: 0, type });
   updateProcessing();
   return {
-    progress(fraction, nextLabel) { if (jobs.has(id)) { jobs.set(id, { fraction, label: nextLabel }); updateProcessing(); } },
+    progress(fraction, nextLabel) { if (jobs.has(id)) { jobs.set(id, { fraction, label: nextLabel, type }); updateProcessing(); } },
     finish() { jobs.delete(id); updateProcessing(); }
   };
 }
 
-function reportProcessingError(error) {
+function reportProcessingError(error, type = 'general') {
   if (error.code === 'E_ABORT') return;
-  processingError = `${error.message} Podés volver a cargar los archivos.`;
+  if (type === 'filter') {
+    processingError = `${error.message} Reintentá o restablecé los filtros.`;
+  } else if (type === 'export') {
+    processingError = `${error.message} Reintentá la exportación.`;
+  } else {
+    processingError = `${error.message} Podés volver a cargar los archivos.`;
+  }
   updateProcessing();
 }
 
@@ -149,7 +155,7 @@ async function initializeAnalysis(result) {
 }
 
 async function analyze(input, { onProgress } = {}) {
-  const job = beginProcessing('Leyendo archivos');
+  const job = beginProcessing('Leyendo archivos', 'import');
   try {
     const result = await analysisClient.request('load', input, { onProgress(fraction, label) {
       job.progress(fraction, label); onProgress?.(fraction, label);
@@ -161,7 +167,7 @@ async function analyze(input, { onProgress } = {}) {
 }
 
 async function loadCached() {
-  const job = beginProcessing('Cargando datos guardados');
+  const job = beginProcessing('Cargando datos guardados', 'import');
   try {
     const result = await analysisClient.request('cached', {}, { onProgress: job.progress });
     if (!result) return null;
@@ -183,24 +189,26 @@ async function refreshModel() {
   if (!model) return false;
   const [view, id] = parseHash();
   const requestedHash = location.hash;
-  const job = beginProcessing('Actualizando estadísticas');
-  const root = document.getElementById('view-root');
-  if (root) root.hidden = true;
+  const job = beginProcessing('Actualizando estadísticas', 'filter');
   appRoot.setAttribute('aria-busy', 'true');
+  appRoot.classList.add('app--updating');
   try {
     const result = await analysisState.update(state, { view, id, onProgress: job.progress });
     if (!result || requestedHash !== location.hash) return false;
     current = result.model;
     currentPrev = result.prev;
-    if (root) root.hidden = false;
-    appRoot.setAttribute('aria-busy', 'false');
     return true;
   } catch (error) {
-    appRoot.setAttribute('aria-busy', 'false');
-    reportProcessingError(error);
+    if (error.code !== 'E_ABORT') {
+      reportProcessingError(error, 'filter');
+    }
     if (initializing) throw error;
     return false;
-  } finally { job.finish(); }
+  } finally {
+    appRoot.setAttribute('aria-busy', 'false');
+    appRoot.classList.remove('app--updating');
+    job.finish();
+  }
 }
 
 function parseHash() {
@@ -670,10 +678,11 @@ function wireView() {
 // <a download>: sin red, CSP intacta.
 async function exportModel() {
   if (!model) return;
-  const job = beginProcessing('Preparando exportación');
+  const job = beginProcessing('Preparando exportación', 'export');
   let result;
   try { result = await analysisClient.request('export', {}, { onProgress: job.progress }); }
   finally { job.finish(); }
+  if (!result || !result.bytes) return;
   const blob = new Blob([result.bytes], { type: 'application/zip' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -695,7 +704,7 @@ headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
     try {
       await exportModel();
     } catch (error) {
-      reportProcessingError(error);
+      if (error.code !== 'E_ABORT') reportProcessingError(error, 'export');
     } finally {
       b.disabled = false;
     }
@@ -721,12 +730,37 @@ const inputApi = setupInput({
 });
 
 cancelProcessing.addEventListener('click', () => {
+  const activeJob = [...jobs.values()].at(-1);
+  if (activeJob?.type === 'filter') {
+    const confirmed = analysisState.cancelUpdate();
+    if (confirmed?.model) {
+      current = confirmed.model;
+      currentPrev = confirmed.prev;
+      state = paramsToFilterState(confirmed.key) ?? emptyFilterState();
+      syncHash();
+      render();
+    }
+    jobs.clear();
+    processingError = null;
+    appRoot.setAttribute('aria-busy', 'false');
+    appRoot.classList.remove('app--updating');
+    updateProcessing();
+    return;
+  }
+  if (activeJob?.type === 'export') {
+    analysisClient.cancelExport();
+    jobs.clear();
+    processingError = null;
+    updateProcessing();
+    return;
+  }
   analysisState.clear();
   analysisClient.cancel();
   model = null; current = null; currentPrev = null; cacheOffer = null;
   appRoot.replaceChildren();
   jobs.clear(); processingError = null;
   appRoot.setAttribute('aria-busy', 'false');
+  appRoot.classList.remove('app--updating');
   updateProcessing(); updateCacheToast();
   headerActions?.setAttribute('hidden', '');
   siteFooter?.setAttribute('hidden', '');
