@@ -1,14 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { aggregate } from '../src/aggregate/aggregate.js';
 import { buildDataset } from './fakes/dataset.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
+import { trackKey } from '../src/aggregate/impl/groups.js';
 import {
   computeComebacks,
   computeRetention,
   computeMonthlyLongitudinal
 } from '../src/longitudinal.js';
-import { trackKey } from '../src/aggregate/impl/groups.js';
 
+test('historical results follow UTC order and selected return events', () => {
+  const start = 1704067200;
+  const events = [0, 5, 100].map(day => ({
+    t: start + day * 86400, m: 60000, track: 'Track', artist: 'Artist'
+  }));
+  for (const input of [events, [...events].reverse()]) {
+    const ds = buildDataset(input);
+    const model = aggregate(ds, { tz: fixedTz('UTC', 0) });
+    assert.equal(model.comebacks.tracks.length, 1);
+    assert.equal(model.comebacks.tracks[0].gapDays, 95);
+    assert.equal(model.retention.r30.rate, 1);
+    const returnIndex = input.findIndex(event => event.t === events[2].t);
+    const selected = aggregate(ds, { tz: fixedTz('UTC', 0), indices: [returnIndex] });
+    assert.equal(selected.comebacks.tracks.length, 1);
+    const firstIndex = input.findIndex(event => event.t === events[0].t);
+    const withoutReturn = aggregate(ds, { tz: fixedTz('UTC', 0), indices: [firstIndex] });
+    assert.equal(withoutReturn.comebacks.tracks.length, 0);
+  }
+});
 test('A23: historical first appearances and comebacks computed on original timeline survive filtering', () => {
   const D0 = 1704067200; // 2024-01-01 00:00:00 UTC
   const DAY = 86400;

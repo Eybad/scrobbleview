@@ -97,7 +97,7 @@ export function aggregate(ds, opts = {}) {
   const model = buildStats({
     ds, tz, now, minMs, skipThresholdMs,
     cols, localOrder: derived.localOrder, totals, groups: g, temporal: t, sessions: s, behavior: b,
-    transitions: tr, concentration, history: opts.history
+    transitions: tr, concentration, history: opts.history, baseDerived, selected: opts.indices ? new Set(order) : null
   });
   opts.onProgress?.(1, 'Estadísticas listas');
   return model;
@@ -199,7 +199,7 @@ function longestStreak(days) {
   return { len: bestLen, start: bestStart, end: bestEnd };
 }
 
-function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration, history = null }) {
+function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration, history = null, baseDerived, selected }) {
   const { artists, tracks, albums } = groups;
   const n = cols.t.length;
 
@@ -241,15 +241,11 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
 
   const transitionTop = mapTransitionTop(transitions.selection || transitions);
 
-  const lastLoadedUtc = ds.t.length > 0 ? ds.meta.tsMin + ds.t[ds.t.length - 1] : null;
-  const rangeForComebacks = n > 0 ? {
-    startUtc: cols.t[0] + ds.meta.tsMin,
-    endUtc: cols.t[n - 1] + ds.meta.tsMin
-  } : null;
-  const comebacks = computeComebacks(ds, { thresholdDays: 30, range: rangeForComebacks });
+  const lastLoadedUtc = baseDerived.t.length ? baseDerived.t[baseDerived.t.length - 1] : null;
+  const comebacks = computeComebacks(ds, { thresholdDays: 30, order: baseDerived.order, selected });
   const retention = {
-    r30: computeRetention(ds, { days: 30 }),
-    r90: computeRetention(ds, { days: 90 })
+    r30: computeRetention(ds, { days: 30, order: baseDerived.order }),
+    r90: computeRetention(ds, { days: 90, order: baseDerived.order })
   };
 
   const tables = buildTables({

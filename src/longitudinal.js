@@ -1,10 +1,13 @@
 import { trackKey } from './aggregate/impl/groups.js';
 import { civilFromDays } from './aggregate/impl/derive.js';
 
-export function computeComebacks(ds, { thresholdDays = 30, range = null, entityType = 'both' } = {}) {
+function chronologicalOrder(ds, order) {
+  return order ?? Uint32Array.from(ds.t, (_, i) => i).sort((a, b) => ds.t[a] - ds.t[b]);
+}
+
+export function computeComebacks(ds, { thresholdDays = 30, range = null, entityType = 'both', order = null, selected = null } = {}) {
   const thresholdSec = thresholdDays * 86400;
   const tsMin = ds.meta?.tsMin ?? 0;
-  const n = ds.t.length;
   const lastSeenTrack = new Map();
   const lastSeenArtist = new Map();
   const tracks = [];
@@ -13,7 +16,7 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
   const checkTrack = entityType === 'both' || entityType === 'tracks';
   const checkArtist = entityType === 'both' || entityType === 'artists';
 
-  for (let i = 0; i < n; i++) {
+  for (const i of chronologicalOrder(ds, order)) {
     const t = tsMin + ds.t[i];
     const tr = ds.tr[i];
     const ar = ds.ar[i];
@@ -24,7 +27,7 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
       if (prevT !== undefined) {
         const gapSec = t - prevT;
         if (gapSec >= thresholdSec) {
-          if (!range || (t >= range.startUtc && t <= range.endUtc)) {
+          if ((!selected || selected.has(i)) && (!range || (t >= range.startUtc && t <= range.endUtc))) {
             tracks.push({
               id: tk,
               name: ds.dicts.tracks.get(tr) || '(Desconocido)',
@@ -44,7 +47,7 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
       if (prevT !== undefined) {
         const gapSec = t - prevT;
         if (gapSec >= thresholdSec) {
-          if (!range || (t >= range.startUtc && t <= range.endUtc)) {
+          if ((!selected || selected.has(i)) && (!range || (t >= range.startUtc && t <= range.endUtc))) {
             artists.push({
               id: ar,
               name: ds.dicts.artists.get(ar) || '(Desconocido)',
@@ -65,7 +68,7 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
   return { tracks, artists };
 }
 
-export function computeRetention(ds, { days = 30, entityType = 'tracks' } = {}) {
+export function computeRetention(ds, { days = 30, entityType = 'tracks', order = null } = {}) {
   const n = ds.t.length;
   if (n === 0) {
     return { total: 0, eligible: 0, insufficient: 0, returned: 0, rate: null, days };
@@ -82,7 +85,7 @@ export function computeRetention(ds, { days = 30, entityType = 'tracks' } = {}) 
   const firstMap = new Map();
   const subsequentMap = new Map();
 
-  for (let i = 0; i < n; i++) {
+  for (const i of chronologicalOrder(ds, order)) {
     const id = isArtists ? ds.ar[i] : trackKey(ds.tr[i], ds.ar[i]);
     if (isArtists && id === 0) continue;
     const t = tsMin + ds.t[i];

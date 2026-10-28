@@ -14,7 +14,8 @@
 - Base revisada: `55f9d9289f09b07808147de0b03e0b413b5e0852`, rama `feat/deepening-plan`, árbol limpio antes de las correcciones.
 - C01: la vista de comparación informa que el período B no está calculado; la comparación real queda pendiente en R7. `node --test`: 309 pruebas aprobadas, 0 fallidas. No se verificó en navegador.
 - C18: se actualizó el selector de Sesiones y la expectativa de cancelación de filtro del harness. `node --check browser-tests/navigation.js` aprobó; la ejecución en navegador, la cancelación de importación y la de exportación siguen pendientes.
-- Siguiente tarea: completar R0 (harness y seguimiento), luego R1 (cronología y denominadores). Los fallos C02–C17 del plan siguen pendientes de corrección y verificación integrada.
+- C02 y C03, avance: regresos y retención recorren el orden UTC; los regresos se seleccionan por evento y el extremo histórico usa el máximo UTC. `node --test`: 310 pruebas aprobadas, 0 fallidas; falta verificar el flujo del motor y la cohorte filtrada.
+- Siguiente tarea: completar R0 (harness) y R1 (cohorte, motor y denominadores). Los demás fallos del plan siguen pendientes de corrección y verificación integrada.
 - Las secciones históricas siguientes registran lo que se afirmó en cada etapa; no acreditan aceptación actual. La revisión posterior detectó integraciones incompletas y resultados incorrectos.
 
 ## 2. Verificación de Partida y Progreso
