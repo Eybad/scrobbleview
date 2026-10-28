@@ -13,7 +13,7 @@
 
 ### Suite de pruebas unitarias y de integración (`node --test`)
 - **Baseline inicial**: 235 pruebas (13,29 s).
-- **Estado actual tras Etapa 4**: 287 pruebas aprobadas, 0 fallidas (12,43 s).
+- **Estado actual tras Etapa 5**: 296 pruebas aprobadas, 0 fallidas (10,73 s).
 
 ### Benchmark base (100.000 eventos compactos)
 - Comando: `node --expose-gc bench/aggregate.js 100000 --compact`
@@ -91,7 +91,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **2** | Contexto, rutas, espera y cancelación | **Completada** |
 | **3** | Catálogo completo y tablas reutilizables | **Completada** |
 | **4** | Gráficos y calendario accesibles | **Completada** |
-| **5** | Comparación A/B y evolución | Pendiente |
+| **5** | Comparación A/B y evolución | **Completada** |
 | **6** | Día, sesiones y secuencias explicables | Pendiente |
 | **7** | Descubrimiento, regresos y hábitos longitudinales | Pendiente |
 | **8** | Exportación, personalización y cierre de calidad | Pendiente |
@@ -131,7 +131,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 5. **Enlaces contextuales desde tarjetas auxiliares**: Acceso directo desde las tarjetas de Obsesión, Saltos (artistas y canciones), Fidelidad, Constancia y Longevidad hacia `Explorar` transportando filtros analíticos, ordenamiento y umbrales configurables con validación de rango.
 6. **Consultas locales sin re-agregación**: Las operaciones de tabla (búsqueda con preservación de caret, paginación, ordenamiento y filtros de umbral) operan sobre el modelo confirmado en memoria sin disparar tareas al Worker ni re-agregar el dataset.
 
-## 8. Criterios de Aceptación Verificados (Etapas 1, 2, 3 y 4)
+## 8. Criterios de Aceptación Verificados (Etapas 1, 2, 3, 4 y 5)
 
 - **A01 / A02**: Cascada móvil y KPIs responsivos probados y colocados tras las definiciones base.
 - **A03**: Redondeo consistente en `fmtMs` sin unidades `60s`.
@@ -149,6 +149,8 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 - **A15**: 24 posiciones horarias completas para Hora de inicio en sesionesstats y vistas; gráfico y tabla exacta coinciden preservando ceros.
 - **A16**: Inspector de día persistente en calendario con acciones explícitas (`Filtrar día`, `Fijar inicio`, `Fijar fin`, `Aplicar rango`) sin depender de Shift, y vista mensual interactiva con botones táctiles ≥40px.
 - **A17**: Escala compartida entre años por defecto en el índice de calendarios y modo explícito de normalización anual identificada.
+- **A18**: Comparación A/B con base cero sin `Infinity` ni `NaN` (`nuevo`/`0,0%`), fechas y bases explícitas, y aviso visible ante ventanas que exceden el intervalo registrado.
+- **A19**: Reconciliación exacta de series diaria, semanal y mensual sin duplicación ni pérdida de eventos en transiciones DST, con banderas de períodos parciales identificadas.
 
 ## 9. Detalle de Cambios — Etapa 4
 
@@ -158,10 +160,17 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 4. **Vista mensual interactiva (`app/calendar-ui.js`, `app/views.js`)**: Incorporación de vista mensual navegable (`calendarMonthViewHTML`) con celdas táctiles de cómodo acceso (≥40px), tabla fallback de lista diaria y roving focus.
 5. **Escala compartida y normalización anual (`app/calendar-ui.js`, `app/views.js`)**: En `calendarIndexView`, la intensidad de color es compartida por defecto entre todos los años observados (`makeScale(sharedMax)`). Se incluye control de escala (`calendarScaleToggleHTML`) con explicación visible para conmutar a normalización individual por año (criterio A17).
 
-## 10. Siguiente Tarea Exacta
+## 10. Detalle de Cambios — Etapa 5
 
-- Iniciar **Etapa 5 — Comparación A/B y evolución**:
-  1. Diseñar ruta y vista `Comparar` (`#/v1/compare`) con dos rangos completos temporales sobre la misma métrica y zona horaria.
-  2. Implementar presets de comparación (período anterior de igual longitud, mismo período del año anterior, selección manual).
-  3. Reconciliar deltas absolutos y porcentuales, manejando base cero (`nuevo`/`sin base`) sin generar `NaN` o `Infinity`.
-  4. Comparación de series temporal diaria, semanal y mensual con alineación de calendario.
+1. **Motor de comparación analítica puro (`src/compare.js`)**: Cálculo puro de rangos temporales A/B (`calculateCompareRange`) con presets (`equal_previous`, `same_period_last_year`, `manual`), detección de ventanas fuera de rango, deltas seguros sin divisiones por cero (`computeMetricDelta`), y agrupación de series diaria, semanal y mensual (`buildCompareSeries`).
+2. **Promedios con denominadores explícitos**: Exposición clara de promedio por día del rango y promedio por día activo con indicación exacta de los días que componen cada denominador (`compareAverages`).
+3. **Ranking comparativo de entidades y transiciones**: Cálculo de variaciones ordinales, permanencias, entradas (`Entrada`), salidas (`Salida`) y diferencias de cuota analítica expresadas en puntos porcentuales (`pp`).
+4. **Vista `Comparar` (`app/compare-view.js`, `app/main.js`, `app/views.js`)**: Incorporación de sección `Comparar` (`#/v1/compare`), navegación dedicada en `navHTML`, selector de presets, resumen de rangos, grid de KPIs comparados y tabla de transiciones con tabla fallback accesible.
+
+## 11. Siguiente Tarea Exacta
+
+- Iniciar **Etapa 6 — Día, sesiones y secuencias explicables**:
+  1. Diseñar vistas de detalle de día y ficha de sesión individual bajo demanda desde el Worker sin hinchar el modelo global.
+  2. Implementar secuencia paginada de eventos y totales de sesión (inicio/fin estimados, pausas, repeticiones).
+  3. Diferenciar atribución de álbum vs. totales agrupados en canciones.
+  4. Incorporar transiciones y rachas con modalidades: adyacencia seleccionada, consecutivas en historial original y dentro de sesiones originales.
