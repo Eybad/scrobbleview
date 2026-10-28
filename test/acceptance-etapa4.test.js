@@ -1,0 +1,98 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { aggregate } from '../src/aggregate/aggregate.js';
+import { createSessionsAcc } from '../src/aggregate/impl/sessions.js';
+import { renderView } from '../app/views.js';
+import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
+import { createChartContract, chartDataTableHTML } from '../src/chart-contract.js';
+import { fmtNum } from '../src/charts.js';
+
+import { buildDataset } from './fakes/dataset.js';
+
+test('A15: sessions startHour always completes 24 positions with zero for absent hours', () => {
+  const tz = fixedTz('UTC', 0);
+  const aggregator = createSessionsAcc({ tz, gapMinutes: 30 });
+  const model = aggregator.finalize();
+
+  assert.equal(model.sessionsStats.startHour.size, 24);
+  for (let h = 0; h < 24; h++) {
+    assert.equal(model.sessionsStats.startHour.get(h), 0);
+  }
+});
+
+test('A15: sessionsView renders all 24 hour positions and table matches chart data', async () => {
+  const ds = buildDataset([
+    { t: 1704067200, m: 60000, track: 'Track 1', artist: 'Artist 1', album: 'Album 1' }
+  ]);
+
+  const model = aggregate(ds, { tz: fixedTz('UTC', 0) });
+  const html = renderView('sessions', model);
+
+  // Hora de inicio must contain all 24 labels (0 to 23)
+  for (let h = 0; h < 24; h++) {
+    assert.ok(html.includes(`>${h}<`), `hour ${h} label must be present in chart`);
+  }
+
+  // Contract matching: 24 points with exact zero preservation
+  const contract = createChartContract({
+    id: 'sessions-start-hour',
+    title: 'Hora de inicio',
+    unit: 'sesiones',
+    data: Array.from({ length: 24 }, (_, h) => ({
+      label: `${h}:00`,
+      value: model.sessionsStats.startHour.get(h) ?? 0
+    })),
+    format: fmtNum
+  });
+
+  const tableHtml = chartDataTableHTML(contract);
+  assert.ok(tableHtml.includes('Hora de inicio (sesiones)'));
+  assert.ok(tableHtml.includes('0:00'));
+  assert.ok(tableHtml.includes('23:00'));
+  assert.ok(tableHtml.includes('1'));
+  assert.ok(tableHtml.includes('0'));
+});
+
+test('A16: calendar provides day inspector, explicit range controls without Shift, and interactive monthly view', async () => {
+  const ds = buildDataset([
+    { t: 1704067200, m: 60000, track: 'Track 1', artist: 'Artist 1' }, // 2024-01-01
+    { t: 1704153600, m: 120000, track: 'Track 2', artist: 'Artist 2' } // 2024-01-02
+  ]);
+  const model = aggregate(ds, { tz: fixedTz('UTC', 0) });
+  const html = renderView('calendar', model, 2024);
+
+  // Inspector and range controls without Shift
+  assert.ok(html.includes('calendar-inspector'));
+  assert.ok(html.includes('data-cal-action="filter-day"'));
+  assert.ok(html.includes('data-cal-action="set-start"'));
+  assert.ok(html.includes('data-cal-action="set-end"'));
+  assert.ok(html.includes('data-cal-action="apply-range"'));
+
+  // Monthly interactive view with navigation and comfortable touch targets
+  assert.ok(html.includes('calendar-month'));
+  assert.ok(html.includes('data-cal-nav="prev-month"'));
+  assert.ok(html.includes('data-cal-nav="next-month"'));
+  assert.ok(html.includes('cal-month-cell'));
+});
+
+test('A17: calendar index defaults to shared scale across years with different maximums, and identifies normalization when opted in', async () => {
+  // 2023-06-01 (epoch 1685577600): 1 play (ms=60000)
+  // 2024-06-01 (epoch 1717200000): 10 plays (ms=600000)
+  const events = [
+    { t: 1685577600, m: 60000, track: 'A', artist: 'Art' }
+  ];
+  for (let i = 0; i < 10; i++) {
+    events.push({ t: 1717200000 + i * 100, m: 60000, track: `B${i}`, artist: 'Art' });
+  }
+  const ds = buildDataset(events);
+  const model = aggregate(ds, { tz: fixedTz('UTC', 0) });
+
+  // Default: shared scale
+  const sharedHtml = renderView('calendar', model, null, { metric: 'plays' });
+  assert.ok(sharedHtml.includes('Escala compartida'));
+  assert.ok(sharedHtml.includes('Normalizar cada año'));
+
+  // Opt-in: normalized scale
+  const normHtml = renderView('calendar', model, null, { metric: 'plays', normalizeYears: true });
+  assert.ok(normHtml.includes('Escala normalizada'));
+});

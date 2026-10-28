@@ -13,7 +13,7 @@
 
 ### Suite de pruebas unitarias y de integración (`node --test`)
 - **Baseline inicial**: 235 pruebas (13,29 s).
-- **Estado actual tras Etapa 3**: 276 pruebas aprobadas, 0 fallidas (10,44 s).
+- **Estado actual tras Etapa 4**: 287 pruebas aprobadas, 0 fallidas (12,43 s).
 
 ### Benchmark base (100.000 eventos compactos)
 - Comando: `node --expose-gc bench/aggregate.js 100000 --compact`
@@ -90,7 +90,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **1** | Correcciones de lectura y definiciones | **Completada** |
 | **2** | Contexto, rutas, espera y cancelación | **Completada** |
 | **3** | Catálogo completo y tablas reutilizables | **Completada** |
-| **4** | Gráficos y calendario accesibles | Pendiente |
+| **4** | Gráficos y calendario accesibles | **Completada** |
 | **5** | Comparación A/B y evolución | Pendiente |
 | **6** | Día, sesiones y secuencias explicables | Pendiente |
 | **7** | Descubrimiento, regresos y hábitos longitudinales | Pendiente |
@@ -131,7 +131,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 5. **Enlaces contextuales desde tarjetas auxiliares**: Acceso directo desde las tarjetas de Obsesión, Saltos (artistas y canciones), Fidelidad, Constancia y Longevidad hacia `Explorar` transportando filtros analíticos, ordenamiento y umbrales configurables con validación de rango.
 6. **Consultas locales sin re-agregación**: Las operaciones de tabla (búsqueda con preservación de caret, paginación, ordenamiento y filtros de umbral) operan sobre el modelo confirmado en memoria sin disparar tareas al Worker ni re-agregar el dataset.
 
-## 8. Criterios de Aceptación Verificados (Etapas 1, 2 y 3)
+## 8. Criterios de Aceptación Verificados (Etapas 1, 2, 3 y 4)
 
 - **A01 / A02**: Cascada móvil y KPIs responsivos probados y colocados tras las definiciones base.
 - **A03**: Redondeo consistente en `fmtMs` sin unidades `60s`.
@@ -146,11 +146,22 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 - **A12**: Inversión de orden de archivos en la carga resuelve idénticamente las rutas semánticas.
 - **A13**: Ráfaga de 5 filtros con Worker ocupado produce ≤ 2 solicitudes efectivas y modelo final correcto.
 - **A14**: Cancelación lógica de filtro y exportación no termina el Worker ni borra el dataset.
+- **A15**: 24 posiciones horarias completas para Hora de inicio en sesionesstats y vistas; gráfico y tabla exacta coinciden preservando ceros.
+- **A16**: Inspector de día persistente en calendario con acciones explícitas (`Filtrar día`, `Fijar inicio`, `Fijar fin`, `Aplicar rango`) sin depender de Shift, y vista mensual interactiva con botones táctiles ≥40px.
+- **A17**: Escala compartida entre años por defecto en el índice de calendarios y modo explícito de normalización anual identificada.
 
-## 9. Siguiente Tarea Exacta
+## 9. Detalle de Cambios — Etapa 4
 
-- Iniciar **Etapa 4 — Gráficos y calendario accesibles**:
-  1. Definir contrato común de gráfico (título, unidad/base, rango, resumen accesible, selección, tabla exacta).
-  2. Implementar inspector táctil persistente y accesible por teclado.
-  3. Incorporar tabla de datos paginada para cada gráfico.
-  4. Rediseñar calendario anual y vista mensual interactiva.
+1. **Contrato común de gráficos (`src/chart-contract.js`)**: Definición del contrato estructurado (`createChartContract`) con metadatos (título, unidad, base, rango, total, max, min), generación de tabla exacta de datos (`chartDataTableHTML`) con soporte para ceros, fechas y cuotas, y contenedor con inspector y controles de navegación por pasos (`renderChartWithContract`).
+2. **Completitud de 24 horas en sesiones (`src/aggregate/impl/sessions.js`, `app/views.js`)**: `startHour` se inicializa con las 24 horas (0–23) en 0 para no comprimir el eje temporal ni omitir horas sin sesiones (criterio A15).
+3. **Inspector y selector de rango de calendario (`app/calendar-ui.js`, `app/main.js`)**: Incorporación de panel accesible (`calendarInspectorHTML`) que permite consultar fechas e imputar rangos mediante inputs fecha y botones explícitos sin requerir Shift ni precisión táctil microscópica (criterio A16).
+4. **Vista mensual interactiva (`app/calendar-ui.js`, `app/views.js`)**: Incorporación de vista mensual navegable (`calendarMonthViewHTML`) con celdas táctiles de cómodo acceso (≥40px), tabla fallback de lista diaria y roving focus.
+5. **Escala compartida y normalización anual (`app/calendar-ui.js`, `app/views.js`)**: En `calendarIndexView`, la intensidad de color es compartida por defecto entre todos los años observados (`makeScale(sharedMax)`). Se incluye control de escala (`calendarScaleToggleHTML`) con explicación visible para conmutar a normalización individual por año (criterio A17).
+
+## 10. Siguiente Tarea Exacta
+
+- Iniciar **Etapa 5 — Comparación A/B y evolución**:
+  1. Diseñar ruta y vista `Comparar` (`#/v1/compare`) con dos rangos completos temporales sobre la misma métrica y zona horaria.
+  2. Implementar presets de comparación (período anterior de igual longitud, mismo período del año anterior, selección manual).
+  3. Reconciliar deltas absolutos y porcentuales, manejando base cero (`nuevo`/`sin base`) sin generar `NaN` o `Infinity`.
+  4. Comparación de series temporal diaria, semanal y mensual con alineación de calendario.
