@@ -56,15 +56,19 @@ export function fmtNum(n) {
 }
 
 export function fmtMs(ms) {
-  if (ms < 1000) return `${ms} ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  const rs = Math.round(s % 60);
-  if (m < 60) return `${m} min ${rs}s`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return `${h}h ${rm} min`;
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const roundedTenths = Math.round(ms / 100);
+  if (roundedTenths < 600) {
+    const s = (roundedTenths / 10).toFixed(1).replace('.', ',');
+    return `${s} s`;
+  }
+  const totalSec = Math.round(ms / 1000);
+  const totalMin = Math.floor(totalSec / 60);
+  const remSec = totalSec % 60;
+  if (totalMin < 60) return `${totalMin} min ${remSec} s`;
+  const h = Math.floor(totalMin / 60);
+  const rm = totalMin % 60;
+  return `${h} h ${rm} min`;
 }
 
 export function fmtPct(x) {

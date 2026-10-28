@@ -42,9 +42,9 @@ test('hbarChart: barras horizontales proporcionales con porcentaje', () => {
 
 test('fmtMs: uses min instead of m for minutes', () => {
   assert.equal(fmtMs(500), '500 ms');
-  assert.equal(fmtMs(12500), '12.5s');
-  assert.equal(fmtMs(125000), '2 min 5s');
-  assert.equal(fmtMs(5.5 * 3600000), '5h 30 min');
+  assert.equal(fmtMs(12500), '12,5 s');
+  assert.equal(fmtMs(125000), '2 min 5 s');
+  assert.equal(fmtMs(5.5 * 3600000), '5 h 30 min');
 });
 
 test('fmtBytes: unidad alineada a la escala (KB para ~10^6, MB para ~10^9)', () => {
