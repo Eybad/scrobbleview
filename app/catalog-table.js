@@ -95,7 +95,7 @@ export function columnsPickerHTML(tab, visibleCols) {
         <fieldset>
           <legend class="sr-only">Selección de columnas secundarias</legend>
           ${optional.map((col) => {
-            const checked = visibleCols.has(col.key);
+            const checked = visibleCols ? visibleCols.has(col.key) : col.defaultVisible;
             return `<label class="col-picker-item">
               <input type="checkbox" data-col-toggle="${col.key}" ${checked ? 'checked' : ''}>
               <span>${esc(col.label)}</span>

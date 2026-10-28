@@ -11,6 +11,8 @@ import {
 } from '../src/charts.js';
 import { matchRangeShortcut, rangeChipLabel } from './filter-ui.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
+import { queryCatalog } from '../src/query.js';
+import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsPickerHTML } from './catalog-table.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -256,7 +258,7 @@ function fillMonths(keys) {
 }
 
 function monthlySeries(monthMap, key) {
-  // monthMap: Map<monthIndex, Map<entityId, value>> → [{label, y}]
+  if (!monthMap) return [];
   return fillMonths(sortedMonths(monthMap)).map((mi) => ({
     label: monthLabel(mi),
     y: monthMap.get(mi)?.get(key) ?? 0
@@ -264,6 +266,7 @@ function monthlySeries(monthMap, key) {
 }
 
 function albumSeries(model, monthly, metric) {
+  if (!model?.monthly || !monthly) return [];
   return fillMonths(sortedMonths(model.monthly)).map((mi) => ({
     label: monthLabel(mi),
     y: monthly.get(mi)?.[metric] ?? 0
@@ -434,7 +437,7 @@ export function rankCardHTML(model, opts = {}) {
         caption: rankCaption,
         spark: (r) => rowSeries(model, tab, metric, r.id),
         tall: topN >= 25
-      })
+      }) + `<div class="explore-header-links"><a class="table-hint-link" href="#/v1/explore?tab=${tab}&m=${metric}">Ver catálogo completo de ${tabName} en Explorar →</a></div>`
       : '<p class="empty">Sin resultados.</p>'}</div>`;
 }
 
@@ -1455,8 +1458,113 @@ export function receiptText(model) {
   return lines.join('\n');
 }
 
+export function exploreView(model, ctx = {}) {
+  const exp = ctx.exploreState || {};
+  const tab = exp.tab || 'artists';
+  const metric = ctx.metric || 'ms';
+  const byMs = metric === 'ms';
+  const query = (exp.query || '').trim();
+  const sortBy = exp.sortBy || 'metric';
+  const sortDir = exp.sortDir || null;
+  const page = Number(exp.page) || 1;
+  const pageSize = Number(exp.pageSize) || 25;
+  const density = exp.density || 'comfortable';
+  const visibleCols = exp.visibleCols || null;
+  const minPlays = exp.minPlays != null ? Number(exp.minPlays) : null;
+  const minMonths = exp.minMonths != null ? Number(exp.minMonths) : null;
+
+  const pool = tab === 'artists' ? model.artists.byId.values()
+    : tab === 'tracks' ? model.tracks.byId.values()
+    : model.albums.byId.values();
+
+  const totalMetric = byMs ? model.totals.ms : model.totals.plays;
+
+  const queryResult = queryCatalog(pool, {
+    metric,
+    totalMetric,
+    query,
+    searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
+    sortBy,
+    sortDir,
+    page,
+    pageSize,
+    minPlays,
+    minMonths,
+    minKnownSkips: (sortBy === 'skipRate' || sortBy === 'lowSkipRate') ? (minPlays ?? 20) : null
+  });
+
+  const tabBtn = (id, label) => `<button type="button" role="tab" id="explore-tab-${id}" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}" class="${tab === id ? 'active' : ''}" data-explore-tab="${id}">${label}</button>`;
+  const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
+
+  let thresholdControl = '';
+  if (sortBy === 'skipRate' || sortBy === 'lowSkipRate') {
+    thresholdControl = `
+      <label class="explore-threshold-label">
+        <span>Mín. eventos conocidos:</span>
+        <input type="number" min="1" max="10000" data-min-plays value="${minPlays ?? 20}" class="pagination-select" aria-label="Mínimo de eventos con bandera conocida">
+      </label>`;
+  } else if (sortBy === 'intensity') {
+    thresholdControl = `
+      <label class="explore-threshold-label">
+        <span>Mín. reproducciones:</span>
+        <input type="number" min="1" max="10000" data-min-plays value="${minPlays ?? 5}" class="pagination-select" aria-label="Mínimo de reproducciones para intensidad">
+      </label>`;
+  } else if (sortBy === 'constancy') {
+    thresholdControl = `
+      <label class="explore-threshold-label">
+        <span>Mín. meses activos:</span>
+        <input type="number" min="1" max="120" data-min-months value="${minMonths ?? 6}" class="pagination-select" aria-label="Mínimo de meses activos">
+      </label>`;
+  }
+
+  const toolbar = `
+    <div class="explore-toolbar">
+      <div class="explore-toolbar-left">
+        <div class="tabs" role="tablist" aria-label="Explorar catálogo">
+          ${tabBtn('artists', 'Artistas')}${tabBtn('tracks', 'Canciones')}${tabBtn('albums', 'Álbumes')}
+        </div>
+      </div>
+      <div class="explore-toolbar-right">
+        ${thresholdControl}
+        ${densityControlsHTML(density)}
+        ${columnsPickerHTML(tab, visibleCols)}
+      </div>
+    </div>
+    <div class="explore-search-wrap">
+      <input type="search" class="explore-search" data-explore-search placeholder="Buscar en ${tabName}…" value="${esc(query)}" aria-label="Buscar en catálogo">
+    </div>`;
+
+  const tableHtml = catalogTableHTML(queryResult, {
+    tab,
+    metric,
+    sortBy,
+    sortDir: queryResult.effectiveDir || sortDir,
+    query,
+    visibleCols,
+    density,
+    queryParamStr: ctx.query,
+    spark: (item) => rowSeries(model, tab, metric, item.id ?? item.tk)
+  });
+
+  const paginationHtml = paginationControlsHTML(queryResult);
+
+  return `
+    <div class="view-header">
+      <h1>Explorar catálogo completo</h1>
+      <p class="view-meta">Consulta, filtrado y ordenamiento de todo tu historial sin límites prefijados.</p>
+    </div>
+    <div class="card explore-card" id="explore-card">
+      ${toolbar}
+      <div role="tabpanel" id="explore-panel" tabindex="0" aria-labelledby="explore-tab-${tab}">
+        ${tableHtml}
+        ${paginationHtml}
+      </div>
+    </div>`;
+}
+
 export const VIEWS = {
   dashboard: (model, id, ctx) => dashboard(model, ctx),
+  explore: (model, id, ctx) => exploreView(model, ctx),
   artist: (model, id, ctx) => artistView(model, Number(id), ctx),
   track: (model, id, ctx) => trackView(model, Number(id), ctx),
   album: (model, id, ctx) => albumView(model, Number(id), ctx),

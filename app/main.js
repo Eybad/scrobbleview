@@ -230,7 +230,15 @@ function syncHash() {
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   let hash;
-  if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
+  if (name === 'explore') {
+    const [, , rawQ] = parseHash();
+    const existing = new URLSearchParams(rawQ ? rawQ.replace(/^\?/, '') : '');
+    const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
+    for (const [k, v] of existing.entries()) {
+      if (!merged.has(k)) merged.set(k, v);
+    }
+    hash = `#/v1/explore${merged.toString() ? `?${merged.toString()}` : ''}`;
+  } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
     hash = formatSemanticRoute(name, resolved.entity, queryStr);
   } else {
     hash = `#/${name}${id != null ? `/${id}` : ''}${queryStr}`;
@@ -257,6 +265,7 @@ function navHTML(active) {
   const link = (hash, label, view) => `<a href="#/${hash}${queryStr}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
   return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
+    ${link('explore', 'Explorar', 'explore')}
     ${link('hours', 'Horarios', 'hours')}
     ${link('habits', 'Hábitos', 'habits')}
     ${link('sessions', 'Sesiones', 'sessions')}
@@ -330,6 +339,34 @@ function buildViewContext(viewName) {
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
+
+  let exploreState = null;
+  if (viewName === 'explore') {
+    const [, , rawQ] = parseHash();
+    const cleanQ = (rawQ || '').replace(/^\?/, '');
+    const p = new URLSearchParams(cleanQ);
+    const tab = p.get('tab') || 'artists';
+    const storedDensity = typeof localStorage !== 'undefined' ? localStorage.getItem('scrobbleview:density') : null;
+    const storedColsRaw = typeof localStorage !== 'undefined' ? localStorage.getItem(`scrobbleview:cols:${tab}`) : null;
+    let visibleCols = null;
+    if (storedColsRaw) {
+      try { visibleCols = new Set(JSON.parse(storedColsRaw)); } catch (_) {}
+    }
+
+    exploreState = {
+      tab,
+      query: p.get('q') || '',
+      sortBy: p.get('sort') || 'metric',
+      sortDir: p.get('dir') || null,
+      page: Number(p.get('page')) || 1,
+      pageSize: Number(p.get('pageSize')) || 25,
+      minPlays: p.get('minPlays') != null ? Number(p.get('minPlays')) : null,
+      minMonths: p.get('minMonths') != null ? Number(p.get('minMonths')) : null,
+      density: storedDensity || 'comfortable',
+      visibleCols
+    };
+  }
+
   return {
     years: state.years,
     range: state.range,
@@ -337,7 +374,8 @@ function buildViewContext(viewName) {
     limits: tableLimits,
     metric: activeMetric,
     rankUI,
-    query: queryStr
+    query: queryStr,
+    exploreState
   };
 }
 
@@ -644,8 +682,182 @@ function wireRankCard() {
   });
 }
 
+function wireExploreView() {
+  const card = document.getElementById('explore-card');
+  if (!card) return;
+
+  const getExploreQuery = () => {
+    const [, , q] = parseHash();
+    return new URLSearchParams(q ? q.replace(/^\?/, '') : '');
+  };
+
+  const updateExploreQuery = (updater) => {
+    const params = getExploreQuery();
+    updater(params);
+    const [, id] = parseHash();
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const hash = formatSemanticRoute('explore', null, queryStr);
+    history.replaceState(null, '', hash);
+    const root = document.getElementById('view-root');
+    if (root && current) {
+      const viewCtx = buildViewContext('explore');
+      root.innerHTML = renderView('explore', current, id, viewCtx);
+      wireView();
+    }
+  };
+
+  card.querySelectorAll('[data-explore-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.exploreTab;
+      updateExploreQuery((p) => {
+        p.set('tab', tab);
+        p.delete('page');
+        p.delete('sort');
+        p.delete('dir');
+        p.delete('minPlays');
+        p.delete('minMonths');
+      });
+    });
+  });
+
+  let exploreSearchTimer;
+  const searchInput = card.querySelector('[data-explore-search]');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(exploreSearchTimer);
+      const v = searchInput.value;
+      const start = searchInput.selectionStart;
+      const end = searchInput.selectionEnd;
+      exploreSearchTimer = setTimeout(() => {
+        updateExploreQuery((p) => {
+          if (v.trim()) p.set('q', v.trim());
+          else p.delete('q');
+          p.delete('page');
+        });
+        const again = card.querySelector('[data-explore-search]');
+        if (again) {
+          again.focus({ preventScroll: true });
+          if (start != null && end != null) {
+            again.setSelectionRange(start, end);
+          }
+        }
+      }, 200);
+    });
+  }
+
+  card.querySelectorAll('[data-clear-search]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      updateExploreQuery((p) => {
+        p.delete('q');
+        p.delete('page');
+      });
+    });
+  });
+
+  card.querySelectorAll('.btn-sort').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const sort = btn.dataset.sort;
+      const dir = btn.dataset.dir;
+      updateExploreQuery((p) => {
+        p.set('sort', sort);
+        p.set('dir', dir);
+        p.delete('page');
+      });
+    });
+  });
+
+  card.querySelectorAll('[data-page]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const page = Number(btn.dataset.page);
+      if (!page || page < 1) return;
+      updateExploreQuery((p) => {
+        p.set('page', String(page));
+      });
+    });
+  });
+
+  const pageSizeSelect = card.querySelector('[data-page-size]');
+  if (pageSizeSelect) {
+    pageSizeSelect.addEventListener('change', () => {
+      const size = Number(pageSizeSelect.value);
+      updateExploreQuery((p) => {
+        p.set('pageSize', String(size));
+        p.delete('page');
+      });
+    });
+  }
+
+  card.querySelectorAll('[data-density]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const d = btn.dataset.density;
+      if (typeof localStorage !== 'undefined') localStorage.setItem('scrobbleview:density', d);
+      updateExploreQuery(() => {});
+    });
+  });
+
+  card.querySelectorAll('[data-col-toggle]').forEach((chk) => {
+    chk.addEventListener('change', () => {
+      const col = chk.dataset.colToggle;
+      const [, , q] = parseHash();
+      const p = new URLSearchParams(q ? q.replace(/^\?/, '') : '');
+      const tab = p.get('tab') || 'artists';
+      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(`scrobbleview:cols:${tab}`) : null;
+      const set = stored ? new Set(JSON.parse(stored)) : new Set();
+      if (chk.checked) set.add(col);
+      else set.delete(col);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(`scrobbleview:cols:${tab}`, JSON.stringify([...set]));
+      updateExploreQuery(() => {});
+    });
+  });
+
+  card.querySelectorAll('[data-reset-cols]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const [, , q] = parseHash();
+      const p = new URLSearchParams(q ? q.replace(/^\?/, '') : '');
+      const tab = p.get('tab') || 'artists';
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(`scrobbleview:cols:${tab}`);
+      updateExploreQuery(() => {});
+    });
+  });
+
+  card.querySelectorAll('[data-expand-name]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const cell = btn.closest('.col-name');
+      const nameSpan = cell?.querySelector('.cell-name');
+      if (nameSpan) {
+        nameSpan.classList.toggle('is-expanded');
+        btn.textContent = nameSpan.classList.contains('is-expanded') ? '▼' : '▶';
+      }
+    });
+  });
+
+  const minPlaysInput = card.querySelector('[data-min-plays]');
+  if (minPlaysInput) {
+    minPlaysInput.addEventListener('change', () => {
+      const val = Math.max(1, Math.min(10000, Number(minPlaysInput.value) || 1));
+      updateExploreQuery((p) => {
+        p.set('minPlays', String(val));
+        p.delete('page');
+      });
+    });
+  }
+
+  const minMonthsInput = card.querySelector('[data-min-months]');
+  if (minMonthsInput) {
+    minMonthsInput.addEventListener('change', () => {
+      const val = Math.max(1, Math.min(120, Number(minMonthsInput.value) || 1));
+      updateExploreQuery((p) => {
+        p.set('minMonths', String(val));
+        p.delete('page');
+      });
+    });
+  }
+}
+
 function wireView() {
   wireRankCard();
+  wireExploreView();
   syncTallTables(appRoot);
 
   appRoot.querySelectorAll('select[data-table-limit]').forEach((sel) => {
