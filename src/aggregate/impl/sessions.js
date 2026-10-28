@@ -89,6 +89,7 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
       const byWeekday = new Map();
       const byBlock = new Map();
       const startHour = new Map();
+      for (let h = 0; h < 24; h++) startHour.set(h, 0);
       for (const s of sessions) {
         const d = Math.floor(s.start / 86400);
         const c = civilFromDays(d);
