@@ -65,7 +65,7 @@ test('A19: day, week and month series reconcile sums exactly without event loss 
   assert.equal(sumMonthlyMs, totalMs);
 });
 
-test('A18 / A19: compare view renders period comparisons, deltas, and entity transitions', async () => {
+test('compare view does not present uncalculated reference values', () => {
   const events = [
     { t: 1704067200, m: 60000, track: 'Song A', artist: 'Artist 1', album: 'Album 1' },
     { t: 1704153600, m: 120000, track: 'Song B', artist: 'Artist 2', album: 'Album 2' }
@@ -76,10 +76,7 @@ test('A18 / A19: compare view renders period comparisons, deltas, and entity tra
   const html = renderView('compare', model, null, { metric: 'ms' });
 
   assert.ok(html.includes('Comparación'));
-  assert.ok(html.includes('Período A'));
-  assert.ok(html.includes('Período B'));
-  assert.ok(html.includes('compare-presets'));
-  assert.ok(html.includes('equal_previous'));
-  assert.ok(html.includes('same_period_last_year'));
-  assert.ok(html.includes('table-fallback'));
+  assert.ok(html.includes('todavía no está calculada'));
+  assert.ok(!html.includes('val-b'));
+  assert.ok(!html.includes('compare-rankings'));
 });
