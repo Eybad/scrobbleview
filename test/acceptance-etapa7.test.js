@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { aggregate } from '../src/aggregate/aggregate.js';
 import { analyze } from '../src/analyze.js';
 import { createAnalysisEngine } from '../app/analysis-engine.js';
+import { emptyFilterState } from '../src/filters.js';
 import { buildDataset } from './fakes/dataset.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { trackKey } from '../src/aggregate/impl/groups.js';
@@ -70,6 +71,33 @@ test('analysis engine preserves historical results when input order is reversed'
     const direct = await analyze(ds, { tz: fixedTz('UTC', 0) });
     assert.equal(direct.comebacks.tracks[0].gapDays, 95);
   }
+});
+
+test('equal timestamps are not returns and filters do not hide later observations', async () => {
+  const start = 1704067200;
+  const entries = [
+    { day: 0, track: 'A', shuffle: true },
+    { day: 0, track: 'A', shuffle: false },
+    { day: 5, track: 'B', shuffle: true },
+    { day: 10, track: 'B', shuffle: false },
+    { day: 100, track: 'C', shuffle: false }
+  ].map(({ day, track, shuffle }) => ({
+    ts: new Date((start + day * 86400) * 1000).toISOString(),
+    ms_played: 60000,
+    master_metadata_track_name: track,
+    master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: 'Album',
+    shuffle
+  }));
+  const engine = createAnalysisEngine();
+  await engine.handle('load', { timeZone: 'UTC', files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(entries)]) }] });
+  const { model } = await engine.handle('filter', { state: { ...emptyFilterState(), shuffle: true } });
+  assert.deepEqual(model.retention.r30, {
+    total: 2, eligible: 2, insufficient: 0, returned: 1, rate: 0.5, days: 30
+  });
+  assert.deepEqual(model.retention.r90, {
+    total: 2, eligible: 2, insufficient: 0, returned: 1, rate: 0.5, days: 90
+  });
 });
 test('A23: historical first appearances and comebacks computed on original timeline survive filtering', () => {
   const D0 = 1704067200; // 2024-01-01 00:00:00 UTC
