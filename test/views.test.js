@@ -972,7 +972,7 @@ test('all Top 10/25/50/100 tables include # column and tall scroll fits at least
       totalTopTables++;
     }
   }
-  assert.equal(totalTopTables, 25, 'all 25 Top 10/25/50/100 tables checked');
+  assert.equal(totalTopTables, 27, 'all 27 Top 10/25/50/100 tables checked');
 
   const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
   const tallIdx = css.indexOf('.table-scroll--tall {');

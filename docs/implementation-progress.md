@@ -93,7 +93,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **4** | Gráficos y calendario accesibles | **Completada** |
 | **5** | Comparación A/B y evolución | **Completada** |
 | **6** | Día, sesiones y secuencias explicables | **Completada** |
-| **7** | Descubrimiento, regresos y hábitos longitudinales | Pendiente |
+| **7** | Descubrimiento, regresos y hábitos longitudinales | **Completada** |
 | **8** | Exportación, personalización y cierre de calidad | Pendiente |
 
 ## 5. Detalle de Cambios — Etapa 1
@@ -154,6 +154,8 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 - **A20**: Canción compartida por álbumes distingue totales globales agrupados de atribución por álbum específico (`trackView` con selector de alcance y tabla de álbumes asociados).
 - **A21**: Adyacencia en selección, consecutivas en historial original y dentro de sesiones originales diferenciadas en transiciones y rachas (`maxRun`), con probabilidades condicionadas en transiciones.
 - **A22**: Sesiones fusionadas por intervalos largos preservan membresía exacta, totales coherentes y vista individual `sessionView` con inicio/fin estimados, pausas y advertencia descriptiva.
+- **A23**: Primeras apariciones y regresos calculados sobre la cronología histórica completa para no crear pausas artificiales ni reiniciar descubrimiento al filtrar.
+- **A24**: Retorno acumulado en 30/90 días con detección estricta de seguimiento insuficiente cuando el dataset termina antes de la ventana, excluyéndolo del denominador sin división por cero.
 
 ## 9. Detalle de Cambios — Etapa 4
 
@@ -185,10 +187,24 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 4. **Detalle de día (`dayView` en `app/views.js`, `app/routes.js`)**:
    - Detalle para `#/v1/day/:date` con totales de reproducciones, tiempo, canciones y artistas del día, sesiones ocurridas y botón de acción para filtrar por el día.
 
-## 12. Siguiente Tarea Exacta
+## 12. Detalle de Cambios — Etapa 7
 
-- Iniciar **Etapa 7 — Descubrimiento, regresos y hábitos longitudinales**:
-  1. Primeras apariciones históricas de canciones y artistas dentro del período seleccionado (independientes de filtros temporales).
-  2. Detección y lista de "Regresos" tras pausas de 30/90/180 días calculados sobre la secuencia original.
-  3. Retorno acumulado en 30/90 días con bandera de "seguimiento insuficiente" para entidades cuya primera aparición ocurre cerca del final del dataset cargado (criterios A23, A24).
-  4. Evolución mensual de concentración (número efectivo de entidades, Top 1/5/10) y tasas de salto/aleatorio con denominadores conocidos.
+1. **Módulo analítico longitudinal puro (`src/longitudinal.js`)**:
+   - `computeComebacks(ds, opts)`: Detección cronológica de regresos tras pausas prolongadas (30/90/180 días) calculada sobre la secuencia global original de eventos, proyectando al período de visualización sin inventar pausas artificiales (criterio A23).
+   - `computeRetention(ds, opts)`: Medición de retorno acumulado a 30 y 90 días desde la primera aparición, con exclusión matemática rigurosa de entidades con seguimiento insuficiente cuando el dataset cargado termina antes de cumplirse la ventana temporal, impidiendo divisiones por cero o tasas engañosas (criterio A24).
+   - `computeMonthlyLongitudinal(ds, tz)`: Evolución mensual de concentración (HHI, número efectivo de artistas, cuotas Top 1/5/10) y tasas de salto, aleatorio y modo sin conexión con sus respectivos denominadores conocidos y desconocidos.
+2. **Integración con agregación (`src/aggregate/aggregate.js`)**:
+   - Incorporación de `retention` (r30 y r90) y `comebacks` en `StatsModel`.
+   - Inclusión en `tables` de `firstAppearances` (listas de canciones y artistas descubiertos en el período con fecha, escuchas posteriores, tiempo y días activos), `comebacks` y distancias temporales dobles en `forgotten` (`daysSinceEnd` del dataset vs. `daysSinceNow` de hoy).
+3. **Sección de Descubrimiento y Hábitos en UI (`app/views.js`)**:
+   - En `discoveryView`: KPIs de retorno acumulado en 30 y 90 días con indicación de casos con seguimiento insuficiente, tarjeta con tabla de regresos tras pausas ≥30 días, y tabla de primeras apariciones en el período.
+   - En `habitsView`: Visualización dual de tiempo transcurrido para entidades olvidadas (respecto al final del archivo cargado y respecto a la fecha actual).
+
+## 13. Siguiente Tarea Exacta
+
+- Iniciar **Etapa 8 — Exportación, personalización y cierre de calidad**:
+  1. Exportación con alcances explícitos (`Todo el historial`, `Selección analítica actual`, `Tabla actual paginada/filtrada completa`).
+  2. Inclusión de metadata de exportación (versión, zona horaria, filtros aplicados, rangos A/B si existen).
+  3. Copia de resumen contextualizado al portapapeles.
+  4. Persistencia de preferencias desacoplada de la caché IndexedDB.
+  5. Verificaciones finales de seguridad XSS, neutralización de fórmulas CSV y validación integral de la matriz de aceptación.
