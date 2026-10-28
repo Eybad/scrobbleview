@@ -705,7 +705,7 @@ export function artistView(model, ar, ctx = {}) {
 
   return `
     <header class="view-header">
-      <p><a href="#/dashboard">← Volver al resumen</a></p>
+      <p><a href="#/dashboard${ctx.query ? (ctx.query.startsWith('?') ? ctx.query : '?' + ctx.query) : ''}">← Volver al resumen</a></p>
       <h1>${esc(a.name)}</h1>
       <p class="view-meta">${fmtNum(a.plays)} reproducciones · ${fmtMs(a.ms)} · ${pctOf(a.ms, totalMs)} del total</p>
       <p><button type="button" class="btn btn-secondary" data-filter-entity="artist:${ar}">Filtrar todo por este artista</button></p>
@@ -778,7 +778,7 @@ export function trackView(model, tk, ctx = {}) {
 
   return `
     <header class="view-header">
-      <p><a href="#/dashboard">← Volver al resumen</a></p>
+      <p><a href="#/dashboard${ctx.query ? (ctx.query.startsWith('?') ? ctx.query : '?' + ctx.query) : ''}">← Volver al resumen</a></p>
       <h1>${esc(tr.name)}</h1>
       <p class="view-meta">${entityLink('artist', ar, tr.artist)}${albumLinks ? ` · ${albumLinks}` : ''} · ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)} · ${pctOf(tr.ms, totalMs)} del total</p>
       <p><button type="button" class="btn btn-secondary" data-filter-entity="track:${tk}">Filtrar todo por esta canción</button></p>
@@ -818,7 +818,7 @@ export function albumView(model, ak, ctx = {}) {
   });
   return `
     <header class="view-header">
-      <p><a href="#/dashboard">← Volver al resumen</a></p>
+      <p><a href="#/dashboard${ctx.query ? (ctx.query.startsWith('?') ? ctx.query : '?' + ctx.query) : ''}">← Volver al resumen</a></p>
       <h1>${esc(al.name)}</h1>
       <p class="view-meta">${entityLink('artist', ar, al.artist)} · ${fmtNum(al.plays)} reproducciones · ${fmtMs(al.ms)} · ${pctOf(al.ms, totalMs)} del total</p>
       <p><button type="button" class="btn btn-secondary" data-filter-entity="album:${ak}">Filtrar todo por este álbum</button></p>

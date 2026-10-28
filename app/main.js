@@ -9,6 +9,7 @@ import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
+import { parseRoute, resolveRoute, formatSemanticRoute } from './routes.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -212,22 +213,25 @@ async function refreshModel() {
 }
 
 function parseHash() {
-  if (location.hash === '#main-content') return ['dashboard', null, ''];
-  const h = location.hash.replace(/^#\/?/, '');
-  const [path, query] = h.split('?');
-  const [name, id] = path.split('/');
-  return [name || 'dashboard', id || null, query || ''];
+  const parsed = parseRoute(location.hash);
+  const resolved = resolveRoute(parsed, current || model);
+  return [resolved.view, resolved.id, parsed.query, resolved];
 }
 
 // La URL refleja el estado de filtros (deep-link + reload). replaceState: sin
 // entrada de historial por cada chip (el Back queda para navegar vistas; al
 // volver, los params del hash de esa entrada restauran sus filtros).
 function syncHash() {
-  const [name, id] = parseHash();
+  const [name, id, , resolved] = parseHash();
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
-  const hash = `#/${name}${id != null ? `/${id}` : ''}${queryStr}`;
+  let hash;
+  if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
+    hash = formatSemanticRoute(name, resolved.entity, queryStr);
+  } else {
+    hash = `#/${name}${id != null ? `/${id}` : ''}${queryStr}`;
+  }
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
@@ -244,7 +248,10 @@ async function applyHashParams() {
 }
 
 function navHTML(active) {
-  const link = (hash, label, view) => `<a href="#/${hash}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
+  const fParams = filterParams(state);
+  const mParam = serializeMetricParam(activeMetric);
+  const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
+  const link = (hash, label, view) => `<a href="#/${hash}${queryStr}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
   return `<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('hours', 'Horarios', 'hours')}
@@ -317,26 +324,40 @@ cacheToast.addEventListener('click', async (e) => {
 });
 
 function buildViewContext(viewName) {
+  const fParams = filterParams(state);
+  const mParam = serializeMetricParam(activeMetric);
+  const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   return {
     years: state.years,
     range: state.range,
     prev: viewName === 'dashboard' ? currentPrev : null,
     limits: tableLimits,
     metric: activeMetric,
-    rankUI
+    rankUI,
+    query: queryStr
   };
 }
 
 function render() {
   if (!current) return;
-  const [name, id] = parseHash();
+  const [name, id, , resolved] = parseHash();
   // Reconstruir el HTML resetea el scroll de la fila: se conserva y restaura
   // para que navegar no pegue un salto brusco (el bug se veía al tocar una
   // sección con el nav deslizado a la derecha).
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   const isEmpty = isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx)}</div>`;
+  let viewContent;
+  if (resolved?.notFound) {
+    viewContent = `<div class="empty-state">
+      <p class="empty">${name === 'artist' ? 'Artista no encontrado.' : name === 'track' ? 'Canción no encontrada.' : 'Álbum no encontrado.'}</p>
+      <p class="empty-hint">No hay coincidencias en el historial cargado.</p>
+      <p><a href="#/dashboard" class="btn btn-primary">← Volver al resumen</a></p>
+    </div>`;
+  } else {
+    viewContent = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
+  }
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + `<div id="view-root">${viewContent}</div>`;
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -818,15 +839,16 @@ appRoot.addEventListener('click', (e) => {
   document.getElementById('filter-chips')?.focus();
 });
 
-// Los enlaces internos llevan los filtros vigentes en el hash: el click los
+// Los enlaces internos llevan los filtros y métrica vigentes en el hash: el click los
 // reescribe antes de navegar (deep-link y Back coherentes entre vistas).
 appRoot.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[href^="#/"]');
   if (!a || !appRoot.contains(a)) return;
-  const f = filterParams(state);
-  if (!f) return;
+  const fParams = filterParams(state);
+  const mParam = serializeMetricParam(activeMetric);
+  const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   const base = a.getAttribute('href').split('?')[0];
-  a.setAttribute('href', base + f);
+  a.setAttribute('href', base + queryStr);
 });
 
 // Títulos de gráficos en táctil: el <title> del SVG no se muestra al toque.
