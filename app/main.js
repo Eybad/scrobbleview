@@ -5,7 +5,10 @@ import { createAnalysisState } from './analysis-state.js';
 import { AbortError } from '../src/parse/errors.js';
 import { emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
-import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText } from './views.js';
+import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText, calendarYearGridHTML } from './views.js';
+import { exportExploreTableCSV, exportFilename } from '../src/export.js';
+import { queryCatalog } from '../src/query.js';
+import { fmtNum } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
@@ -258,12 +261,77 @@ async function applyHashParams() {
   return refreshModel();
 }
 
+const FAVORITES_STORAGE_KEY = 'scrobbleview:favorites';
+const SECTION_NAMES = {
+  dashboard: 'Resumen',
+  explore: 'Explorar',
+  compare: 'Comparar',
+  hours: 'Horarios',
+  habits: 'Hábitos',
+  sessions: 'Sesiones',
+  discovery: 'Descubrimiento',
+  yearly: 'Años',
+  calendar: 'Calendario',
+  wrapped: 'Resumen del período'
+};
+
+function loadStoredFavorites() {
+  const set = new Set();
+  try {
+    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) for (const x of arr) if (typeof x === 'string') set.add(x);
+    }
+  } catch (_) {}
+  return set;
+}
+
+function saveStoredFavorites(favs) {
+  try {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...favs]));
+  } catch (_) {}
+}
+
+const favorites = loadStoredFavorites();
+
+function resetPreferences() {
+  try {
+    localStorage.removeItem(METRIC_STORAGE_KEY);
+    localStorage.removeItem(LIMITS_STORAGE_KEY);
+    localStorage.removeItem(FAVORITES_STORAGE_KEY);
+    localStorage.removeItem('scrobbleview:density');
+    for (const tab of ['artists', 'tracks', 'albums']) {
+      localStorage.removeItem(`scrobbleview:cols:${tab}`);
+    }
+  } catch (_) {}
+  activeMetric = 'ms';
+  rankUI.metric = 'ms';
+  tableLimits.clear();
+  rankUI.topN = 10;
+  favorites.clear();
+  announce('Preferencias restablecidas a los valores predeterminados.');
+  render();
+}
+
 function navHTML(active) {
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   const link = (hash, label, view) => `<a href="#/${hash}${queryStr}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
-  return `<nav class="app-nav" aria-label="Secciones">
+
+  let favsHTML = '';
+  if (favorites.size > 0) {
+    const favLinks = [...favorites]
+      .filter((v) => SECTION_NAMES[v])
+      .map((v) => `<a href="#/${v}${queryStr}" class="nav-fav-chip${active === v ? ' active' : ''}">${SECTION_NAMES[v]}</a>`)
+      .join('');
+    if (favLinks) {
+      favsHTML = `<div class="app-nav-favorites" aria-label="Accesos rápidos favoritos"><span class="nav-fav-title">Favoritos:</span>${favLinks}</div>`;
+    }
+  }
+
+  return `${favsHTML}<nav class="app-nav" aria-label="Secciones">
     ${link('dashboard', 'Resumen', 'dashboard')}
     ${link('explore', 'Explorar', 'explore')}
     ${link('compare', 'Comparar', 'compare')}
@@ -857,6 +925,12 @@ function wireExploreView() {
       });
     });
   }
+
+  card.querySelectorAll('[data-action="export-table"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      exportCurrentExploreTable();
+    });
+  });
 }
 
 function wireView() {
@@ -894,7 +968,7 @@ function wireView() {
   // Copiar resumen en texto plano (con fallback a copia manual).
   appRoot.querySelectorAll('[data-action="copy-receipt"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const text = receiptText(current);
+      const text = receiptText(current, buildViewContext('wrapped'));
       try {
         await navigator.clipboard.writeText(text);
         btn.textContent = '¡Copiado!';
@@ -910,17 +984,89 @@ function wireView() {
       }
     });
   });
+
+  appRoot.querySelectorAll('details.calendar-year').forEach((det) => {
+    det.addEventListener('toggle', () => {
+      if (det.open) {
+        const deferred = det.querySelector('[data-deferred-year]');
+        if (deferred) {
+          const y = Number(deferred.dataset.deferredYear);
+          deferred.innerHTML = calendarYearGridHTML(current, y, buildViewContext('calendar'));
+          delete deferred.dataset.deferredYear;
+        }
+      }
+    });
+  });
+
+  const viewHeaderH1 = appRoot.querySelector('.view-header h1');
+  const [currentViewName] = parseHash();
+  if (viewHeaderH1 && SECTION_NAMES[currentViewName] && !appRoot.querySelector('[data-action="toggle-fav"]')) {
+    const isFav = favorites.has(currentViewName);
+    const favBtn = document.createElement('button');
+    favBtn.type = 'button';
+    favBtn.className = `btn-fav ${isFav ? 'is-fav' : ''}`;
+    favBtn.dataset.action = 'toggle-fav';
+    favBtn.dataset.favView = currentViewName;
+    favBtn.setAttribute('aria-label', isFav ? 'Quitar de favoritos' : 'Agregar a favoritos');
+    favBtn.title = isFav ? 'Quitar de favoritos' : 'Agregar a favoritos';
+    favBtn.textContent = isFav ? '★' : '☆';
+    favBtn.addEventListener('click', () => {
+      if (favorites.has(currentViewName)) favorites.delete(currentViewName);
+      else favorites.add(currentViewName);
+      saveStoredFavorites(favorites);
+      render();
+    });
+    viewHeaderH1.appendChild(favBtn);
+  }
+
+  document.querySelectorAll('[data-action="reset-preferences"]').forEach((btn) => {
+    btn.onclick = () => resetPreferences();
+  });
 }
 
-// Acciones del header: DOM estático fuera de #app-root, se cablean una vez.
-// Export descarga un .zip con un CSV por tabla (análisis en Sheets/Excel de
-// Android): el JSON crudo colgaba los visores con decenas de MB. Blob +
-// <a download>: sin red, CSP intacta.
-async function exportModel() {
+function exportCurrentExploreTable() {
+  if (!current) return;
+  const viewCtx = buildViewContext('explore');
+  const exp = viewCtx.exploreState || {};
+  const tab = exp.tab || 'artists';
+  const pool = tab === 'artists' ? [...current.artists.byId.values()]
+    : tab === 'tracks' ? [...current.tracks.byId.values()]
+    : [...current.albums.byId.values()];
+  const exported = exportExploreTableCSV(pool, {
+    metric: activeMetric,
+    totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.plays,
+    query: exp.query,
+    searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
+    sortBy: exp.sortBy,
+    sortDir: exp.sortDir,
+    minPlays: exp.minPlays,
+    minMonths: exp.minMonths
+  }, tab);
+
+  const blob = new Blob([exported.csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `scrobbleview-${tab}-${exportFilename(Math.floor(Date.now() / 1000)).replace(/\.json$/, '')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  announce(`Exportadas ${exported.totalMatches} filas a CSV.`);
+}
+
+async function exportModel(scope = 'all') {
   if (!model) return;
-  const job = beginProcessing('Preparando exportación', 'export');
+  const label = scope === 'selection' ? 'Exportando selección analítica' : 'Preparando exportación';
+  const job = beginProcessing(label, 'export');
   let result;
-  try { result = await analysisClient.request('export', {}, { onProgress: job.progress }); }
+  try {
+    const payload = {
+      scope,
+      filterState: scope === 'selection' ? state : undefined
+    };
+    result = await analysisClient.request('export', payload, { onProgress: job.progress });
+  }
   finally { job.finish(); }
   if (!result || !result.bytes) return;
   const blob = new Blob([result.bytes], { type: 'application/zip' });
@@ -934,15 +1080,74 @@ async function exportModel() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const exportDialog = document.getElementById('dialog-export');
+const exportForm = document.getElementById('export-form');
+
 headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
   btn.addEventListener('click', async (e) => {
-    // El zip de historiales grandes tarda segundos: sin feedback el usuario
-    // re-toca y encola otra descarga idéntica.
+    if (!model) return;
+    if (exportDialog && typeof exportDialog.showModal === 'function') {
+      const allDesc = document.getElementById('export-all-desc');
+      if (allDesc) allDesc.textContent = `${fmtNum(model.totals.records)} reproducciones totales.`;
+
+      const optSelection = document.getElementById('export-opt-selection');
+      const selDesc = document.getElementById('export-selection-desc');
+      const hasFilters = isFilterActive(state);
+      if (optSelection && selDesc) {
+        if (hasFilters && current) {
+          optSelection.classList.remove('is-disabled');
+          optSelection.querySelector('input').disabled = false;
+          selDesc.textContent = `${fmtNum(current.totals.records)} reproducciones calculadas con los filtros activos.`;
+        } else {
+          optSelection.classList.add('is-disabled');
+          optSelection.querySelector('input').disabled = true;
+          selDesc.textContent = 'No hay filtros activos (coincide con todo el historial).';
+        }
+      }
+
+      const [viewName] = parseHash();
+      const optTable = document.getElementById('export-opt-table');
+      const tableDesc = document.getElementById('export-table-desc');
+      if (optTable) {
+        if (viewName === 'explore' && current) {
+          optTable.hidden = false;
+          const viewCtx = buildViewContext('explore');
+          const exp = viewCtx.exploreState || {};
+          const tab = exp.tab || 'artists';
+          const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
+          const pool = tab === 'artists' ? [...current.artists.byId.values()]
+            : tab === 'tracks' ? [...current.tracks.byId.values()]
+            : [...current.albums.byId.values()];
+          const qRes = queryCatalog(pool, {
+            metric: activeMetric,
+            totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.plays,
+            query: exp.query,
+            searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
+            sortBy: exp.sortBy,
+            sortDir: exp.sortDir,
+            minPlays: exp.minPlays,
+            minMonths: exp.minMonths
+          });
+          if (tableDesc) tableDesc.textContent = `${fmtNum(qRes.totalMatches)} ${tabName} coincidentes en formato CSV.`;
+        } else {
+          optTable.hidden = true;
+          const tableRadio = optTable.querySelector('input');
+          if (tableRadio && tableRadio.checked) {
+            const allRadio = exportDialog.querySelector('input[value="all"]');
+            if (allRadio) allRadio.checked = true;
+          }
+        }
+      }
+
+      exportDialog.showModal();
+      return;
+    }
+
     const b = e.currentTarget;
     if (b.disabled) return;
     b.disabled = true;
     try {
-      await exportModel();
+      await exportModel('all');
     } catch (error) {
       if (error.code !== 'E_ABORT') reportProcessingError(error, 'export');
     } finally {
@@ -950,6 +1155,27 @@ headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
     }
   });
 });
+
+if (exportDialog) {
+  exportDialog.querySelector('[data-action="close-export"]')?.addEventListener('click', () => {
+    exportDialog.close();
+  });
+  exportForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(exportForm);
+    const scope = data.get('export-scope') || 'all';
+    exportDialog.close();
+    try {
+      if (scope === 'table') {
+        exportCurrentExploreTable();
+      } else {
+        await exportModel(scope);
+      }
+    } catch (error) {
+      if (error.code !== 'E_ABORT') reportProcessingError(error, 'export');
+    }
+  });
+}
 headerActions?.querySelectorAll('[data-action="reset"]').forEach((btn) => {
   btn.addEventListener('click', () => location.reload());
 });

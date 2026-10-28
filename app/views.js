@@ -1307,6 +1307,37 @@ export function calendarView(model, year, ctx = {}) {
 `;
 }
 
+export function calendarYearGridHTML(model, y, ctx = {}) {
+  const byMs = ctx?.metric ? ctx.metric === 'ms' : true;
+  const valFmt = byMs ? fmtMs : fmtNum;
+  const normalizeYears = Boolean(ctx?.normalizeYears);
+  const allDailyValues = [...model.daily.values()].map((v) => (byMs ? v.ms : v.plays));
+  const sharedMax = allDailyValues.length ? Math.max(...allDailyValues, 1) : 1;
+
+  const dataRange = model.meta.firstTs != null
+    ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
+    : null;
+
+  const days = [...model.daily.entries()]
+    .filter(([d]) => civilFromDays(d).y === y)
+    .map(([d, v]) => {
+      const c = civilFromDays(d);
+      const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
+      return { date: iso, value: byMs ? v.ms : v.plays };
+    });
+  const yearMax = Math.max(...days.map((d) => d.value), 1);
+  const effectiveScale = normalizeYears ? makeScale(yearMax) : makeScale(sharedMax);
+  const legendMax = normalizeYears ? yearMax : sharedMax;
+
+  return calendarGrid({
+    days, year: y,
+    colorScale: effectiveScale,
+    cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin registros'}`,
+    dataRange,
+    interactive: true
+  }) + heatLegend({ max: legendMax, unit: byMs ? 'tiempo' : 'reproducciones', format: valFmt }) + calendarTable(days, y, byMs);
+}
+
 export function calendarIndexView(model, ctx = {}) {
   const byMs = ctx?.metric ? ctx.metric === 'ms' : true;
   const valFmt = byMs ? fmtMs : fmtNum;
@@ -1319,26 +1350,6 @@ export function calendarIndexView(model, ctx = {}) {
     ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
     : null;
 
-  const yearGrid = (y) => {
-    const days = [...model.daily.entries()]
-      .filter(([d]) => civilFromDays(d).y === y)
-      .map(([d, v]) => {
-        const c = civilFromDays(d);
-        const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
-        return { date: iso, value: byMs ? v.ms : v.plays };
-      });
-    const yearMax = Math.max(...days.map((d) => d.value), 1);
-    const effectiveScale = normalizeYears ? makeScale(yearMax) : makeScale(sharedMax);
-    const legendMax = normalizeYears ? yearMax : sharedMax;
-
-    return calendarGrid({
-      days, year: y,
-      colorScale: effectiveScale,
-      cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin registros'}`,
-      dataRange,
-      interactive: true
-    }) + heatLegend({ max: legendMax, unit: byMs ? 'tiempo' : 'reproducciones', format: valFmt }) + calendarTable(days, y, byMs);
-  };
   const [last, ...prev] = years;
   const latestYear = last ?? (years.length ? years[0] : new Date().getFullYear());
   const latestDaysMap = new Map([...model.daily.entries()]
@@ -1358,14 +1369,15 @@ export function calendarIndexView(model, ctx = {}) {
     ${calendarScaleToggleHTML({ normalizeYears, maxValFormatted: valFmt(sharedMax) })}
     ${calendarInspectorHTML({ year: latestYear, byMs })}
     ${calendarMonthViewHTML({ year: latestYear, month: currentMonth, daysMap: latestDaysMap, colorScale: normalizeYears ? makeScale(Math.max(...[...latestDaysMap.values()].map((d) => d.value), 1)) : makeScale(sharedMax), byMs, dataRange })}
-    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${yearGrid(last)}</div>`, '', true) : ''}
+    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${calendarYearGridHTML(model, last, ctx)}</div>`, '', true) : ''}
     ${prev.map((y) => {
       const yd = model.yearly.get(y);
+      const isRendered = Boolean(ctx?.renderAllYears);
       return `
       <details class="card calendar-year">
         <summary>${calendarYearSummaryHTML(y, yd)}</summary>
         <p class="calendar-year-link"><a href="#/calendar/${esc(String(y))}">Ver solo ${esc(String(y))} →</a></p>
-        <div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(y))}">${yearGrid(y)}</div>
+        <div class="chart-scroll chart-scroll--cal" data-deferred-year="${y}" tabindex="0" role="region" aria-label="Calendario de ${esc(String(y))}">${isRendered ? calendarYearGridHTML(model, y, ctx) : ''}</div>
       </details>`;
     }).join('')}`;
 }
@@ -1724,19 +1736,31 @@ export function wrappedView(model, id, ctx) {
 
 // Resumen en texto plano (para portapapeles / copia manual). Sin HTML: se
 // asigna con textContent, así que no necesita escaping.
-export function receiptText(model) {
+export function receiptText(model, ctx = {}) {
   const t = model.totals;
-  const topArtist = model.artists.top.byMs[0];
-  const topTrack = model.tracks.top.byMs[0];
+  const evoByMs = (ctx?.metric ?? 'ms') === 'ms';
+  const topArtist = model.artists.top[evoByMs ? 'byMs' : 'byPlays']?.[0];
+  const topTrack = model.tracks.top[evoByMs ? 'byMs' : 'byPlays']?.[0];
+  const onlyYear = ctx?.range ? matchRangeShortcut(ctx.range)?.year
+    : ctx?.years?.size === 1 ? [...ctx.years][0] : null;
+  const isFullYear = onlyYear != null;
+  const periodLabel = ctx?.range ? rangeChipLabel(ctx.range)
+    : (model.meta.firstTs != null ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}` : '—');
+  const tzLabel = model.meta.tzId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC');
+  const metricLabel = evoByMs ? 'Tiempo escuchado' : 'Reproducciones';
+
   const lines = [
-    'Mi resumen Scrobbleview',
+    isFullYear ? `Mi resumen Scrobbleview (año ${onlyYear})` : 'Mi resumen Scrobbleview (del período)',
+    `Período: ${periodLabel}`,
+    `Zona horaria: ${tzLabel}`,
+    `Criterio principal: ${metricLabel}`,
     `Reproducciones: ${t.records}`,
     `Tiempo escuchado: ${fmtMs(t.ms)}`,
     `Artistas distintos: ${model.artists.byId.size}`,
     `Canciones distintas: ${model.tracks.byId.size}`,
     `Sesiones: ${model.sessionsStats.count}`,
-    `Artista del año: ${topArtist ? topArtist.name : '—'}`,
-    `Canción del año: ${topTrack ? `${topTrack.name} — ${topTrack.artist}` : '—'}`,
+    `${isFullYear ? 'Artista del año' : 'Artista del período'}: ${topArtist ? topArtist.name : '—'}`,
+    `${isFullYear ? 'Canción del año' : 'Canción del período'}: ${topTrack ? `${topTrack.name} — ${topTrack.artist}` : '—'}`,
     `Saltadas: ${t.skipped}`,
     `Racha más larga: ${model.streak.len} días`
   ];
@@ -1813,6 +1837,7 @@ export function exploreView(model, ctx = {}) {
         ${thresholdControl}
         ${densityControlsHTML(density)}
         ${columnsPickerHTML(tab, visibleCols)}
+        <button type="button" class="btn btn-secondary btn-sm" data-action="export-table" title="Exportar todas las ${queryResult.totalMatches} coincidencias de la consulta actual a CSV">Exportar CSV (${queryResult.totalMatches})</button>
       </div>
     </div>
     <div class="explore-search-wrap">

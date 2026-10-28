@@ -2772,3 +2772,120 @@ details.calendar-year summary:hover {
 .status-salida {
   color: var(--text-faint);
 }
+
+.export-dialog {
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  max-width: 520px;
+  width: 90%;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+  margin: auto;
+}
+
+.export-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+.export-dialog h2 {
+  margin-top: 0;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-lg);
+}
+
+.export-dialog-note {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--sp-4);
+  line-height: 1.4;
+}
+
+.export-dialog-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.export-dialog-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  cursor: pointer;
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.export-dialog-option:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.export-dialog-option input[type="radio"] {
+  margin-top: 3px;
+}
+
+.export-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+}
+
+.footer-actions {
+  margin-bottom: var(--sp-2);
+}
+
+.app-nav-favorites {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+}
+
+.nav-fav-title {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-right: var(--sp-1);
+}
+
+.nav-fav-chip {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-fav-chip.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+.btn-fav {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+  cursor: pointer;
+  padding: 0 var(--sp-2);
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.btn-fav:hover,
+.btn-fav.is-fav {
+  color: #f1c40f;
+}

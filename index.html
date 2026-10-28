@@ -21,7 +21,7 @@
           <button type="button" class="btn-icon" data-action="reset" aria-label="Cargar archivos" title="Cargar archivos: vuelve al inicio para elegir otros archivos">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>
           </button>
-          <button type="button" class="btn-icon" data-action="export" aria-label="Exportar datos" title="Exportar datos: descarga el modelo completo (ignora los filtros activos)">
+          <button type="button" class="btn-icon" data-action="export" aria-label="Exportar datos" title="Exportar datos: abrir opciones de exportación (historial, selección o tabla)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
           </button>
         </div>
@@ -97,8 +97,47 @@
   <footer class="site-footer" hidden>
     <div class="container">
       <p id="footer-meta" class="footer-meta" hidden></p>
+      <div class="footer-actions">
+        <button type="button" class="btn btn-secondary btn-sm" data-action="reset-preferences">Restablecer preferencias</button>
+      </div>
       <p>Tus datos se procesan localmente en tu dispositivo. Nunca se suben a ningún servidor.</p>
     </div>
   </footer>
+
+  <dialog id="dialog-export" class="export-dialog" aria-labelledby="export-dialog-title">
+    <form method="dialog" id="export-form">
+      <h2 id="export-dialog-title">Exportar estadísticas</h2>
+      <p class="export-dialog-note">
+        Descarga de tablas tabulares en formato CSV comprimidas en un archivo ZIP. Este archivo contiene métricas agregadas para análisis en hojas de cálculo y no sustituye ni puede reimportarse como los archivos JSON originales de Spotify.
+      </p>
+      <div class="export-dialog-options">
+        <label class="export-dialog-option">
+          <input type="radio" name="export-scope" value="all" checked>
+          <div>
+            <strong>Todo el historial</strong>
+            <p id="export-all-desc" class="view-meta">Descarga todas las tablas sin aplicar filtros.</p>
+          </div>
+        </label>
+        <label class="export-dialog-option" id="export-opt-selection">
+          <input type="radio" name="export-scope" value="selection">
+          <div>
+            <strong>Selección analítica actual</strong>
+            <p id="export-selection-desc" class="view-meta">Descarga tablas calculadas con los filtros activos del dashboard.</p>
+          </div>
+        </label>
+        <label class="export-dialog-option" id="export-opt-table" hidden>
+          <input type="radio" name="export-scope" value="table">
+          <div>
+            <strong>Tabla actual del catálogo</strong>
+            <p id="export-table-desc" class="view-meta">Descarga todas las coincidencias de la consulta actual en un único archivo CSV.</p>
+          </div>
+        </label>
+      </div>
+      <div class="export-dialog-actions">
+        <button type="button" class="btn btn-secondary" data-action="close-export">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btn-confirm-export">Descargar</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>
