@@ -8,6 +8,7 @@ import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText } from './views.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
+import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -57,7 +58,8 @@ let current = null; // modelo activo (filtrado o completo)
 let currentPrev = null;
 let initializing = false;
 let state = emptyFilterState();
-let rankUI = { tab: 'artists', metric: 'plays', topN: initialLimits.rankTopN, query: '' };
+let activeMetric = resolveMetric(null, typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null);
+let rankUI = { tab: 'artists', metric: activeMetric, topN: initialLimits.rankTopN, query: '' };
 const tableLimits = initialLimits.map;
 let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
 let advState = null;
@@ -133,7 +135,7 @@ async function initializeAnalysis(result) {
   current = model;
   currentPrev = null;
   analysisState.initialize(model);
-  rankUI = { tab: 'artists', metric: 'plays', topN: rankUI.topN, query: '' };
+  rankUI = { tab: 'artists', metric: activeMetric, topN: rankUI.topN, query: '' };
   initializing = true;
   try {
     let restored, hash;
@@ -214,7 +216,10 @@ function parseHash() {
 // volver, los params del hash de esa entrada restauran sus filtros).
 function syncHash() {
   const [name, id] = parseHash();
-  const hash = `#/${name}${id != null ? `/${id}` : ''}${filterParams(state)}`;
+  const fParams = filterParams(state);
+  const mParam = serializeMetricParam(activeMetric);
+  const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
+  const hash = `#/${name}${id != null ? `/${id}` : ''}${queryStr}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
@@ -222,6 +227,10 @@ function syncHash() {
 // Restore state and its model together before any view reads either one.
 async function applyHashParams() {
   const [, , query] = parseHash();
+  const parsed = parseQueryParams(query);
+  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null;
+  activeMetric = resolveMetric(parsed.metric, stored);
+  rankUI.metric = activeMetric;
   state = paramsToFilterState(query) ?? emptyFilterState();
   return refreshModel();
 }
@@ -305,6 +314,7 @@ function buildViewContext(viewName) {
     range: state.range,
     prev: viewName === 'dashboard' ? currentPrev : null,
     limits: tableLimits,
+    metric: activeMetric,
     rankUI
   };
 }
@@ -550,8 +560,13 @@ function wireRankCard() {
   });
   card.querySelectorAll('[data-metric]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      rankUI.metric = btn.dataset.metric;
-      updateRankCard(`[data-metric="${rankUI.metric}"]`);
+      activeMetric = btn.dataset.metric;
+      rankUI.metric = activeMetric;
+      try { localStorage.setItem(METRIC_STORAGE_KEY, activeMetric); } catch (_) {}
+      syncHash();
+      render();
+      const newBtn = appRoot.querySelector(`[data-metric="${activeMetric}"]`);
+      if (newBtn) newBtn.focus();
     });
   });
   const sel = card.querySelector('[data-topn]');
