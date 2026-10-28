@@ -1,5 +1,4 @@
-export function createTransitionsAcc(gapMinutes = 30) {
-  const gapSec = gapMinutes * 60;
+export function createTransitionsAcc() {
 
   function createSubAcc() {
     const pairs = new Map();
@@ -56,14 +55,12 @@ export function createTransitionsAcc(gapMinutes = 30) {
         if (isOrigConsecutive) {
           originalConsecutive.record(prevEv.ar, ev.ar);
 
-          const startUtc = ev.t - ((ev.flags & 8) ? 0 : Math.floor(ev.ms / 1000));
-          const gap = startUtc - prevEv.t;
-          if (gap <= gapSec) {
+          if (ev.originalSession === prevEv.originalSession) {
             originalSession.record(prevEv.ar, ev.ar);
           }
         }
       }
-      prevEv = { ar: ev.ar, pos: ev.pos, t: ev.t, ms: ev.ms, flags: ev.flags };
+      prevEv = { ar: ev.ar, pos: ev.pos, originalSession: ev.originalSession };
     },
 
     finalize() {

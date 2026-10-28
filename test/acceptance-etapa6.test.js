@@ -4,22 +4,59 @@ import { buildDataset } from './fakes/dataset.js';
 import { aggregate } from '../src/aggregate/aggregate.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { trackKey } from '../src/aggregate/impl/groups.js';
+import { createAnalysisEngine } from '../app/analysis-engine.js';
+import { emptyFilterState } from '../src/filters.js';
+
+test('original session sequences include pairs joined by a later interval', () => {
+  const start = 1704067200;
+  const ds = buildDataset([
+    { t: start, m: 60000, track: 'A', artist: 'Artist' },
+    { t: start + 7200, m: 60000, track: 'A', artist: 'Artist' },
+    { t: start + 10800, m: 10800000, track: 'A', artist: 'Artist' }
+  ]);
+  const model = aggregate(ds, { tz: fixedTz('UTC', 0) });
+  const key = trackKey(ds.tr[0], ds.ar[0]);
+  assert.equal(model.sessionsStats.count, 1);
+  assert.equal(model.sessions[0].plays, 3);
+  assert.equal(model.transitions.originalSession.auto, 2);
+  assert.equal(model.behavior.maxRun.originalSession.get(key), 3);
+  const selected = aggregate(ds, { tz: fixedTz('UTC', 0), indices: [0, 1] });
+  assert.equal(selected.sessionsStats.count, 2);
+  assert.equal(selected.transitions.originalSession.auto, 1);
+  assert.equal(selected.behavior.maxRun.originalSession.get(key), 2);
+});
+
+test('engine keeps original session membership when the bridge is filtered out', async () => {
+  const start = 1704067200;
+  const entries = [
+    { offset: 0, ms: 60000, shuffle: true },
+    { offset: 7200, ms: 60000, shuffle: true },
+    { offset: 10800, ms: 10800000, shuffle: false }
+  ].map(({ offset, ms, shuffle }) => ({
+    ts: new Date((start + offset) * 1000).toISOString(), ms_played: ms, shuffle,
+    master_metadata_track_name: 'A', master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: 'Album'
+  }));
+  const engine = createAnalysisEngine();
+  await engine.handle('load', { timeZone: 'UTC', files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(entries)]) }] });
+  const { model } = await engine.handle('filter', { state: { ...emptyFilterState(), shuffle: true } });
+  assert.equal(model.sessionsStats.count, 2);
+  assert.equal(model.transitions.originalSession.auto, 1);
+  assert.equal([...model.behavior.maxRun.originalSession.values()][0], 2);
+  assert.equal('cols' in model, false);
+});
 
 test('A21: A->B->A and day pause distinguishes selection, original consecutive, and session adjacency', () => {
   const UTC = fixedTz('UTC', 0);
-  const D0 = 1704067200; // 2024-01-01 00:00:00
+  const D0 = 1704067200;
 
-  // Case 1: A -> B -> A. When filtered to A:
-  // - Selection adjacency counts A -> A (1 pair)
-  // - Original consecutive counts 0 pairs
-  // - Original session counts 0 pairs
   const eventsABA = [
     { t: D0, m: 60000, track: 'Song A', artist: 'Artist A' },
     { t: D0 + 100, m: 60000, track: 'Song B', artist: 'Artist B' },
     { t: D0 + 200, m: 60000, track: 'Song A', artist: 'Artist A' }
   ];
   const dsABA = buildDataset(eventsABA);
-  const filteredIndices = [0, 2]; // Filter out Artist B
+  const filteredIndices = [0, 2];
 
   const mABA = aggregate(dsABA, { tz: UTC, indices: filteredIndices });
 
@@ -32,10 +69,6 @@ test('A21: A->B->A and day pause distinguishes selection, original consecutive, 
   assert.equal(mABA.behavior.maxRun.originalConsecutive.get(tkA), 1);
   assert.equal(mABA.behavior.maxRun.originalSession.get(tkA), 1);
 
-  // Case 2: A -> A with 2 days pause (same artist, consecutive in original history, but different sessions):
-  // - Selection adjacency counts 1
-  // - Original consecutive counts 1
-  // - Original session counts 0 (separated by 2 days gap > 30 min)
   const eventsPause = [
     { t: D0, m: 60000, track: 'Song A', artist: 'Artist A' },
     { t: D0 + 2 * 86400, m: 60000, track: 'Song A', artist: 'Artist A' }
@@ -85,8 +118,6 @@ test('A22: sessions merged by long overlapping interval preserve exact membershi
   const UTC = fixedTz('UTC', 0);
   const D0 = 1704067200;
 
-  // Track 1: 10:00 to 10:10 (600s).
-  // Track 2: 10:45 to 11:30 (45 min = 2700s play, starting at 10:45 UTC, bridging the gap).
   const events = [
     { t: D0 + 600, m: 600000, track: 'Intro', artist: 'Artist 1' },
     { t: D0 + 3300, m: 2700000, track: 'Long Bridge', artist: 'Artist 2' }

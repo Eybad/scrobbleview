@@ -16,7 +16,9 @@
 - C18: se actualizó el selector de Sesiones y la expectativa de cancelación de filtro del harness. `node --check browser-tests/navigation.js` aprobó; la ejecución en navegador, la cancelación de importación y la de exportación siguen pendientes.
 - C02 y C03, avance: regresos y retención recorren el orden UTC; los regresos se seleccionan por evento y el extremo histórico usa el máximo UTC. La cohorte contiene primeras apariciones históricas seleccionadas; el seguimiento posterior usa todo el historial. Pruebas de `analyze` y del motor cubren inversión de eventos, igualdad temporal y filtros no temporales. `node --test test/acceptance-etapa7.test.js`: 8 pruebas aprobadas.
 - C07, avance: Explorar y las opciones de exportación usan `totals.records` para cuotas por reproducciones. `node --test test/explore-view.test.js test/acceptance-etapa8.test.js`: 10 pruebas aprobadas; falta reconciliar la exportación real y su elegibilidad con la pantalla.
-- Siguiente tarea: completar R0 (harness) y R1 (cohorte, motor y denominadores). Los demás fallos del plan siguen pendientes de corrección y verificación integrada.
+- C06, avance: las transiciones y rachas usan pertenencia definitiva de sesiones originales, incluso si un intervalo posterior une sesiones o si el filtro oculta ese intervalo. El motor conserva el índice por dataset. `node --test`: 316 pruebas aprobadas; la prueba enfocada posterior aprobó 5. Falta detalle paginado de miembros en R3.
+- Medición aislada posterior al cambio, Termux/Node v26.12.1: `node --expose-gc bench/aggregate.js 100000 --compact`, agregado 2000 ms, filtrado 1479 ms, conteo 6 ms, RSS pico 261 MiB. Es una muestra Node, no una medición de navegador ni una comparación repetida.
+- Siguiente tarea: completar R0 (harness), cerrar R1 y continuar R2–R3 con detalle de sesiones. Los demás fallos del plan siguen pendientes de corrección y verificación integrada.
 - Las secciones históricas siguientes registran lo que se afirmó en cada etapa; no acreditan aceptación actual. La revisión posterior detectó integraciones incompletas y resultados incorrectos.
 
 ## 2. Verificación de Partida y Progreso

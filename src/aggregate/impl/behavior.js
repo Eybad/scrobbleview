@@ -1,7 +1,6 @@
 import { trackKey } from './groups.js';
 
-export function createBehaviorAcc(gapMinutes = 30) {
-  const gapSec = gapMinutes * 60;
+export function createBehaviorAcc() {
   const starts = new Map();
   const ends = new Map();
   const pairs = new Map();
@@ -44,18 +43,13 @@ export function createBehaviorAcc(gapMinutes = 30) {
       const isFirst = !prevEv;
       const isOrigConsecutive = !isFirst && ev.pos != null && prevEv.pos != null && ev.pos === prevEv.pos + 1;
 
-      let isSessionConsecutive = false;
-      if (isOrigConsecutive) {
-        const startUtc = ev.t - ((ev.flags & 8) ? 0 : Math.floor(ev.ms / 1000));
-        const gap = startUtc - prevEv.t;
-        if (gap <= gapSec) isSessionConsecutive = true;
-      }
+      const isSessionConsecutive = isOrigConsecutive && ev.originalSession === prevEv.originalSession;
 
       runSel.track(tk, !isFirst);
       runOrig.track(tk, isOrigConsecutive);
       runSess.track(tk, isSessionConsecutive);
 
-      prevEv = { pos: ev.pos, t: ev.t, ms: ev.ms, flags: ev.flags };
+      prevEv = { pos: ev.pos, originalSession: ev.originalSession };
     },
 
     finalize() {

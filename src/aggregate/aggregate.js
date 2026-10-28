@@ -8,7 +8,7 @@ import { derive, selectDerived, civilFromDays } from './impl/derive.js';
 import { computeTotals } from './impl/totals.js';
 import { createGroupsAcc, trackKey } from './impl/groups.js';
 import { createTemporalAcc } from './impl/temporal.js';
-import { createSessionsAcc } from './impl/sessions.js';
+import { createSessionsAcc, originalSessionMembership } from './impl/sessions.js';
 import { createBehaviorAcc } from './impl/behavior.js';
 import { createTransitionsAcc } from './impl/transitions.js';
 import { computeConcentration } from './impl/concentration.js';
@@ -46,13 +46,14 @@ export function aggregate(ds, opts = {}) {
     ymd: derived.ymd, day: derived.day, isSkipped: derived.isSkipped, ms: derived.ms
   };
   const order = derived.order;
+  const originalSessions = opts.originalSessions ?? originalSessionMembership(ds, baseDerived, tz, opts.sessionGapMinutes);
   const totals = computeTotals(ds, minMs, skipThresholdMs, opts.indices);
 
   const groups = createGroupsAcc(ds, opts);
   const temporal = createTemporalAcc(minMs, opts.history, opts);
   const sessions = createSessionsAcc({ tz, gapMinutes: opts.sessionGapMinutes, compact: opts.compact });
-  const behavior = createBehaviorAcc(opts.sessionGapMinutes);
-  const transitions = createTransitionsAcc(opts.sessionGapMinutes);
+  const behavior = createBehaviorAcc();
+  const transitions = createTransitionsAcc();
 
   const n = cols.t.length;
   const ev = {};
@@ -64,6 +65,7 @@ export function aggregate(ds, opts = {}) {
     const i = order[k];
     ev.k = k;
     ev.pos = derived.utcPositions ? derived.utcPositions[k] : k;
+    ev.originalSession = originalSessions[ev.pos];
     ev.t = cols.t[k];
     ev.loc = cols.loc[k];
     ev.hour = cols.hour[k];

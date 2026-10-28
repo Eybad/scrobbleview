@@ -6,7 +6,7 @@ import { civilFromDays } from './derive.js';
 import { trackKey } from './groups.js';
 import { SESSION_GAP_MINUTES } from '../../defaults.js';
 
-export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compact = false }) {
+export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compact = false, membership = false }) {
   const sessions = [];
   let current = null;
   let intraSessionsWithRepeats = 0;
@@ -37,6 +37,7 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
       if (!current) {
         current = {
           start, end: ev.loc, startUtc, endUtc: ev.t,
+          ...(membership ? { firstPosition: ev.k, lastPosition: ev.k } : {}),
           duration: 0, ms: ev.ms, plays: 1,
           artists: new Map([[ev.ar, 1]]),
           tracks: new Map([[tk, 1]])
@@ -48,6 +49,7 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
         sessions.push(current);
         current = {
           start, end: ev.loc, startUtc, endUtc: ev.t,
+          ...(membership ? { firstPosition: ev.k, lastPosition: ev.k } : {}),
           duration: 0, ms: ev.ms, plays: 1,
           artists: new Map([[ev.ar, 1]]),
           tracks: new Map([[tk, 1]])
@@ -59,6 +61,7 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
         }
         current.end = ev.loc;
         current.endUtc = ev.t;
+        if (membership) current.lastPosition = ev.k;
         current.ms += ev.ms;
         current.plays++;
         current.artists.set(ev.ar, (current.artists.get(ev.ar) || 0) + 1);
@@ -68,6 +71,7 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
       // End-time order can reveal a long interval after an earlier split.
       while (sessions.length && current.startUtc - sessions.at(-1).endUtc <= gapMinutes * 60) {
         const previous = sessions.pop();
+        if (membership) current.firstPosition = previous.firstPosition;
         if (previous.startUtc < current.startUtc) {
           current.startUtc = previous.startUtc;
           current.start = previous.start;
@@ -81,8 +85,14 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
 
     finalize() {
       if (current) sessions.push(current);
+      const sessionByPosition = membership ? new Uint32Array(sessions.reduce((sum, session) => sum + session.plays, 0)) : null;
       for (let i = 0; i < sessions.length; i++) {
         sessions[i].id = i;
+        if (membership) {
+          sessionByPosition.fill(i, sessions[i].firstPosition, sessions[i].lastPosition + 1);
+          delete sessions[i].firstPosition;
+          delete sessions[i].lastPosition;
+        }
         finalizeSession(sessions[i]);
       }
 
@@ -123,10 +133,19 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
       };
 
       return {
-        sessions,
+        sessions, sessionByPosition,
         sessionsStats,
         intraSession: { sessionsWithRepeats: intraSessionsWithRepeats, repeatedPlays: intraRepeatedPlays }
       };
     }
   };
+}
+
+export function originalSessionMembership(ds, derived, tz, gapMinutes = SESSION_GAP_MINUTES) {
+  const accumulator = createSessionsAcc({ tz, gapMinutes, compact: true, membership: true });
+  for (let k = 0; k < derived.order.length; k++) {
+    const i = derived.order[k];
+    accumulator.onEvent({ k, t: derived.t[k], loc: derived.loc[k], ms: ds.m[i], flags: ds.flags[i], tr: ds.tr[i], ar: ds.ar[i] });
+  }
+  return accumulator.finalize().sessionByPosition;
 }

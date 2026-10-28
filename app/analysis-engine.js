@@ -2,6 +2,7 @@
 import { analyze } from '../src/analyze.js';
 import { parse } from '../src/parse/parse.js';
 import { derive } from '../src/aggregate/impl/derive.js';
+import { originalSessionMembership } from '../src/aggregate/impl/sessions.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, countFiltered, emptyFilterState } from '../src/filters.js';
 import { fileBytes } from '../src/parse/adapters/file-bytes.js';
@@ -24,20 +25,21 @@ function timeZoneForDataset(ds, id) {
 }
 
 export function createAnalysisEngine() {
-  let ds = null, derived = null, tz = null, history = null, generatedAt = null;
+  let ds = null, derived = null, tz = null, history = null, generatedAt = null, originalSessions = null;
 
   async function aggregateSelection(state, extra = {}) {
     const indices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : undefined;
-    return analyze(ds, { tz, derived, indices, history, now: generatedAt, compact: true, albumDetails: null, ...extra });
+    return analyze(ds, { tz, derived, indices, history, originalSessions, now: generatedAt, compact: true, albumDetails: null, ...extra });
   }
 
   async function initialize(dataset, timeZone, report) {
     report(0, 'Preparando zona horaria');
     const nextTz = timeZoneForDataset(dataset, timeZone);
     const nextDerived = derive(dataset, nextTz);
+    const nextOriginalSessions = originalSessionMembership(dataset, nextDerived, nextTz);
     const now = Math.floor(Date.now() / 1000);
-    const model = await analyze(dataset, { tz: nextTz, derived: nextDerived, now, compact: true, albumDetails: null, onProgress: report });
-    ds = dataset; tz = nextTz; derived = nextDerived; generatedAt = now;
+    const model = await analyze(dataset, { tz: nextTz, derived: nextDerived, originalSessions: nextOriginalSessions, now, compact: true, albumDetails: null, onProgress: report });
+    ds = dataset; tz = nextTz; derived = nextDerived; generatedAt = now; originalSessions = nextOriginalSessions;
     const firstAppearances = (entities) => new Map([...entities].map(([key, entity]) => [key, { firstUtc: entity.firstUtc }]));
     history = { tracks: firstAppearances(model.tracks.byId), artists: firstAppearances(model.artists.byId) };
     delete model.cols;
