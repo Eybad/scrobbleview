@@ -12,6 +12,7 @@ import { createSessionsAcc } from './impl/sessions.js';
 import { createBehaviorAcc } from './impl/behavior.js';
 import { createTransitionsAcc } from './impl/transitions.js';
 import { computeConcentration } from './impl/concentration.js';
+import { computeComebacks, computeRetention } from '../longitudinal.js';
 
 import { AbortError } from '../parse/errors.js';
 import { resolveOptions } from '../defaults.js';
@@ -96,7 +97,7 @@ export function aggregate(ds, opts = {}) {
   const model = buildStats({
     ds, tz, now, minMs, skipThresholdMs,
     cols, localOrder: derived.localOrder, totals, groups: g, temporal: t, sessions: s, behavior: b,
-    transitions: tr, concentration
+    transitions: tr, concentration, history: opts.history
   });
   opts.onProgress?.(1, 'Estadísticas listas');
   return model;
@@ -152,9 +153,14 @@ function rankDeepCatalog(artistList) {
     .slice(0, TOP_N);
 }
 
-function rankForgottenEntities(entities) {
+function rankForgottenEntities(entities, lastLoadedUtc = null, now = null) {
   return entities
     .filter((entity) => entity.plays >= MIN_PLAYS_FOR_OBSESSION && entity.lastTs != null)
+    .map((entity) => ({
+      ...entity,
+      daysSinceEnd: lastLoadedUtc != null ? Math.max(0, Math.floor((lastLoadedUtc - entity.lastUtc) / 86400)) : null,
+      daysSinceNow: now != null ? Math.max(0, Math.floor((now - entity.lastUtc) / 86400)) : null
+    }))
     .sort((first, second) => first.lastUtc - second.lastUtc || second.plays - first.plays || second.ms - first.ms)
     .slice(0, TOP_N);
 }
@@ -193,7 +199,7 @@ function longestStreak(days) {
   return { len: bestLen, start: bestStart, end: bestEnd };
 }
 
-function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration }) {
+function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration, history = null }) {
   const { artists, tracks, albums } = groups;
   const n = cols.t.length;
 
@@ -235,10 +241,25 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
 
   const transitionTop = mapTransitionTop(transitions.selection || transitions);
 
+  const lastLoadedUtc = ds.t.length > 0 ? ds.meta.tsMin + ds.t[ds.t.length - 1] : null;
+  const rangeForComebacks = n > 0 ? {
+    startUtc: cols.t[0] + ds.meta.tsMin,
+    endUtc: cols.t[n - 1] + ds.meta.tsMin
+  } : null;
+  const comebacks = computeComebacks(ds, { thresholdDays: 30, range: rangeForComebacks });
+  const retention = {
+    r30: computeRetention(ds, { days: 30 }),
+    r90: computeRetention(ds, { days: 90 })
+  };
+
   const tables = buildTables({
     groups, temporal, sessions, behavior, transitions, streak,
     firstTs: n ? cols.loc[localOrder[0]] : null,
-    lastTs: n ? cols.loc[localOrder[n - 1]] : null
+    lastTs: n ? cols.loc[localOrder[n - 1]] : null,
+    history,
+    lastLoadedUtc,
+    now,
+    comebacks
   });
 
   return {
@@ -311,11 +332,13 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
         auto: transitions.originalSession?.auto ?? 0
       }
     },
+    retention,
+    comebacks,
     tables
   };
 }
 
-function buildTables({ groups, temporal, sessions, behavior, transitions, streak, firstTs = null, lastTs = null }) {
+function buildTables({ groups, temporal, sessions, behavior, transitions, streak, firstTs = null, lastTs = null, history = null, lastLoadedUtc = null, now = null, comebacks = null }) {
   const { artists, tracks, albums } = groups;
   const artistList = [...artists.values()];
   const trackList = [...tracks.values()];
@@ -336,7 +359,7 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
   const lowSkipRate = { artists: rankByLowSkipRate(artistList), tracks: rankByLowSkipRate(trackList) };
   const oneHitWonders = rankOneHitWonders(artistList, tracks);
   const deepCatalog = rankDeepCatalog(artistList);
-  const forgotten = { artists: rankForgottenEntities(artistList), tracks: rankForgottenEntities(trackList) };
+  const forgotten = { artists: rankForgottenEntities(artistList, lastLoadedUtc, now), tracks: rankForgottenEntities(trackList, lastLoadedUtc, now) };
 
   // Obsesión: intensidad = plays / días activos (mín. MIN_PLAYS_FOR_OBSESSION).
   const obsession = trackList
@@ -405,6 +428,24 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.years.size - a.years.size || b.months.size - a.months.size || b.days.size - a.days.size || b.plays - a.plays)
     .slice(0, TOP_N);
 
+  const newTracks = trackList
+    .filter((tr) => (!history || history.tracks.get(tr.tk)?.firstUtc === tr.firstUtc))
+    .map((tr) => ({
+      ...tr,
+      subsequentPlays: Math.max(0, tr.plays - 1),
+      daysCount: tr.days.size
+    }))
+    .sort((a, b) => a.firstUtc - b.firstUtc || b.plays - a.plays);
+
+  const newArtists = artistList
+    .filter((a) => a.id > 0 && (!history || history.artists.get(a.id)?.firstUtc === a.firstUtc))
+    .map((a) => ({
+      ...a,
+      subsequentPlays: Math.max(0, a.plays - 1),
+      daysCount: a.days.size
+    }))
+    .sort((a, b) => a.firstUtc - b.firstUtc || b.plays - a.plays);
+
   return {
     artists: artistsTop,
     tracks: tracksTop,
@@ -421,6 +462,9 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     sessions: { byDuration: sessByDuration, byPlays: sessByPlays },
     discovery: { absolute: discAbs, relative: discRel },
     constancy,
-    longevity
+    longevity,
+    comebacks: comebacks?.tracks ?? [],
+    comebackArtists: comebacks?.artists ?? [],
+    firstAppearances: { tracks: newTracks, artists: newArtists }
   };
 }
