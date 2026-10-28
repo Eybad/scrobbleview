@@ -88,7 +88,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 |---|---|---|
 | **0** | Reconocimiento, base y seguimiento | **Completada** |
 | **1** | Correcciones de lectura y definiciones | **Completada** |
-| **2** | Contexto, rutas, espera y cancelación | Pendiente |
+| **2** | Contexto, rutas, espera y cancelación | **Completada** |
 | **3** | Catálogo completo y tablas reutilizables | Pendiente |
 | **4** | Gráficos y calendario accesibles | Pendiente |
 | **5** | Comparación A/B y evolución | Pendiente |
@@ -111,15 +111,35 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 11. **Arquetipo como patrón heurístico**: En `wrappedView`, se incorporó el detalle consultable de reglas estadísticas locales y aviso de banderas desconocidas, descartando inferencias psicológicas.
 12. **Aserción de regresión**: Actualizada `browser-tests/navigation.js` para aceptar el formato con glifo `▲ 100%`.
 
-## 6. Siguiente Tarea Exacta
+## 6. Detalle de Cambios — Etapa 2
 
-- Iniciar **Etapa 2 — Contexto, rutas, espera y cancelación**:
-  1. Implementar la separación tripartita del estado (analítico, consulta, retorno).
-  2. Implementar rutas semánticas versionadas (tipo + entidad) con resolución a IDs internos y recuperación explícita para enlaces legados o inexistentes.
-  3. Guardar/restaurar posición de scroll y foco mediante `history.state`.
-  4. Enlaces jerárquicos y contextuales transportables entre pestañas.
-  5. Franja contextual compacta en móvil (≤ 2 filas) e índice local de secciones.
-  6. Unificación de métrica (*Tiempo escuchado* / *Reproducciones*) en todo el flujo.
-  7. Coalescencia de solicitudes analíticas en vuelo hacia el Worker.
-  8. Feedback de "Actualizando" preservando último estado confirmado.
-  9. Manejo diferenciado de errores y cancelación lógica de tareas.
+1. **Unificación de métrica analítica**: En `app/state-metric.js`, se fijó `ms` (*Tiempo escuchado*) como métrica analítica inicial por defecto, estableciendo jerarquía de prevalencia: URL query param (`?m=ms` / `?m=plays`) > preferencia almacenada (`localStorage`) > default. Se propagó el contexto unificado `{ metric }` a todas las vistas, tablas y gráficos.
+2. **Coalescencia de solicitudes analíticas**: En `app/analysis-client.js`, se implementó una cola en el cliente que mantiene a lo sumo una solicitud de filtro activa en el Worker y a lo sumo una pendiente reemplazable con el último estado. Se expuso `dispatchedFilterCount` para verificar que ráfagas de 5 filtros generen como máximo 2 envíos efectivos (criterio A13).
+3. **Cancelación lógica sin descarga**: Se incorporaron `cancelUpdate()` y `cancelExport()` en `analysis-client.js` y `analysis-state.js` para descartar resultados obsoletos o cancelados sin terminar el Worker ni perder el dataset en memoria (criterio A14). Solo la cancelación de importación reinicia el worker.
+4. **Preservación del modelo confirmado y feedback no bloqueante**: En `app/main.js`, se eliminó `root.hidden = true` durante el refresco analítico; el modelo confirmado se conserva visible con `aria-busy="true"` y clase `.app--updating` (opacidad 0.65 y `pointer-events: none` en CSS). Los errores de filtro conservan el dataset e invitan a reintentar o ajustar filtros sin exigir volver a cargar archivos.
+5. **Rutas semánticas versionadas (v1)**: En `app/routes.js`, se implementaron rutas semánticas estables (`#/v1/artist/<nombre>`, `#/v1/track/<artista>/<titulo>`, `#/v1/album/<artista>/<titulo>`) con codificación URL segura, resolución a IDs internos del dataset actual independiente del orden de carga de archivos (criterio A12) y fallback de búsqueda/recuperación para entidades inexistentes y enlaces numéricos legados.
+6. **Transporte de contexto en enlaces y nueva pestaña**: Enlaces internos y navegación de retorno incorporan parámetros analíticos (`?m=...&range=...`) directamente en el atributo `href` del DOM, permitiendo abrir en nueva pestaña o copiar enlaces sin depender de reescrituras en el click (criterio A11).
+7. **Captura y restauración de historial**: En `app/history-state.js`, se implementó la captura de `scrollY`, `scrollX`, selector del elemento con foco y scroll de tablas/gráficos en `history.state` (`returnState`). Al pulsar Atrás (`popstate`), se restauran exactamente fila, scroll y foco con `preventScroll: true` (criterio A10).
+8. **Franja contextual compacta**: En `app/context-bar.js` y `css/style.css`, se implementó una franja contextual (`.context-bar`) de ≤ 2 filas que resume el período activo, chips de filtros aplicados y switch de métrica unificado respetando safe-areas móviles.
+
+## 7. Criterios de Aceptación Verificados (Etapas 1 y 2)
+
+- **A01 / A02**: Cascada móvil y KPIs responsivos probados y colocados tras las definiciones base.
+- **A03**: Redondeo consistente en `fmtMs` sin unidades `60s`.
+- **A04**: Tasas de salto con base conocida y desconocidos separados.
+- **A05**: Coincidencia de artistas identificados entre Resumen y Años.
+- **A06**: Constancia separa continuidad activa de cobertura del período observado.
+- **A10**: Ida y vuelta desde fila de tabla restaura scroll de página, tabla y foco exacto.
+- **A11**: Navegación entre entidades y apertura en nueva pestaña transporta contexto analítico en `href`.
+- **A12**: Inversión de orden de archivos en la carga resuelve idénticamente las rutas semánticas.
+- **A13**: Ráfaga de 5 filtros con Worker ocupado produce ≤ 2 solicitudes efectivas y modelo final correcto.
+- **A14**: Cancelación lógica de filtro y exportación no termina el Worker ni borra el dataset.
+
+## 8. Siguiente Tarea Exacta
+
+- Iniciar **Etapa 3 — Catálogo completo y tablas reutilizables**:
+  1. Extraer funciones puras de consulta sobre entidades y rankings (filtro de texto, orden, desempate, total, offset, límite).
+  2. Implementar vista `Explorar` para Artistas/Canciones/Álbumes con cuota sobre el universo analítico total.
+  3. Búsqueda normalizada sobre todo el catálogo sin reiniciar caret de búsqueda.
+  4. Paginación accesible (25/50/100 filas) y desempate determinista.
+  5. Controles accionados y scroll conservados.
