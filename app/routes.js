@@ -91,6 +91,28 @@ export function parseRoute(hash) {
     };
   }
 
+  if (primary === 'session') {
+    return {
+      version: version || 'v1',
+      view: 'session',
+      params: { id: segments[offset + 1] ?? '0' },
+      query: queryPart,
+      isLegacy: version !== 'v1',
+      raw: hash
+    };
+  }
+
+  if (primary === 'day') {
+    return {
+      version: version || 'v1',
+      view: 'day',
+      params: { date: segments[offset + 1] || '' },
+      query: queryPart,
+      isLegacy: version !== 'v1',
+      raw: hash
+    };
+  }
+
   return {
     version: version || 'v1',
     view: primary,
@@ -167,6 +189,14 @@ export function resolveRoute(parsed, model) {
     return { view: 'calendar', id: params.year, entity: null, notFound: false, query };
   }
 
+  if (view === 'session') {
+    return { view: 'session', id: params.id, entity: null, notFound: false, query };
+  }
+
+  if (view === 'day') {
+    return { view: 'day', id: params.date, entity: null, notFound: false, query };
+  }
+
   return { view, id: null, entity: null, notFound: false, query };
 }
 
@@ -188,6 +218,12 @@ export function formatSemanticRoute(view, entityOrParams, query = '') {
   }
   if (view === 'calendar' && entityOrParams) {
     return `#/v1/calendar/${encodeRouteSegment(entityOrParams)}${cleanQ}`;
+  }
+  if (view === 'session' && entityOrParams != null) {
+    return `#/v1/session/${encodeRouteSegment(entityOrParams)}${cleanQ}`;
+  }
+  if (view === 'day' && entityOrParams != null) {
+    return `#/v1/day/${encodeRouteSegment(entityOrParams)}${cleanQ}`;
   }
   return `#/v1/${view}${cleanQ}`;
 }

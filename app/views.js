@@ -771,15 +771,66 @@ export function trackView(model, tk, ctx = {}) {
   const byMs = (ctx?.metric ?? 'ms') === 'ms';
   const totalMs = model.totals.ms;
   const ar = tk % 4294967296;
-  const albumLinks = [...tr.albums]
-    .map((ak) => model.albums.byId.get(ak))
-    .map((album) => entityLink('album', album.id, album.name))
+
+  const originAk = ctx?.albumOrigin != null
+    ? Number(ctx.albumOrigin)
+    : (ctx?.query ? Number(new URLSearchParams(ctx.query.replace(/^\?/, '')).get('album')) : null);
+  const originAlbum = originAk != null ? model.albums.byId.get(originAk) : null;
+  const originStats = originAlbum?.trackStats?.get(tk);
+
+  const albumList = [...tr.albums]
+    .map((ak) => {
+      const al = model.albums.byId.get(ak);
+      const st = al?.trackStats?.get(tk);
+      return {
+        ak,
+        name: al ? al.name : '(Álbum desconocido)',
+        plays: st ? st.plays : 0,
+        ms: st ? st.ms : 0
+      };
+    })
+    .sort((a, b) => b.plays - a.plays || b.ms - a.ms);
+
+  const albumLinks = albumList
+    .map((a) => entityLink('album', a.ak, a.name))
     .join(' · ');
-  const run = model.maxRun.get(tk) ?? 0;
+
+  const run = model.maxRun?.get ? (model.maxRun.get(tk) ?? 0) : 0;
   const evolution = lineChart({
     points: monthlySeries(byMs ? model.monthlyTrackMs : model.monthlyTrackPlays, tk),
     format: byMs ? fmtMs : fmtNum
   });
+
+  const scopeNotice = originAlbum && originStats
+    ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;border-left:4px solid var(--accent, #1db954);">
+        <p style="margin:0 0 0.25rem 0;">
+          <strong>Alcance: En este álbum</strong> (<strong>${esc(originAlbum.name)}</strong>: ${fmtNum(originStats.plays)} rep., ${fmtMs(originStats.ms)})
+        </p>
+        <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
+          Totales como <strong>Canción agrupada</strong>: ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)}.
+          <a href="#/track/${tk}">Ver ficha global de la canción agrupada</a>
+        </p>
+       </div>`
+    : (albumList.length > 1
+      ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;">
+          <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
+            <strong>Canción agrupada:</strong> consolida ${fmtNum(tr.plays)} reproducciones a través de ${fmtNum(albumList.length)} álbumes.
+          </p>
+         </div>`
+      : '');
+
+  const albumsCard = albumList.length > 0
+    ? card('Álbumes asociados', table(
+        ['Álbum', 'Reproducciones', 'Tiempo', 'Cuota de la canción'],
+        albumList.map((a) => [
+          entityLink('album', a.ak, a.name),
+          fmtNum(a.plays),
+          fmtMs(a.ms),
+          pctOf(a.plays, tr.plays)
+        ]),
+        '', ['cell-name', 'n', 'n', 'n'], null, 'Atribución por álbum'
+      ))
+    : '';
 
   return `
     <header class="view-header">
@@ -788,9 +839,10 @@ export function trackView(model, tk, ctx = {}) {
       <p class="view-meta">${entityLink('artist', ar, tr.artist)}${albumLinks ? ` · ${albumLinks}` : ''} · ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)} · ${pctOf(tr.ms, totalMs)} del total</p>
       <p><button type="button" class="btn btn-secondary" data-filter-entity="track:${tk}">Filtrar todo por esta canción</button></p>
     </header>
+    ${scopeNotice}
     ${kpis([
-      { label: 'Reproducciones', value: fmtNum(tr.plays) },
-      { label: 'Tiempo', value: fmtMs(tr.ms) },
+      { label: 'Reproducciones', value: fmtNum(originStats ? originStats.plays : tr.plays), sub: originStats ? `de ${fmtNum(tr.plays)} en canción agrupada` : '' },
+      { label: 'Tiempo', value: fmtMs(originStats ? originStats.ms : tr.ms), sub: originStats ? `de ${fmtMs(tr.ms)} en canción agrupada` : '' },
       { label: 'Duración media', value: tr.durationKnown ? fmtMs(tr.ms / tr.durationKnown) : '—', sub: `${fmtNum(tr.plays - tr.durationKnown)} duraciones desconocidas` },
       { label: 'Saltadas', value: fmtNum(tr.skips), sub: pctOf(tr.skips, tr.skipKnown) },
       { label: 'Racha máxima (seguidas)', value: fmtNum(run) },
@@ -799,7 +851,10 @@ export function trackView(model, tk, ctx = {}) {
       { label: 'Primera escucha', value: fmtLocal(tr.firstTs) },
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
     ])}
-    ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}`;
+    <div class="grid-2">
+      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
+      ${albumsCard}
+    </div>`;
 }
 
 export function albumView(model, ak, ctx = {}) {
@@ -874,7 +929,7 @@ export function sessionsView(model, ctx = {}) {
 
   const sessRows = (list) => list.map((x, i) => [
     String(i + 1),
-    fmtLocal(x.start),
+    `<a href="#/session/${x.id ?? i}" class="cell-link">${fmtLocal(x.start)}</a>`,
     fmtMs(x.duration * 1000),
     fmtNum(x.plays),
     fmtMs(x.ms)
@@ -909,6 +964,163 @@ export function sessionsView(model, ctx = {}) {
     <div class="grid-2">
       ${card('Razones de inicio', hbarChart({ rows: [...model.starts.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), format: fmtNum }))}
       ${card('Razones de fin', hbarChart({ rows: [...model.ends.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), format: fmtNum }))}
+    </div>`;
+}
+
+export function sessionView(model, id, ctx = {}) {
+  const idx = Number(id);
+  const s = model.sessions?.[idx];
+  if (!s) return `<p class="empty">Sesión no encontrada.</p>`;
+
+  const pauseMs = Math.max(0, s.duration * 1000 - s.ms);
+
+  const topSongs = s.tracks ? [...s.tracks.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([tk, count], i) => {
+      const tr = model.tracks.byId.get(tk);
+      return [
+        String(i + 1),
+        tr ? trackSubLink(tk, tr.name, tr.artist) : 'Desconocido',
+        fmtNum(count)
+      ];
+    }) : [];
+
+  const topArtists = s.artists ? [...s.artists.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([ar, count], i) => {
+      const a = model.artists.byId.get(ar);
+      return [
+        String(i + 1),
+        a ? entityLink('artist', ar, a.name) : 'Desconocido',
+        fmtNum(count)
+      ];
+    }) : [];
+
+  return `
+    <header class="view-header">
+      <p><a href="#/sessions${ctx.query ? (ctx.query.startsWith('?') ? ctx.query : '?' + ctx.query) : ''}">← Volver a sesiones</a></p>
+      <h1>Sesión #${idx + 1}</h1>
+      <p class="view-meta">Inicio estimado: ${fmtLocal(s.start)} · Fin: ${fmtLocal(s.end)} · ${fmtNum(s.plays)} reproducciones · ${fmtMs(s.ms)} tiempo escuchado</p>
+      <p class="view-meta">La duración de sesión es una estimación a partir del final de cada reproducción y su tiempo escuchado; puede contener pausas y solapamientos. No afirma escucha simultánea, canción completada ni atención efectiva.</p>
+    </header>
+    ${kpis([
+      { label: 'Duración estimada', value: fmtMs(s.duration * 1000) },
+      { label: 'Tiempo escuchado', value: fmtMs(s.ms) },
+      { label: 'Pausa estimada', value: fmtMs(pauseMs) },
+      { label: 'Reproducciones', value: fmtNum(s.plays) },
+      { label: 'Artistas distintos', value: s.artists ? fmtNum(s.artists.size) : '—' },
+      { label: 'Canciones distintas', value: s.tracks ? fmtNum(s.tracks.size) : '—' }
+    ])}
+    <div class="grid-2">
+      ${s.tracks && topSongs.length ? card('Canciones de la sesión', table(['#', 'Canción', 'Reproducciones'], topSongs, '', ['c', '', 'n'], null, 'Canciones de la sesión')) : ''}
+      ${s.artists && topArtists.length ? card('Artistas de la sesión', table(['#', 'Artista', 'Reproducciones'], topArtists, '', ['c', '', 'n'], null, 'Artistas de la sesión')) : ''}
+    </div>`;
+}
+
+export function dayView(model, id, ctx = {}) {
+  let dayNum = null;
+  let isoDate = null;
+  if (typeof id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(id)) {
+    isoDate = id;
+    const parts = id.split('-').map(Number);
+    dayNum = Math.floor(Date.UTC(parts[0], parts[1] - 1, parts[2]) / 86400000);
+  } else {
+    dayNum = Number(id);
+    if (Number.isFinite(dayNum)) {
+      const c = civilFromDays(dayNum);
+      isoDate = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
+    }
+  }
+
+  if (dayNum == null || !Number.isFinite(dayNum)) {
+    return `<p class="empty">Día no válido.</p>`;
+  }
+
+  let plays = 0;
+  let ms = 0;
+  const dayTracks = new Map();
+  const dayArtists = new Map();
+
+  const d = model.daily?.get ? model.daily.get(dayNum) : null;
+  if (d) {
+    plays = d.plays;
+    ms = d.ms;
+    if (d.tracks) {
+      for (const [tk, c] of d.tracks) dayTracks.set(tk, c);
+    }
+    if (d.artists) {
+      for (const [ar, c] of d.artists) dayArtists.set(ar, c);
+    }
+  } else if (model.cols) {
+    const { cols } = model;
+    const n = cols.day.length;
+    for (let i = 0; i < n; i++) {
+      if (cols.day[i] === dayNum) {
+        plays++;
+        ms += cols.ms[i];
+      }
+    }
+  }
+
+  const daySessions = (model.sessions || []).filter((s) => {
+    const startDay = Math.floor(s.start / 86400);
+    const endDay = Math.floor(s.end / 86400);
+    return dayNum >= startDay && dayNum <= endDay;
+  });
+
+  const sessRows = daySessions.map((s, i) => [
+    String(i + 1),
+    `<a href="#/session/${s.id ?? 0}" class="cell-link">${fmtLocal(s.start)}</a>`,
+    fmtMs(s.duration * 1000),
+    fmtNum(s.plays),
+    fmtMs(s.ms)
+  ]);
+
+  const topSongRows = [...dayTracks.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([tk, count], i) => {
+      const tr = model.tracks.byId.get(tk);
+      return [
+        String(i + 1),
+        tr ? trackSubLink(tk, tr.name, tr.artist) : 'Desconocido',
+        fmtNum(count)
+      ];
+    });
+
+  const topArtistRows = [...dayArtists.entries()]
+    .filter(([ar]) => ar > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([ar, count], i) => {
+      const a = model.artists.byId.get(ar);
+      return [
+        String(i + 1),
+        a ? entityLink('artist', ar, a.name) : 'Desconocido',
+        fmtNum(count)
+      ];
+    });
+
+  return `
+    <header class="view-header">
+      <p><a href="#/calendar${ctx.query ? (ctx.query.startsWith('?') ? ctx.query : '?' + ctx.query) : ''}">← Volver al calendario</a></p>
+      <h1>Día: ${esc(isoDate)}</h1>
+      <p class="view-meta">${fmtNum(plays)} reproducciones · ${fmtMs(ms)} tiempo escuchado</p>
+      <p><button type="button" class="btn btn-secondary" data-filter-range="${isoDate}:${isoDate}">Filtrar solo este día</button></p>
+    </header>
+    ${kpis([
+      { label: 'Reproducciones', value: fmtNum(plays) },
+      { label: 'Tiempo escuchado', value: fmtMs(ms) },
+      { label: 'Sesiones en el día', value: fmtNum(daySessions.length) },
+      { label: 'Canciones distintas', value: dayTracks.size ? fmtNum(dayTracks.size) : '—' },
+      { label: 'Artistas distintos', value: dayArtists.size ? fmtNum(dayArtists.size) : '—' }
+    ])}
+    <div class="grid-2">
+      ${card('Sesiones del día', table(['#', 'Inicio estimado', 'Duración estimada', 'Reproducciones', 'Tiempo'], sessRows, '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones del día'))}
+      ${topSongRows.length ? card('Canciones del día', table(['#', 'Canción', 'Reproducciones'], topSongRows, '', ['c', '', 'n'], null, 'Canciones del día')) : ''}
+      ${topArtistRows.length ? card('Artistas del día', table(['#', 'Artista', 'Reproducciones'], topArtistRows, '', ['c', '', 'n'], null, 'Artistas del día')) : ''}
     </div>`;
 }
 
@@ -1597,6 +1809,8 @@ export const VIEWS = {
   artist: (model, id, ctx) => artistView(model, Number(id), ctx),
   track: (model, id, ctx) => trackView(model, Number(id), ctx),
   album: (model, id, ctx) => albumView(model, Number(id), ctx),
+  session: (model, id, ctx) => sessionView(model, Number(id), ctx),
+  day: (model, id, ctx) => dayView(model, id, ctx),
   hours: (model, id, ctx) => hoursView(model, ctx),
   habits: (model, id, ctx) => habitsView(model, ctx),
   sessions: (model, id, ctx) => sessionsView(model, ctx),
