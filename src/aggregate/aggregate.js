@@ -230,7 +230,11 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
     count
   }));
 
-  const tables = buildTables({ groups, temporal, sessions, behavior, transitions, streak });
+  const tables = buildTables({
+    groups, temporal, sessions, behavior, transitions, streak,
+    firstTs: n ? cols.loc[localOrder[0]] : null,
+    lastTs: n ? cols.loc[localOrder[n - 1]] : null
+  });
 
   return {
     meta: {
@@ -286,7 +290,7 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
   };
 }
 
-function buildTables({ groups, temporal, sessions, behavior, transitions, streak }) {
+function buildTables({ groups, temporal, sessions, behavior, transitions, streak, firstTs = null, lastTs = null }) {
   const { artists, tracks, albums } = groups;
   const artistList = [...artists.values()];
   const trackList = [...tracks.values()];
@@ -353,11 +357,20 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .slice(0, TOP_DISCOVERY_N);
 
   // Constancia: meses activos / meses del intervalo (mín. MIN_MONTHS_FOR_CONSTANCY).
+  const observedSpan = (firstTs != null && lastTs != null)
+    ? Math.max(1, absoluteMonths(lastTs) - absoluteMonths(firstTs) + 1)
+    : 1;
   const constancy = artistList
     .filter((a) => a.months.size >= MIN_MONTHS_FOR_CONSTANCY && a.firstTs != null && a.lastTs != null)
     .map((a) => {
       const span = Math.max(1, absoluteMonths(a.lastTs) - absoluteMonths(a.firstTs) + 1);
-      return { ...a, coverage: a.months.size / span };
+      return {
+        ...a,
+        coverage: a.months.size / span,
+        activeMonthsSpan: span,
+        observedMonths: observedSpan,
+        periodCoverage: a.months.size / observedSpan
+      };
     })
     .sort((a, b) => b.coverage - a.coverage || b.months.size - a.months.size || b.years.size - a.years.size || b.days.size - a.days.size || b.plays - a.plays)
     .slice(0, TOP_N);
