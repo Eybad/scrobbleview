@@ -86,7 +86,7 @@ async function run() {
   assert(element('[data-preset="4w"]').getAttribute('aria-pressed') === 'true', 'Atrás debe restaurar el filtro');
   assert(kpiValue('Reproducciones') === '2', 'Atrás debe restaurar las cifras filtradas');
   const comparison = [...frame.contentDocument.querySelectorAll('.kpi-sub')].map(node => node.textContent).join(' ');
-  assert(comparison.includes('+100'), 'La comparación debe usar el período filtrado');
+  assert(comparison.includes('100%') && comparison.includes('▲'), 'La comparación debe usar el período filtrado');
 
   appWindow.history.forward();
   await waitFor(() => appWindow.location.hash === allHash && !element('#view-root').hidden && element('#view-root h1').textContent === 'Sesiones de escucha', 'Adelante');

@@ -9,26 +9,22 @@
 - **HEAD inicial**: `4aa7023c14ded79bd6564529457aec55ef67e1ab` ("ignore local data and tighten JSON exceptions").
 - **Estado del árbol de trabajo**: Limpio, sin modificaciones previas sin registrar.
 
-## 2. Verificación de Partida
+## 2. Verificación de Partida y Progreso
 
 ### Suite de pruebas unitarias y de integración (`node --test`)
-- **Total ejecutado**: 235 pruebas.
-- **Aprobadas**: 235.
-- **Fallidas**: 0.
-- **Duración**: 13,29 s.
+- **Baseline inicial**: 235 pruebas (13,29 s).
+- **Estado actual tras Etapa 1**: 240 pruebas aprobadas, 0 fallidas (10,60 s).
 
 ### Benchmark base (100.000 eventos compactos)
 - Comando: `node --expose-gc bench/aggregate.js 100000 --compact`
-- Eventos: 100.000.
-- Tracks únicos: 10.000.
-- Records procesados: 50.000.
-- Tiempo de agregación: 1652 ms.
-- Tiempo de filtrado: 1018 ms.
-- Tiempo de conteo: 1 ms.
-- Pico de memoria RSS: 235 MiB.
+- Eventos: 100.000 (10.000 tracks, 50.000 records).
+- Agregación: 1771 ms.
+- Filtrado: 974 ms.
+- Conteo: 19 ms.
+- Pico RSS: 264 MiB.
 
 ### Estado de la regresión de navegador (`browser-tests/navigation.js`)
-- **Fallo previo identificado**: Línea 89 evalúa `comparison.includes('+100')` cuando la interfaz actual renderiza `▲ 100%`. Requiere actualizar la aserción de formato en Etapa 1 sin alterar la lógica de cálculo.
+- **Aserción obsoleta corregida**: Línea 89 actualizada para comprobar `100%` y `▲` en concordancia con `deltaSub()`, conservando la verificación numérica estricta.
 
 ## 3. Inventario de Conservación del Sistema Existente
 
@@ -36,10 +32,12 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 
 ### 3.1. Vistas y Secciones (8 principales + 3 fichas de detalle)
 1. **Resumen (`dashboard`)**:
-   - KPIs: Reproducciones, Tiempo escuchado, Artistas, Canciones, Álbumes, Sesiones, Racha más larga, Duración promedio, Final con código trackdone, Saltadas, En aleatorio, Sin conexión, Reproducciones significativas, Reproducciones cortas.
+   - KPIs agrupados en Actividad, Continuidad y Comportamiento dentro de un único grid accesible.
+   - Panel de calidad y cobertura de datos (fuentes, rango observado, zona horaria, desconocidos, umbrales y advertencias).
    - Gráficos: Actividad día × hora (heatmap + tabla accesible), Evolución mensual (lineChart), Distribución de duración (hbarChart).
-   - Componentes: Récords (recordsGridHTML), Rankings con tabs accesibles APG (Artistas, Canciones, Álbumes), Tablas con límite (Obsesión, Rachas, Mayor tasa de salto artistas/canciones, Menor tasa de salto artistas/canciones, Primera/Última canción del día).
+   - Componentes: Récords (recordsGridHTML), Rankings con tabs accesibles APG (Artistas, Canciones, Álbumes), Tablas con límite (Obsesión, Rachas, Mayor tasa de salto artistas/canciones, Menor tasa de salto artistas/canciones, Primera/Última canción del día) con indicación de bases conocidas y estados vacíos descriptivos.
 2. **Horarios (`hours`)**:
+   - Nota explícita de atribución de actividad al timestamp de finalización de evento.
    - KPIs de picos: Hora pico, Hora valle, Día pico, Bloque pico, Fin de semana vs. Días de semana.
    - Gráficos: 24 horas (barChart), Días de la semana (hbarChart), Bloques horarios (stackedBar), Reloj de escucha 24h.
    - Tabla detallada de 24 horas agrupada por bloques.
@@ -51,19 +49,19 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 4. **Sesiones (`sessions`)**:
    - KPIs: Conteo de sesiones, Duración promedio, Tiempo total, Pausa promedio, Sesión más larga.
    - Gráficos: Distribución por bloques, Hora de inicio, Meses, Días de la semana.
-   - Tablas: Sesiones más largas por duración y por reproducciones.
+   - Tablas: Sesiones más largas por duración y por reproducciones con códigos de motivo descriptivos y no fusionados (`trackdone`, `endplay`, `logout`).
 5. **Descubrimiento (`discovery`)**:
    - KPIs: Primeras apariciones, Escuchas de catálogo, Promedio por mes activo, Artistas únicos.
    - Gráfico: Canciones nuevas por mes.
-   - Tablas: Meses con más descubrimientos, Meses con mayor proporción de nuevas, Constancia (cobertura activa intermensual), Longevidad de artistas.
+   - Tablas: Meses con más descubrimientos, Meses con mayor proporción de nuevas, Constancia (con continuidad en etapa activa y cobertura del período observado, denominadores explícitos y mínimo de 6 meses), Longevidad de artistas.
 6. **Años (`yearly`)**:
-   - Tabla anual con enlaces al calendario, tiempo, reproducciones, artistas, canciones, álbumes, descubrimientos, top artista, top canción, saltadas y rachas.
+   - Tabla anual con enlaces al calendario, tiempo, reproducciones, artistas identificados (coincidentes con Resumen) y desconocidos separados, canciones, álbumes, descubrimientos, top artista, top canción, saltadas y rachas.
    - Gráfico apilado por bloques horarios por año.
 7. **Calendario (`calendar` / `calendar/:year`)**:
    - Índice general de años y vista de año individual.
    - Vista anual panorámica con escala de intensidad accesible y selector interactivo de días para filtrado.
 8. **Resumen del período (`wrapped`)**:
-   - Hero card con arquetipo de oyente.
+   - Hero card con arquetipo de oyente como patrón heurístico descriptivo, reglas consultables y mención de desconocidos.
    - Hitos y primeras veces del período.
    - Resumen en formato recibo con botón de copia al portapapeles.
 9. **Fichas de entidad**:
@@ -75,8 +73,8 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 - Intervalo temporal por fechas exactas (inputs date) y accesos rápidos (4 semanas, 6 meses, 1 año, Todo).
 - Días de la semana conmutables (Lunes a Domingo).
 - Franjas horarias conmutables (Madrugada, Mañana, Tarde, Noche).
-- Modos de reproducción: Shuffle (Cualquiera / Solo aleatorio / Solo secuencial), Offline (Cualquiera / Solo sin conexión / Solo online), Skips (Cualquiera / Solo saltadas / Solo completadas).
-- Umbrales configurables: reproducción significativa (`minMs`, default 30s) y reproducción corta (`skipThresholdMs`, default 10s).
+- Modos de reproducción: Shuffle, Offline, Skips con soporte de estado desconocido.
+- Umbrales configurables: reproducción significativa (`minMs`) y reproducción corta (`skipThresholdMs`).
 
 ### 3.3. Exportación y Almacenamiento
 - Exportación JSON completa (`modelToJSON`).
@@ -89,7 +87,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | Etapa | Descripción | Estado |
 |---|---|---|
 | **0** | Reconocimiento, base y seguimiento | **Completada** |
-| **1** | Correcciones de lectura y definiciones | Pendiente |
+| **1** | Correcciones de lectura y definiciones | **Completada** |
 | **2** | Contexto, rutas, espera y cancelación | Pendiente |
 | **3** | Catálogo completo y tablas reutilizables | Pendiente |
 | **4** | Gráficos y calendario accesibles | Pendiente |
@@ -98,15 +96,30 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **7** | Descubrimiento, regresos y hábitos longitudinales | Pendiente |
 | **8** | Exportación, personalización y cierre de calidad | Pendiente |
 
-## 5. Siguiente Tarea Exacta
+## 5. Detalle de Cambios — Etapa 1
 
-- Iniciar **Etapa 1 — Correcciones de lectura y definiciones**:
-  1. Corregir la cascada responsive en `css/style.css` (reubicar reglas móviles de `.kpis` y `.records-grid` posteriores a las definiciones generales).
-  2. Preservar dos columnas útiles en móvil para KPIs y récords sin desborde ni cortes.
-  3. Normalizar redondeo de duración en `src/charts.js` (`fmtMs` y cálculo de unidades).
-  4. Formatear rangos de intervalos en `src/aggregate/impl/totals.js` y `app/views.js`.
-  5. Separar artistas identificados de artistas desconocidos en `src/aggregate/impl/temporal.js` y `app/views.js` (anual).
-  6. Documentar constancia: continuidad activa vs. cobertura del período observado.
-  7. Ajustar etiquetas de motivos de fin de evento en `app/views.js`.
-  8. Aclarar denominadores de tasas y mínimos en rankings.
-  9. Corregir aserción en `browser-tests/navigation.js:89`.
+1. **Cascada móvil**: En `css/style.css`, se trasladaron los overrides `@media (max-width: 640px)` de `.kpis`, `.records-grid` y `.filter-presets` para que sucedan a sus declaraciones base, garantizando estilos calculados consistentes y dos columnas operativas en móviles (320–640 px).
+2. **Agrupación de KPIs**: Se organizaron los KPIs en *Actividad*, *Continuidad* y *Comportamiento* dentro de una cuadrícula uniforme (`.kpi-group-heading`) que preserva la estructura accesible de lista de definiciones.
+3. **Redondeo y formato de duración**: En `src/charts.js`, se normalizó `fmtMs` para redondear unidades antes de descomponerlas, impidiendo `60s` o `60 min` (e.g. `59999 ms → 1 min 0 s`, `119999 ms → 2 min 0 s`, `3599999 ms → 1 h 0 min`), aplicando coma decimal local (`12,5 s`).
+4. **Intervalos no ambiguos**: En `src/aggregate/impl/totals.js`, se adoptó la notación matemática de intervalos semiabiertos: `<10 s`, `10–<30 s`, `30–<60 s`, `1–<3 min`, `3–<5 min`, `≥5 min`.
+5. **Separación de artista desconocido anual**: En `src/aggregate/impl/temporal.js`, los eventos sin artista (`ev.ar === 0`) se contabilizan por separado en `unknownArtistPlays`/`unknownArtistMs` sin contaminar `y.artistsC`, reconciliando el conteo de artistas identificados entre la tabla de Años y Resumen.
+6. **Métricas de constancia**: En `src/aggregate/aggregate.js`, se incorporó `periodCoverage` y `observedMonths` junto con la continuidad activa (`coverage`, `activeMonthsSpan`), exhibiendo ambos denominadores en `app/views.js` con explicación del umbral de 6 meses.
+7. **Códigos de motivo descriptivos**: En `app/views.js`, `REASON_LABELS` ahora presenta descripciones verificables sin afirmar reproducción completa (`Fin de pista (trackdone)`) y separa explícitamente `Fin de reproducción (endplay)` de `Cierre de sesión (logout)`.
+8. **Denominadores de tasas y elegibilidad**: Se informan bases conocidas y desconocidas en las tasas del Resumen y rankings de saltos; las tablas vacías distinguen la falta de muestra mínima (20 banderas conocidas) de la ausencia de datos.
+9. **Atribución de actividad temporal**: Se documentó que la agregación horaria y diaria se imputa al final de cada evento y no a una distribución estimada minuto a minuto.
+10. **Panel de calidad**: Se añadió en `dashboard` un panel colapsable que centraliza metadatos de fuentes, rango observado, zona horaria, registros con datos desconocidos, exclusiones y advertencias.
+11. **Arquetipo como patrón heurístico**: En `wrappedView`, se incorporó el detalle consultable de reglas estadísticas locales y aviso de banderas desconocidas, descartando inferencias psicológicas.
+12. **Aserción de regresión**: Actualizada `browser-tests/navigation.js` para aceptar el formato con glifo `▲ 100%`.
+
+## 6. Siguiente Tarea Exacta
+
+- Iniciar **Etapa 2 — Contexto, rutas, espera y cancelación**:
+  1. Implementar la separación tripartita del estado (analítico, consulta, retorno).
+  2. Implementar rutas semánticas versionadas (tipo + entidad) con resolución a IDs internos y recuperación explícita para enlaces legados o inexistentes.
+  3. Guardar/restaurar posición de scroll y foco mediante `history.state`.
+  4. Enlaces jerárquicos y contextuales transportables entre pestañas.
+  5. Franja contextual compacta en móvil (≤ 2 filas) e índice local de secciones.
+  6. Unificación de métrica (*Tiempo escuchado* / *Reproducciones*) en todo el flujo.
+  7. Coalescencia de solicitudes analíticas en vuelo hacia el Worker.
+  8. Feedback de "Actualizando" preservando último estado confirmado.
+  9. Manejo diferenciado de errores y cancelación lógica de tareas.

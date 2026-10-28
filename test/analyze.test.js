@@ -111,7 +111,7 @@ test('unknown durations and flags stay separate from zero and false', async () =
   assert.equal(track.skipKnown, 2);
   assert.equal(track.durationKnown, 2);
   const { trackView } = await import('../app/views.js');
-  assert.match(trackView(model, track.tk), /<dt>Duración media<\/dt>\s*<dd>30\.0s/);
+  assert.match(trackView(model, track.tk), /<dt>Duración media<\/dt>\s*<dd>30,0 s/);
   assert.match(trackView(model, track.tk), /2 duraciones desconocidas/);
   for (const field of ['skip', 'shuffle', 'offline']) {
     assert.deepEqual([...applyFilters(ds, { ...emptyFilterState(), [field]: false }, UTC).indices], [1]);

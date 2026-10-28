@@ -180,7 +180,7 @@ test('album views and sparklines isolate shared tracks by album for both metrics
       const html = renderView('album', model, album.id, { metric });
       const row = html.match(/<tr\b[^>]*>.*Shared song.*?<\/tr>/)?.[0];
       assert.ok(row);
-      assert.ok(row.includes(`class="cell-metric-val">${metric === 'plays' ? (index === 0 ? '1' : '2') : (index === 0 ? '3 min 0s' : '4 min 0s')}</span>`));
+      assert.ok(row.includes(`class="cell-metric-val">${metric === 'plays' ? (index === 0 ? '1' : '2') : (index === 0 ? '3 min 0 s' : '4 min 0 s')}</span>`));
       assert.ok(row.includes(sparkline({ points: values, width: 80, height: 24 })), `${album.name}: track sparkline, ${metric}`);
       assert.ok(html.includes(lineChart({
         points: [{ label: 'ene 2024', y: values[0] }, { label: 'feb 2024', y: values[1] }],
@@ -413,7 +413,7 @@ test('filter-ui: rango invertido colapsa al día editado', () => {
 test('filter-ui: el announcer resume el resultado del filtrado', () => {
   const msg = filterStatusMessage({ records: 2538, ms: 5.5 * 3600000 });
   assert.ok(msg.includes('2.538'), 'conteo con separador de miles');
-  assert.ok(msg.includes('5h 30 min'), 'tiempo humanizado');
+  assert.ok(msg.includes('5 h 30 min'), 'tiempo humanizado');
 });
 
 test('filter-ui: min/max de los date inputs acotados al dataset', async () => {
@@ -654,11 +654,11 @@ test('traducciones: chips y toggles de shuffle/offline en español', async () =>
 test('traducciones: razones de inicio/fin en español', async () => {
   const model = await demoModel();
   const html = renderView('sessions', model);
-  assert.ok(html.includes('Canción completa'), 'trackdone');
-  assert.ok(html.includes('Botón siguiente'), 'fwdbtn');
-  assert.ok(html.includes('Clic en pista'), 'clickrow');
-  assert.ok(html.includes('Control remoto'), 'remote');
-  assert.ok(html.includes('Cierre de sesión'), 'endplay/logout');
+  assert.ok(html.includes('Fin de pista (trackdone)'), 'trackdone descriptivo');
+  assert.ok(html.includes('Botón siguiente (fwdbtn)'), 'fwdbtn descriptivo');
+  assert.ok(html.includes('Clic en lista (clickrow)'), 'clickrow descriptivo');
+  assert.ok(html.includes('Control remoto (remote)'), 'remote descriptivo');
+  assert.ok(html.includes('Fin de reproducción (endplay)') || html.includes('Cierre de sesión (logout)'), 'endplay/logout diferenciados');
   assert.ok(html.includes('Una pausa de más de 30 min inicia otra sesión'), 'session gap is explained');
   assert.ok(html.includes('Duración estimada'), 'estimated duration is distinguished from listened time');
   const unknown = { ...model, starts: new Map([['weird-code', 3]]) };

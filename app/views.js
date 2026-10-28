@@ -41,8 +41,11 @@ function resolveLimit(ctx, key, fallback = 10) {
 // todo string de dato debe ser escapado por el llamador ANTES de entrar
 // acá. `label` y `sub` se escapan en esta función.
 function kpis(items) {
-  return `<dl class="kpis">${items.map((it) => `
-    <div class="kpi${it.text ? ' kpi-text' : ''}"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`).join('')}</dl>`;
+  return `<dl class="kpis">${items.map((it) => {
+    if (it.heading) return `<div class="kpi-group-heading" role="presentation"><span>${esc(it.heading)}</span></div>`;
+    return `
+    <div class="kpi${it.text ? ' kpi-text' : ''}"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`;
+  }).join('')}</dl>`;
 }
 
 function fmtLocal(loc) {
@@ -68,17 +71,18 @@ function monthLabel(mi) {
 // (los gráficos de razones no deben desbordar). Los códigos sin mapeo quedan
 // crudos: preferible a inventar una traducción dudosa.
 const REASON_LABELS = new Map([
-  ['trackdone', 'Canción completa'],
-  ['fwdbtn', 'Botón siguiente'],
-  ['backbtn', 'Botón anterior'],
-  ['clickrow', 'Clic en pista'],
-  ['appload', 'Inicio de app'],
-  ['appstart', 'Inicio de app'],
-  ['endplay', 'Cierre de sesión'],
-  ['logout', 'Cierre de sesión'],
-  ['remote', 'Control remoto'],
-  ['unexpected-exit', 'Cierre inesperado'],
-  ['shuffle', 'Aleatorio']
+  ['trackdone', 'Fin de pista (trackdone)'],
+  ['fwdbtn', 'Botón siguiente (fwdbtn)'],
+  ['backbtn', 'Botón anterior (backbtn)'],
+  ['clickrow', 'Clic en lista (clickrow)'],
+  ['appload', 'Carga de app (appload)'],
+  ['appstart', 'Inicio de reproducción (appstart)'],
+  ['endplay', 'Fin de reproducción (endplay)'],
+  ['logout', 'Cierre de sesión (logout)'],
+  ['remote', 'Control remoto (remote)'],
+  ['unexpected-exit', 'Cierre inesperado (unexpected-exit)'],
+  ['shuffle', 'Modo aleatorio (shuffle)'],
+  ['trackerror', 'Error de pista (trackerror)']
 ]);
 const reasonLabel = (code) => REASON_LABELS.get(code) ?? code;
 
@@ -134,13 +138,14 @@ function calendarTable(days, year, byMs = true) {
 // `caption` es para lectores de pantalla (visually-hidden): el h2 de la card
 // no viaja con la tabla al scrollear, así que la tabla sin caption queda
 // anónima fuera de contexto (WCAG H51/H63).
-function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '', scrollCls = '') {
+function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '', scrollCls = '', emptyNotice = '') {
   const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
   const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
   const cap = caption ? `<caption class="visually-hidden">${esc(caption)}</caption>` : '';
   const wrapCls = scrollCls ? `table-scroll ${scrollCls}` : 'table-scroll';
+  const emptyHTML = rows.length === 0 && emptyNotice ? `<p class="empty">${esc(emptyNotice)}</p>` : '';
   return `<div class="${wrapCls}"><table class="${cls}">${cap}<thead><tr>${headers.map(th).join('')}</tr></thead>
-    <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
+    <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table>${emptyHTML}</div>`;
 }
 
 function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valueLabel = 'Reproducciones', caption = '', spark = null, tall = false }) {
@@ -523,9 +528,15 @@ export function dashboard(model, ctx = {}) {
 
   const rankings = `<div id="rank-card">${rankCardHTML(model, ctx.rankUI)}</div>`;
 
-  const skipRate = t.skippedKnown > 0 ? fmtPct(t.skipped / t.skippedKnown) : '—';
-  const shuffleRate = t.shuffleKnown > 0 ? fmtPct(t.shuffle / t.shuffleKnown) : '—';
-  const offlineRate = t.offlineKnown > 0 ? fmtPct(t.offline / t.offlineKnown) : '—';
+  const skipRate = t.skippedKnown > 0
+    ? `${fmtPct(t.skipped / t.skippedKnown)} (${fmtNum(t.skippedKnown)} conocidas · ${fmtNum(t.records - t.skippedKnown)} desconocidas)`
+    : '—';
+  const shuffleRate = t.shuffleKnown > 0
+    ? `${fmtPct(t.shuffle / t.shuffleKnown)} (${fmtNum(t.shuffleKnown)} conocidas · ${fmtNum(t.records - t.shuffleKnown)} desconocidas)`
+    : '—';
+  const offlineRate = t.offlineKnown > 0
+    ? `${fmtPct(t.offline / t.offlineKnown)} (${fmtNum(t.offlineKnown)} conocidas · ${fmtNum(t.records - t.offlineKnown)} desconocidas)`
+    : '—';
   const avgDuration = t.avgMs;
 
   const obsLimit = resolveLimit(ctx, 'dash-obsession', 10);
@@ -537,28 +548,43 @@ export function dashboard(model, ctx = {}) {
   const firstLimit = resolveLimit(ctx, 'dash-first', 10);
   const lastLimit = resolveLimit(ctx, 'dash-last', 10);
 
+  const qualityPanel = `
+    <details class="card quality-panel">
+      <summary class="quality-summary"><strong>Panel de calidad y cobertura de datos</strong></summary>
+      <div class="quality-body">
+        <p class="view-meta">Fuentes: ${esc((model.meta.sources || []).join(', ') || 'Sin archivo especificado')} (${fmtNum(model.meta.records)} registros). Zona horaria: ${esc(model.meta.tzId)}.</p>
+        <p class="view-meta">Rango observado: ${esc(range)}. La ausencia de registros entre fechas no garantiza cobertura continua de escucha.</p>
+        <p class="view-meta">Duración desconocida: ${fmtNum(t.durationUnknown)} registros excluidos de medias, umbrales y distribución. Banderas desconocidas: saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan únicamente valores con banderas conocidas. Mínimo de 20 eventos conocidos para calificar en rankings de saltos.</p>
+        <p class="view-meta">Atribución temporal: Toda actividad horaria o diaria se asigna al timestamp de finalización del evento; no representa una reconstrucción minuto a minuto de reproducciones que cruzan horas o días.</p>
+        ${model.meta.warnings && model.meta.warnings.length > 0 ? `<p class="view-meta">Advertencias: ${esc(model.meta.warnings.map((w) => w.message || w.code).join('; '))}</p>` : ''}
+      </div>
+    </details>`;
+
   return `
     <header class="view-header view-header--compact">
       <h1 class="visually-hidden">Resumen</h1>
       <p class="view-meta view-range">${esc(range)}</p>
     </header>
     ${kpis([
+      { heading: 'Actividad' },
       { label: 'Reproducciones', value: fmtNum(t.records), sub: prev ? deltaSub(t.records, prev.records) : undefined },
       { label: 'Tiempo escuchado', value: fmtMs(t.ms), sub: prev ? deltaSub(t.ms, prev.ms) : undefined },
       { label: 'Artistas', value: fmtNum(model.artists.byId.size) },
       { label: 'Canciones', value: fmtNum(model.tracks.byId.size) },
       { label: 'Álbumes', value: fmtNum(model.albums.byId.size) },
       { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
+      { heading: 'Continuidad' },
       { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
       { label: 'Duración promedio', value: avgDuration == null ? '—' : fmtMs(avgDuration), sub: `mediana ${t.medianMs == null ? '—' : fmtMs(t.medianMs)}` },
+      { label: 'Reproducciones significativas', value: fmtNum(t.playsSignificant), sub: `≥${thresholdLabel(model.meta.minMs)}` },
+      { label: 'Reproducciones cortas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` },
+      { heading: 'Comportamiento' },
       { label: 'Final con código trackdone', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} otros finales · ${fmtNum(t.endReasonUnknown)} desconocidos` },
       { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
       { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
-      { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate },
-      { label: 'Reproducciones significativas', value: fmtNum(t.playsSignificant), sub: `≥${thresholdLabel(model.meta.minMs)}` },
-      { label: 'Reproducciones cortas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` }
+      { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate }
     ])}
-    <p class="view-meta">Duración desconocida: ${fmtNum(t.durationUnknown)} registros excluidos de medias, umbrales y distribución. Banderas desconocidas: saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan valores conocidos. Todas las reproducciones, incluidas las cortas, participan en los totales y rankings.</p>
+    ${qualityPanel}
     ${card('Récords', recordsGridHTML(model))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
@@ -583,36 +609,40 @@ export function dashboard(model, ctx = {}) {
       ]), '', ['c', '', 'n', 'n'], null, 'Canciones repetidas en racha'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Mayor tasa de salto — Artistas', 'dash-skip-art', skipArtLimit, table(['#', 'Artista', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.artists.slice(0, skipArtLimit).map((a, i) => [
+      ${cardWithLimit('Mayor tasa de salto — Artistas', 'dash-skip-art', skipArtLimit, table(['#', 'Artista', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], model.tables.skipRate.artists.slice(0, skipArtLimit).map((a, i) => [
         String(i + 1),
         entityLink('artist', a.id, a.name),
-        fmtNum(a.skips),
+        `${fmtNum(a.skips)} / ${fmtNum(a.skipKnown)}`,
         fmtNum(a.plays),
+        fmtNum(a.plays - a.skipKnown),
         fmtPct(a.skips / a.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto'))}
-      ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['#', 'Canción', 'Saltadas', 'Reproducciones', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr, i) => [
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
+      ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['#', 'Canción', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr, i) => [
         String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
-        fmtNum(tr.skips),
+        `${fmtNum(tr.skips)} / ${fmtNum(tr.skipKnown)}`,
         fmtNum(tr.plays),
+        fmtNum(tr.plays - tr.skipKnown),
         fmtPct(tr.skips / tr.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['#', 'Artista', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a, i) => [
+      ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['#', 'Artista', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a, i) => [
         String(i + 1),
         entityLink('artist', a.id, a.name),
-        fmtNum(a.skips),
+        `${fmtNum(a.skips)} / ${fmtNum(a.skipKnown)}`,
         fmtNum(a.plays),
+        fmtNum(a.plays - a.skipKnown),
         fmtPct(a.skips / a.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto'))}
-      ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['#', 'Canción', 'Saltadas', 'Reproducciones', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr, i) => [
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
+      ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['#', 'Canción', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr, i) => [
         String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
-        fmtNum(tr.skips),
+        `${fmtNum(tr.skips)} / ${fmtNum(tr.skipKnown)}`,
         fmtNum(tr.plays),
+        fmtNum(tr.plays - tr.skipKnown),
         fmtPct(tr.skips / tr.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['#', 'Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d, i) => [
@@ -913,12 +943,13 @@ export function discoveryView(model, ctx = {}) {
       ${cardWithLimit('Meses con mayor proporción de nuevas', 'disc-rel', relLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones', 'Proporción'], rel.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
     </div>
     <div class="grid-2">
-      ${cardWithLimit('Constancia (artistas de todos los meses)', 'disc-constancy', constLimit, table(['#', 'Artista', 'Meses', 'Cobertura'], model.tables.constancy.slice(0, constLimit).map((a, i) => [
+      ${cardWithLimit('Constancia (artistas con ≥6 meses activos)', 'disc-constancy', constLimit, table(['#', 'Artista', 'Meses activos', 'Etapa activa', 'Período observado'], model.tables.constancy.slice(0, constLimit).map((a, i) => [
         String(i + 1),
         entityLink('artist', a.id, a.name),
         fmtNum(a.months.size),
-        fmtPct(a.coverage)
-      ]), '', ['c', '', 'n', 'n'], null, 'Artistas presentes en todos los meses del rango'))}
+        `${fmtPct(a.coverage)} (${fmtNum(a.months.size)}/${fmtNum(a.activeMonthsSpan)})`,
+        `${fmtPct(a.periodCoverage)} (${fmtNum(a.months.size)}/${fmtNum(a.observedMonths)})`
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Continuidad durante etapa activa y cobertura del período total (mín. 6 meses activos)'))}
       ${cardWithLimit('Longevidad (años activos)', 'disc-longevity', longLimit, table(['#', 'Artista', 'Años', 'Meses', 'Días'], model.tables.longevity.slice(0, longLimit).map((a, i) => [
         String(i + 1),
         entityLink('artist', a.id, a.name),
@@ -943,7 +974,7 @@ export function yearlyView(model, ctx = {}) {
       `<a href="#/calendar/${esc(String(y))}">${esc(String(y))}</a>`,
       fmtNum(d.plays),
       fmtMs(d.ms),
-      fmtNum(d.artistsC.size),
+      fmtNum(d.artistsC.size) + (d.unknownArtistPlays > 0 ? ` <span class="cell-sub">(${fmtNum(d.unknownArtistPlays)} sin artista)</span>` : ''),
       fmtNum(d.tracksC.size),
       fmtNum(d.albumsC.size),
       fmtNum(d.newArtists),
@@ -1146,7 +1177,7 @@ export function hoursView(model, ctx = {}) {
   return `
     <header class="view-header">
       <h1>Horarios y ritmo diario</h1>
-      <p class="view-meta">Distribución por hora (00–23h), día de la semana y franja horaria</p>
+      <p class="view-meta">Distribución atribuida al momento de finalización registrado de cada evento (no a una reconstrucción minuto a minuto de escuchas que cruzan horas o días).</p>
     </header>
     ${kpis([
       { label: 'Hora pico', value: `${String(peakHour).padStart(2, '0')}:00`, sub: `${fmtNum(model.hour[peakHour].plays)} rep. · ${fmtMs(model.hour[peakHour].ms)}` },
@@ -1341,8 +1372,19 @@ export function wrappedView(model, id, ctx) {
     }
   }
 
+  const unknownFlagsNote = (t.records - t.skippedKnown > 0)
+    ? ` Nota: ${fmtNum(t.records - t.skippedKnown)} eventos tienen bandera de salto desconocida.`
+    : '';
   const heroHTML = archetype
-    ? `<section class="card hero-archetype"><p class="hero-eyebrow">Perfil de escucha</p><h2 class="hero-title">${esc(archetype.label)}</h2><p class="hero-detail">${esc(archetype.detail)}</p></section>`
+    ? `<section class="card hero-archetype">
+        <p class="hero-eyebrow">Perfil de escucha</p>
+        <h2 class="hero-title">${esc(archetype.label)}</h2>
+        <p class="hero-detail">${esc(archetype.detail)}</p>
+        <details class="archetype-rules">
+          <summary>Patrón heurístico: reglas descriptivas</summary>
+          <p class="view-meta">Clasificación descriptiva basada en umbrales estadísticos de tus datos locales: Explorador (saltos conocidos ≥ 35%), Devoto (concentración HHI ≥ 8%), o Equilibrado; combinado con la franja horaria más frecuente. No constituye diagnóstico psicológico ni de personalidad.${unknownFlagsNote}</p>
+        </details>
+      </section>`
     : '';
 
   return `
