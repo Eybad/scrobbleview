@@ -50,8 +50,8 @@ export function aggregate(ds, opts = {}) {
   const groups = createGroupsAcc(ds, opts);
   const temporal = createTemporalAcc(minMs, opts.history, opts);
   const sessions = createSessionsAcc({ tz, gapMinutes: opts.sessionGapMinutes, compact: opts.compact });
-  const behavior = createBehaviorAcc();
-  const transitions = createTransitionsAcc();
+  const behavior = createBehaviorAcc(opts.sessionGapMinutes);
+  const transitions = createTransitionsAcc(opts.sessionGapMinutes);
 
   const n = cols.t.length;
   const ev = {};
@@ -62,6 +62,7 @@ export function aggregate(ds, opts = {}) {
     }
     const i = order[k];
     ev.k = k;
+    ev.pos = derived.utcPositions ? derived.utcPositions[k] : k;
     ev.t = cols.t[k];
     ev.loc = cols.loc[k];
     ev.hour = cols.hour[k];
@@ -222,13 +223,17 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
   pairs.sort((a, b) => b.count - a.count);
 
   const artistName = (ar) => (ar > 0 && artists.has(ar) ? artists.get(ar).name : '(Desconocido)');
-  const transitionTop = transitions.top.map(({ from, to, count }) => ({
+  const mapTransitionTop = (sub) => (sub?.top || []).map(({ from, to, count, baseCount, prob, isRepeat }) => ({
     from, to,
     fromName: artistName(from),
     toName: artistName(to),
-    repeat: from === to,
-    count
+    repeat: isRepeat ?? (from === to),
+    count,
+    baseCount: baseCount ?? count,
+    prob: prob ?? 1
   }));
+
+  const transitionTop = mapTransitionTop(transitions.selection || transitions);
 
   const tables = buildTables({
     groups, temporal, sessions, behavior, transitions, streak,
@@ -283,9 +288,29 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
     starts,
     ends,
     pairs,
-    maxRun: behavior.maxRun,
+    behavior,
+    maxRun: behavior.runSelection ?? behavior.maxRun,
     concentration,
-    transitions: { pairs: transitions.pairs, top: transitionTop, auto: transitions.auto },
+    transitions: {
+      pairs: transitions.pairs,
+      top: transitionTop,
+      auto: transitions.auto,
+      selection: {
+        pairs: transitions.selection?.pairs ?? transitions.pairs,
+        top: transitionTop,
+        auto: transitions.selection?.auto ?? transitions.auto
+      },
+      originalConsecutive: {
+        pairs: transitions.originalConsecutive?.pairs,
+        top: mapTransitionTop(transitions.originalConsecutive),
+        auto: transitions.originalConsecutive?.auto ?? 0
+      },
+      originalSession: {
+        pairs: transitions.originalSession?.pairs,
+        top: mapTransitionTop(transitions.originalSession),
+        auto: transitions.originalSession?.auto ?? 0
+      }
+    },
     tables
   };
 }
@@ -321,7 +346,8 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .slice(0, TOP_OBSESSION_N);
 
   // Binge: rachas consecutivas de la misma canción.
-  const binge = [...behavior.maxRun.entries()]
+  const bingeSource = behavior.runSelection ?? (behavior.maxRun instanceof Map ? behavior.maxRun : behavior.maxRun.selection);
+  const binge = [...bingeSource.entries()]
     .map(([tk, run]) => ({ tk, run, track: tracks.get(tk) }))
     .filter((x) => x.track)
     .sort((a, b) => b.run - a.run || b.track.plays - a.track.plays)

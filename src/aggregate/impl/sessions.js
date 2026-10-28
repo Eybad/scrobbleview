@@ -81,7 +81,10 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
 
     finalize() {
       if (current) sessions.push(current);
-      for (const session of sessions) finalizeSession(session);
+      for (let i = 0; i < sessions.length; i++) {
+        sessions[i].id = i;
+        finalizeSession(sessions[i]);
+      }
 
       const durations = sessions.map((s) => s.duration);
       const plays = sessions.map((s) => s.plays);

@@ -53,7 +53,9 @@ export function derive(ds, tz) {
   const localOrder = new Uint32Array(n);
   for (let k = 0; k < n; k++) localOrder[k] = k;
   localOrder.sort((a, b) => loc[a] - loc[b]);
-  return { t, loc, hour, dow, ymd, day, isSkipped, ms, order, localOrder, positions };
+  const utcPositions = new Uint32Array(n);
+  for (let k = 0; k < n; k++) utcPositions[k] = k;
+  return { t, loc, hour, dow, ymd, day, isSkipped, ms, order, localOrder, positions, utcPositions };
 }
 
 // Select already-derived rows without another time-zone lookup or UTC sort.
@@ -68,5 +70,6 @@ export function selectDerived(derived, indices) {
   selected.order = Uint32Array.from(positions, (position) => derived.order[position]);
   selected.localOrder = Uint32Array.from(positions, (_, index) => index);
   selected.localOrder.sort((a, b) => selected.loc[a] - selected.loc[b]);
+  selected.utcPositions = positions;
   return selected;
 }
