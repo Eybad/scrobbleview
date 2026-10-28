@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aggregate } from '../src/aggregate/aggregate.js';
+import { analyze } from '../src/analyze.js';
+import { createAnalysisEngine } from '../app/analysis-engine.js';
 import { buildDataset } from './fakes/dataset.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { trackKey } from '../src/aggregate/impl/groups.js';
@@ -27,6 +29,46 @@ test('historical results follow UTC order and selected return events', () => {
     const firstIndex = input.findIndex(event => event.t === events[0].t);
     const withoutReturn = aggregate(ds, { tz: fixedTz('UTC', 0), indices: [firstIndex] });
     assert.equal(withoutReturn.comebacks.tracks.length, 0);
+  }
+});
+
+test('retention cohort contains selected historical first appearances', () => {
+  const start = 1704067200;
+  const ds = buildDataset([
+    { t: start, track: 'A', artist: 'Artist' },
+    { t: start, track: 'B', artist: 'Artist' },
+    { t: start + 5 * 86400, track: 'A', artist: 'Artist' },
+    { t: start + 100 * 86400, track: 'C', artist: 'Artist' }
+  ]);
+  const model = aggregate(ds, { tz: fixedTz('UTC', 0), indices: [0] });
+  assert.deepEqual(model.retention.r30, {
+    total: 1, eligible: 1, insufficient: 0, returned: 1, rate: 1, days: 30
+  });
+  const later = aggregate(ds, { tz: fixedTz('UTC', 0), indices: [2] });
+  assert.equal(later.retention.r30.total, 0);
+});
+
+test('analysis engine preserves historical results when input order is reversed', async () => {
+  const days = [0, 5, 100];
+  const entries = days.map(day => ({
+    ts: new Date((1704067200 + day * 86400) * 1000).toISOString(),
+    ms_played: 60000,
+    master_metadata_track_name: 'Track',
+    master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: 'Album'
+  }));
+  for (const input of [entries, [...entries].reverse()]) {
+    const engine = createAnalysisEngine();
+    const result = await engine.handle('load', {
+      timeZone: 'UTC', files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(input)]) }]
+    });
+    assert.equal(result.model.comebacks.tracks[0].gapDays, 95);
+    assert.equal(result.model.retention.r30.rate, 1);
+    const ds = buildDataset(input.map(event => ({
+      t: Date.parse(event.ts) / 1000, m: event.ms_played, track: 'Track', artist: 'Artist', album: 'Album'
+    })));
+    const direct = await analyze(ds, { tz: fixedTz('UTC', 0) });
+    assert.equal(direct.comebacks.tracks[0].gapDays, 95);
   }
 });
 test('A23: historical first appearances and comebacks computed on original timeline survive filtering', () => {

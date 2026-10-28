@@ -1214,7 +1214,7 @@ export function discoveryView(model, ctx = {}) {
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con más años activos'))}
     </div>
     <p class="view-meta" style="margin-top:1rem;font-size:0.85rem;color:var(--text-sub, #b3b3b3);">
-      El retorno acumulado en 30/90 días mide si una canción nueva fue escuchada al menos una vez más dentro de los 30 o 90 días posteriores. Requiere que el historial alcance la ventana completa; de lo contrario se reporta seguimiento insuficiente y se excluye del denominador. Los regresos se calculan sobre la cronología histórica completa para no crear pausas artificiales al filtrar.
+      El retorno acumulado incluye canciones cuya primera aparición histórica coincide con la selección. Busca escuchas posteriores en todo el historial cargado, aunque no coincidan con los filtros. Requiere que el historial alcance la ventana de 30 o 90 días; de lo contrario se reporta seguimiento insuficiente y se excluye del denominador. Los regresos usan la cronología histórica completa para no crear pausas artificiales al filtrar.
     </p>`;
 }
 

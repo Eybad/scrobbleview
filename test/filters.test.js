@@ -280,7 +280,11 @@ test('cached derivation and selected aggregation preserve filtered statistics', 
   const selected = applyFilters(ds, { ...emptyFilterState(), range: { from: 1704153600, to: 1704240000 } }, UTC, derived);
   const expected = aggregate(filterDataset(ds, selected.indices), { tz: UTC, now: 1 });
   const actual = aggregate(ds, { tz: UTC, now: 1, derived, indices: selected.indices });
-  assert.deepEqual(actual, expected);
+  const { retention: actualRetention, ...actualSelection } = actual;
+  const { retention: subsetRetention, ...expectedSelection } = expected;
+  assert.deepEqual(actualSelection, expectedSelection);
+  assert.equal(actualRetention.r30.total, 1);
+  assert.equal(subsetRetention.r30.total, 2);
   const { countFiltered } = await import('../src/filters.js');
   assert.equal(countFiltered(ds, { ...emptyFilterState(), skip: false }, UTC, derived).ms, 180000);
 });

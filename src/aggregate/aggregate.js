@@ -244,8 +244,8 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
   const lastLoadedUtc = baseDerived.t.length ? baseDerived.t[baseDerived.t.length - 1] : null;
   const comebacks = computeComebacks(ds, { thresholdDays: 30, order: baseDerived.order, selected });
   const retention = {
-    r30: computeRetention(ds, { days: 30, order: baseDerived.order }),
-    r90: computeRetention(ds, { days: 90, order: baseDerived.order })
+    r30: computeRetention(ds, { days: 30, order: baseDerived.order, selected }),
+    r90: computeRetention(ds, { days: 90, order: baseDerived.order, selected })
   };
 
   const tables = buildTables({

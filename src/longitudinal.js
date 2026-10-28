@@ -68,7 +68,7 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
   return { tracks, artists };
 }
 
-export function computeRetention(ds, { days = 30, entityType = 'tracks', order = null } = {}) {
+export function computeRetention(ds, { days = 30, entityType = 'tracks', order = null, selected = null } = {}) {
   const n = ds.t.length;
   if (n === 0) {
     return { total: 0, eligible: 0, insufficient: 0, returned: 0, rate: null, days };
@@ -84,6 +84,7 @@ export function computeRetention(ds, { days = 30, entityType = 'tracks', order =
   const isArtists = entityType === 'artists';
   const firstMap = new Map();
   const subsequentMap = new Map();
+  const cohort = selected ? new Set() : null;
 
   for (const i of chronologicalOrder(ds, order)) {
     const id = isArtists ? ds.ar[i] : trackKey(ds.tr[i], ds.ar[i]);
@@ -100,6 +101,7 @@ export function computeRetention(ds, { days = 30, entityType = 'tracks', order =
       }
       list.push(t);
     }
+    if (cohort && selected.has(i) && t === firstMap.get(id)) cohort.add(id);
   }
 
   const windowSec = days * 86400;
@@ -108,6 +110,7 @@ export function computeRetention(ds, { days = 30, entityType = 'tracks', order =
   let returned = 0;
 
   for (const [id, firstUtc] of firstMap.entries()) {
+    if (cohort && !cohort.has(id)) continue;
     if (maxDatasetUtc - firstUtc >= windowSec) {
       eligible++;
       const subs = subsequentMap.get(id);
