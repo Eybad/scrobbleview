@@ -94,7 +94,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **5** | Comparación A/B y evolución | **Completada** |
 | **6** | Día, sesiones y secuencias explicables | **Completada** |
 | **7** | Descubrimiento, regresos y hábitos longitudinales | **Completada** |
-| **8** | Exportación, personalización y cierre de calidad | Pendiente |
+| **8** | Exportación, personalización y cierre de calidad | **Completada** |
 
 ## 5. Detalle de Cambios — Etapa 1
 
@@ -200,11 +200,57 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
    - En `discoveryView`: KPIs de retorno acumulado en 30 y 90 días con indicación de casos con seguimiento insuficiente, tarjeta con tabla de regresos tras pausas ≥30 días, y tabla de primeras apariciones en el período.
    - En `habitsView`: Visualización dual de tiempo transcurrido para entidades olvidadas (respecto al final del archivo cargado y respecto a la fecha actual).
 
-## 13. Siguiente Tarea Exacta
+## 13. Detalle de Cambios — Etapa 8
 
-- Iniciar **Etapa 8 — Exportación, personalización y cierre de calidad**:
-  1. Exportación con alcances explícitos (`Todo el historial`, `Selección analítica actual`, `Tabla actual paginada/filtrada completa`).
-  2. Inclusión de metadata de exportación (versión, zona horaria, filtros aplicados, rangos A/B si existen).
-  3. Copia de resumen contextualizado al portapapeles.
-  4. Persistencia de preferencias desacoplada de la caché IndexedDB.
-  5. Verificaciones finales de seguridad XSS, neutralización de fórmulas CSV y validación integral de la matriz de aceptación.
+1. **Exportación con alcances visibles y diálogo accesible (`dialog#dialog-export` en `index.html`, `app/main.js`)**:
+   - Diálogo nativo accesible con opciones explícitas: `Todo el historial`, `Selección analítica actual` y `Tabla actual del catálogo`.
+   - Conteo previo de eventos y advertencia metodológica transparente: archivos ZIP contienen tablas tabulares agregadas en CSV para hojas de cálculo y no constituyen respaldo para reimportar en la aplicación.
+2. **Metadata en exportación ZIP (`app/analysis-engine.js`)**:
+   - Inclusión automática de tabla `metadata.csv` con esquema, versión (`EXPORT_VERSION = 1`), zona horaria, alcance, totales, marcas de tiempo y detalle de filtros activos (rango, años, días de la semana y horas).
+3. **Exportación de tabla de catálogo completa (`src/export.js`, `app/views.js`, `app/main.js`)**:
+   - Función pura `exportExploreTableCSV`: exporta la totalidad de coincidencias de la consulta analítica sin limitarse a la página visible (criterio A25).
+   - Botón directo en la barra de herramientas del catálogo mostrando el total de filas coincidentes.
+   - Neutralización estricta de prefijos de fórmulas en CSV (`=`, `+`, `-`, `@`, `\t`, `\r`) ante exportaciones (criterio A26).
+4. **Copia de resumen contextualizado (`receiptText` en `app/views.js`, `app/main.js`)**:
+   - Generación de resumen para portapapeles incorporando el período efectivo, zona horaria observada, criterio de ordenamiento activo (tiempo vs. reproducciones) y lenguaje diferenciado (`del año` para años completos vs. `del período` para rangos parciales o filtrados).
+5. **Personalización y accesos rápidos desacoplados de IndexedDB (`app/main.js`, `css/style.css`)**:
+   - Paneles favoritos (`scrobbleview:favorites`) administrables con botón estrella en cabecera de vistas y renderizados como chips de acceso rápido sobre la barra de navegación sin sustituir el índice de secciones.
+   - Botón de restablecimiento de preferencias (`data-action="reset-preferences"`) que limpia configuraciones de interfaz (métricas, límites de tabla, densidad, columnas y favoritos) preservando íntegramente el historial en memoria y la caché IndexedDB.
+6. **Diferimiento de calendarios anuales previos (`calendarIndexView` en `app/views.js`, `app/main.js`)**:
+   - Reducción del costo de renderizado inicial dejando los años previos plegados con atributo `data-deferred-year` y materialización bajo demanda al desplegar el elemento `<details>`.
+7. **Cierre de Matriz de Aceptación y Rendimiento (`test/acceptance-etapa8.test.js`)**:
+   - Verificados los criterios A25, A26, A27 y A28 (20 ciclos sin fugas ni crecimiento sostenido de memoria retenida).
+   - Suite total aprobada al 100% (309 tests pasando, 0 fallos).
+
+## 14. Matriz de Aceptación — Estado Final de Verificación (A01 a A28)
+
+| ID | Caso | Resultado | Estado |
+|---|---|---|---|
+| A01 | 320/360/393/412/640 px, texto ampliado | Cifras y controles legibles; sin scroll horizontal; layout responsive | **Verificado** (`test/acceptance-etapa1.test.js`) |
+| A02 | KPIs móviles | Estilos en 2 columnas útiles, sin desbordes ni texto cortado | **Verificado** (`test/acceptance-etapa1.test.js`) |
+| A03 | 59.999, 119.999 y 3.599.999 ms | Redondeo coherente; nunca `60s` en unidad inferior | **Verificado** (`test/acceptance-etapa1.test.js`) |
+| A04 | 100 eventos, 20 flags conocidos, 10 saltos | 50 %, base 20, desconocidos 80; ninguna interpretación 10/100 | **Verificado** (`test/acceptance-etapa1.test.js`) |
+| A05 | Una reproducción sin artista | Mismo conteo de artistas identificados en Resumen y Años | **Verificado** (`test/acceptance-etapa1.test.js`) |
+| A06 | Artista activo ene-jun, período observado ene-dic | Continuidad activa 100 %; cobertura 50 %; denominadores visibles | **Verificado** (`test/acceptance-etapa1.test.js`) |
+| A07 | >150 entidades y >100 coincidencias | Acceso a todas las filas con paginación y total correcto | **Verificado** (`test/acceptance-etapa3.test.js`) |
+| A08 | Ordenar después de buscar y cambiar de página | Orden global estable; cuota independiente de página | **Verificado** (`test/acceptance-etapa3.test.js`) |
+| A09 | Canciones homónimas de artistas distintos | Identidad visible y enlaces correctos por clave compuesta | **Verificado** (`test/acceptance-etapa3.test.js`) |
+| A10 | Abrir entidad desde una fila y volver | Misma fila, scroll de página/tabla, consulta y foco conservados | **Verificado** (`test/acceptance-etapa2.test.js`) |
+| A11 | Artista A → artista B y nueva pestaña | Encabezado/foco correctos; contexto transportado en href | **Verificado** (`test/acceptance-etapa2.test.js`) |
+| A12 | Misma importación con archivos en distinto orden | Rutas semánticas resuelven la misma entidad deterministamente | **Verificado** (`test/acceptance-etapa2.test.js`) |
+| A13 | Ráfaga de cinco filtros con Worker ocupado | Máximo 1 en ejecución y 1 pendiente; estado final consistente | **Verificado** (`test/acceptance-etapa2.test.js`) |
+| A14 | Error/cancelación de filtro o exportación | Modelo y dataset utilizables; no se descargan resultados truncos | **Verificado** (`test/acceptance-etapa2.test.js`) |
+| A15 | Serie larga, horas ausentes, todo cero | 24 posiciones horarias completas; gráfico y tabla coinciden | **Verificado** (`test/acceptance-etapa4.test.js`) |
+| A16 | Calendario con teclado y tacto | Inspector de día, selector de rango explícito sin Shift | **Verificado** (`test/acceptance-etapa4.test.js`) |
+| A17 | Años con máximos diferentes | Escala compartida por defecto; normalización identificada | **Verificado** (`test/acceptance-etapa4.test.js`) |
+| A18 | Comparación con base cero y rango parcial | Sin NaN/Infinity; ventanas parciales advertidas; deltas exactos | **Verificado** (`test/acceptance-etapa5.test.js`) |
+| A19 | Día/semana/mes y cambios DST | Sumas reconcilian sin perder ni duplicar scrobbles | **Verificado** (`test/acceptance-etapa5.test.js`) |
+| A20 | Canción compartida por álbumes | Atribución específica y global agrupada diferenciadas | **Verificado** (`test/acceptance-etapa6.test.js`) |
+| A21 | A→B→A, filtrado a A y pausas de días | Adyacencia seleccionada, original y de sesión diferenciadas | **Verificado** (`test/acceptance-etapa6.test.js`) |
+| A22 | Sesiones unidas por un intervalo largo | Totales coherentes y detalle exacto de pertenencia | **Verificado** (`test/acceptance-etapa6.test.js`) |
+| A23 | Primera aparición anterior, regreso dentro | No se reinicia descubrimiento ni se inventa pausa | **Verificado** (`test/acceptance-etapa7.test.js`) |
+| A24 | Primera aparición cerca del final del historial | Seguimiento insuficiente explícito; no abandono supuesto | **Verificado** (`test/acceptance-etapa7.test.js`) |
+| A25 | Exportar con filtros y búsqueda | Alcance, cantidad, orden y metadata; exporta todas las filas | **Verificado** (`test/acceptance-etapa8.test.js`) |
+| A26 | CSV con prefijos de fórmula | Neutralización con apóstrofe inicial según RFC 4180 / OWASP | **Verificado** (`test/acceptance-etapa8.test.js`) |
+| A27 | Strings con HTML y caracteres especiales | Sin inyección XSS en vistas ni fallos de formato en CSV | **Verificado** (`test/acceptance-etapa8.test.js`) |
+| A28 | Veinte ciclos de navegación/detalle/filtros | Sin fugas de memoria; heap acotado en ejecución continua | **Verificado** (`test/acceptance-etapa8.test.js`) |
