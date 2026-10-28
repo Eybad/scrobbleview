@@ -1143,6 +1143,30 @@ export function discoveryView(model, ctx = {}) {
   const totalRepTracks = disc.reduce((acc, [, d]) => acc + d.rep, 0);
   const avgNewPerMonth = disc.length > 0 ? (totalNewTracks / disc.length).toFixed(1) : '0';
 
+  const r30 = model.retention?.r30;
+  const r90 = model.retention?.r90;
+
+  const comebacksLimit = resolveLimit(ctx, 'disc-comebacks', 10);
+  const comebacksList = (model.tables?.comebacks ?? []).slice(0, comebacksLimit);
+  const comebacksRows = comebacksList.map((x, i) => [
+    String(i + 1),
+    trackSubLink(x.id, x.name, x.artist),
+    `${fmtNum(x.gapDays)} días`,
+    fmtLocal(x.lastSeenUtc),
+    fmtLocal(x.returnUtc)
+  ]);
+
+  const newTracksLimit = resolveLimit(ctx, 'disc-new-tracks', 10);
+  const newTracksList = (model.tables?.firstAppearances?.tracks ?? []).slice(0, newTracksLimit);
+  const newTracksRows = newTracksList.map((tr, i) => [
+    String(i + 1),
+    trackSubLink(tr.tk, tr.name, tr.artist),
+    fmtLocal(tr.firstTs),
+    fmtNum(tr.subsequentPlays),
+    fmtMs(tr.ms),
+    fmtNum(tr.daysCount)
+  ]);
+
   return `
     <header class="view-header">
       <h1>Descubrimiento</h1>
@@ -1152,12 +1176,26 @@ export function discoveryView(model, ctx = {}) {
       { label: 'Primeras apariciones', value: fmtNum(totalNewTracks) },
       { label: 'Escuchas de catálogo', value: fmtNum(totalRepTracks), sub: `${pctOf(totalRepTracks, model.totals.records)} de las reproducciones` },
       { label: 'Promedio por mes activo', value: `${avgNewPerMonth} nuevas` },
-      { label: 'Artistas únicos', value: fmtNum(model.artists.byId.size) }
+      { label: 'Artistas únicos', value: fmtNum(model.artists.byId.size) },
+      {
+        label: 'Retorno a 30 días',
+        value: r30?.rate != null ? fmtPct(r30.rate) : '—',
+        sub: r30 ? `${fmtNum(r30.returned)}/${fmtNum(r30.eligible)} elegibles${r30.insufficient ? ` (${fmtNum(r30.insufficient)} con seguimiento insuficiente)` : ''}` : ''
+      },
+      {
+        label: 'Retorno a 90 días',
+        value: r90?.rate != null ? fmtPct(r90.rate) : '—',
+        sub: r90 ? `${fmtNum(r90.returned)}/${fmtNum(r90.eligible)} elegibles${r90.insufficient ? ` (${fmtNum(r90.insufficient)} con seguimiento insuficiente)` : ''}` : ''
+      }
     ])}
     ${card('Canciones nuevas por mes', scrollChart(line, 'Canciones nuevas por mes'))}
     <div class="grid-2">
       ${cardWithLimit('Meses con más descubrimientos', 'disc-abs', absLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones'], abs.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays)]), '', ['c', '', 'n', 'n', 'n'], null, 'Meses con más descubrimientos'))}
       ${cardWithLimit('Meses con mayor proporción de nuevas', 'disc-rel', relLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones', 'Proporción'], rel.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
+    </div>
+    <div class="grid-2">
+      ${cardWithLimit('Regresos tras pausa (canciones con pausa ≥30 días)', 'disc-comebacks', comebacksLimit, comebacksRows.length ? table(['#', 'Canción', 'Pausa observada', 'Última antes de la pausa', 'Fecha de regreso'], comebacksRows, '', ['c', '', 'n', '', ''], null, 'Regresos tras pausa de 30 o más días') : '<p class="empty">Sin regresos registrados en este período.</p>')}
+      ${cardWithLimit('Primeras apariciones en el período', 'disc-new-tracks', newTracksLimit, newTracksRows.length ? table(['#', 'Canción', 'Fecha de descubrimiento', 'Escuchas posteriores', 'Tiempo escuchado', 'Días activos'], newTracksRows, '', ['c', '', '', 'n', 'n', 'n'], null, 'Primeras apariciones en el período') : '<p class="empty">Sin primeras apariciones en este período.</p>')}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Constancia (artistas con ≥6 meses activos)', 'disc-constancy', constLimit, table(['#', 'Artista', 'Meses activos', 'Etapa activa', 'Período observado'], model.tables.constancy.slice(0, constLimit).map((a, i) => [
@@ -1174,7 +1212,10 @@ export function discoveryView(model, ctx = {}) {
         fmtNum(a.months.size),
         fmtNum(a.days.size)
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con más años activos'))}
-    </div>`;
+    </div>
+    <p class="view-meta" style="margin-top:1rem;font-size:0.85rem;color:var(--text-sub, #b3b3b3);">
+      El retorno acumulado en 30/90 días mide si una canción nueva fue escuchada al menos una vez más dentro de los 30 o 90 días posteriores. Requiere que el historial alcance la ventana completa; de lo contrario se reporta seguimiento insuficiente y se excluye del denominador. Los regresos se calculan sobre la cronología histórica completa para no crear pausas artificiales al filtrar.
+    </p>`;
 }
 
 export function yearlyView(model, ctx = {}) {
@@ -1519,7 +1560,9 @@ export function habitsView(model, ctx = {}) {
     entityLink('artist', a.id, a.name),
     fmtNum(a.plays),
     fmtMs(a.ms),
-    esc(fmtLocal(a.lastTs))
+    a.daysSinceEnd != null && a.daysSinceNow != null
+      ? `${esc(fmtLocal(a.lastTs))} <span class="cell-sub">(${fmtNum(a.daysSinceEnd)}d del fin · ${fmtNum(a.daysSinceNow)}d de hoy)</span>`
+      : esc(fmtLocal(a.lastTs))
   ]);
 
   const forgTrkRows = (model.tables.forgotten?.tracks ?? []).slice(0, forgTrkLimit).map((tr, i) => [
@@ -1527,7 +1570,9 @@ export function habitsView(model, ctx = {}) {
     trackSubLink(tr.tk, tr.name, tr.artist),
     fmtNum(tr.plays),
     fmtMs(tr.ms),
-    esc(fmtLocal(tr.lastTs))
+    tr.daysSinceEnd != null && tr.daysSinceNow != null
+      ? `${esc(fmtLocal(tr.lastTs))} <span class="cell-sub">(${fmtNum(tr.daysSinceEnd)}d del fin · ${fmtNum(tr.daysSinceNow)}d de hoy)</span>`
+      : esc(fmtLocal(tr.lastTs))
   ]);
 
   return `
