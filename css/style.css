@@ -712,55 +712,6 @@ main.container {
   .drop-zone {
     padding: var(--sp-8) var(--sp-4);
   }
-
-  .kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-2);
-  }
-
-  .kpis > .kpi:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
-  .kpi {
-    padding: var(--sp-2) var(--sp-3);
-  }
-
-  .kpi dd {
-    font-size: clamp(1.15rem, 4.5vw, 1.4rem);
-  }
-
-  .kpi.kpi-text dd {
-    font-size: var(--fs-md);
-  }
-
-  .records-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-2);
-  }
-
-  .records-grid > .record-item:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
-  .record-item {
-    padding: var(--sp-2) var(--sp-3);
-  }
-
-  .record-value {
-    font-size: var(--fs-md);
-  }
-
-  .filter-presets {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .filter-presets button[data-preset] {
-    justify-content: center;
-    padding-inline: var(--sp-1);
-  }
 }
 
 /* Navegación: UNA fila deslizante con las 6 secciones (nada oculto tras
@@ -971,6 +922,61 @@ main.container {
   font-size: var(--fs-xs);
   font-weight: 400;
   margin-top: var(--sp-1);
+}
+
+.kpi-group-heading {
+  grid-column: 1 / -1;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-top: var(--sp-3);
+  margin-bottom: calc(-1 * var(--sp-1));
+}
+
+.kpi-group-heading:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .kpis > .kpi:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .kpi {
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .kpi dd {
+    font-size: clamp(1.1rem, 4vw, 1.35rem);
+  }
+
+  .kpi.kpi-text dd {
+    font-size: var(--fs-md);
+  }
+
+  .records-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .records-grid > .record-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .record-item {
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .record-value {
+    font-size: var(--fs-md);
+  }
 }
 
 .card {
@@ -1757,6 +1763,19 @@ td a:hover {
   flex-wrap: wrap;
   gap: var(--sp-1);
   align-items: center;
+}
+
+@media (max-width: 640px) {
+  .filter-presets {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .filter-presets button[data-preset] {
+    justify-content: center;
+    padding-inline: var(--sp-1);
+  }
 }
 
 .filter-badge {
