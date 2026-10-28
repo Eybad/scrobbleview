@@ -9,6 +9,14 @@
 - **HEAD inicial**: `4aa7023c14ded79bd6564529457aec55ef67e1ab` ("ignore local data and tighten JSON exceptions").
 - **Estado del árbol de trabajo**: Limpio, sin modificaciones previas sin registrar.
 
+## Correcciones iniciadas el 28 de octubre de 2026
+
+- Base revisada: `55f9d9289f09b07808147de0b03e0b413b5e0852`, rama `feat/deepening-plan`, árbol limpio antes de las correcciones.
+- C01: la vista de comparación informa que el período B no está calculado; la comparación real queda pendiente en R7. `node --test`: 309 pruebas aprobadas, 0 fallidas. No se verificó en navegador.
+- C18: se actualizó el selector de Sesiones y la expectativa de cancelación de filtro del harness. `node --check browser-tests/navigation.js` aprobó; la ejecución en navegador, la cancelación de importación y la de exportación siguen pendientes.
+- Siguiente tarea: completar R0 (harness y seguimiento), luego R1 (cronología y denominadores). Los fallos C02–C17 del plan siguen pendientes de corrección y verificación integrada.
+- Las secciones históricas siguientes registran lo que se afirmó en cada etapa; no acreditan aceptación actual. La revisión posterior detectó integraciones incompletas y resultados incorrectos.
+
 ## 2. Verificación de Partida y Progreso
 
 ### Suite de pruebas unitarias y de integración (`node --test`)
@@ -222,35 +230,37 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
    - Verificados los criterios A25, A26, A27 y A28 (20 ciclos sin fugas ni crecimiento sostenido de memoria retenida).
    - Suite total aprobada al 100% (309 tests pasando, 0 fallos).
 
-## 14. Matriz de Aceptación — Estado Final de Verificación (A01 a A28)
+## 14. Matriz de Aceptación — Evidencia histórica (A01 a A28)
+
+Las referencias a Node indican pruebas de funciones, markup o mocks, no validación de DOM, accesibilidad ni navegador. Los criterios de integración y manuales siguen pendientes; C01–C18 identifican fallos o faltantes. Estados posibles: implementado, verificado en Node, verificado en navegador, manual pendiente, fallido y no implementado. La matriz no acredita aceptación completa.
 
 | ID | Caso | Resultado | Estado |
 |---|---|---|---|
-| A01 | 320/360/393/412/640 px, texto ampliado | Cifras y controles legibles; sin scroll horizontal; layout responsive | **Verificado** (`test/acceptance-etapa1.test.js`) |
-| A02 | KPIs móviles | Estilos en 2 columnas útiles, sin desbordes ni texto cortado | **Verificado** (`test/acceptance-etapa1.test.js`) |
-| A03 | 59.999, 119.999 y 3.599.999 ms | Redondeo coherente; nunca `60s` en unidad inferior | **Verificado** (`test/acceptance-etapa1.test.js`) |
-| A04 | 100 eventos, 20 flags conocidos, 10 saltos | 50 %, base 20, desconocidos 80; ninguna interpretación 10/100 | **Verificado** (`test/acceptance-etapa1.test.js`) |
-| A05 | Una reproducción sin artista | Mismo conteo de artistas identificados en Resumen y Años | **Verificado** (`test/acceptance-etapa1.test.js`) |
-| A06 | Artista activo ene-jun, período observado ene-dic | Continuidad activa 100 %; cobertura 50 %; denominadores visibles | **Verificado** (`test/acceptance-etapa1.test.js`) |
-| A07 | >150 entidades y >100 coincidencias | Acceso a todas las filas con paginación y total correcto | **Verificado** (`test/acceptance-etapa3.test.js`) |
-| A08 | Ordenar después de buscar y cambiar de página | Orden global estable; cuota independiente de página | **Verificado** (`test/acceptance-etapa3.test.js`) |
-| A09 | Canciones homónimas de artistas distintos | Identidad visible y enlaces correctos por clave compuesta | **Verificado** (`test/acceptance-etapa3.test.js`) |
-| A10 | Abrir entidad desde una fila y volver | Misma fila, scroll de página/tabla, consulta y foco conservados | **Verificado** (`test/acceptance-etapa2.test.js`) |
-| A11 | Artista A → artista B y nueva pestaña | Encabezado/foco correctos; contexto transportado en href | **Verificado** (`test/acceptance-etapa2.test.js`) |
-| A12 | Misma importación con archivos en distinto orden | Rutas semánticas resuelven la misma entidad deterministamente | **Verificado** (`test/acceptance-etapa2.test.js`) |
-| A13 | Ráfaga de cinco filtros con Worker ocupado | Máximo 1 en ejecución y 1 pendiente; estado final consistente | **Verificado** (`test/acceptance-etapa2.test.js`) |
-| A14 | Error/cancelación de filtro o exportación | Modelo y dataset utilizables; no se descargan resultados truncos | **Verificado** (`test/acceptance-etapa2.test.js`) |
-| A15 | Serie larga, horas ausentes, todo cero | 24 posiciones horarias completas; gráfico y tabla coinciden | **Verificado** (`test/acceptance-etapa4.test.js`) |
-| A16 | Calendario con teclado y tacto | Inspector de día, selector de rango explícito sin Shift | **Verificado** (`test/acceptance-etapa4.test.js`) |
-| A17 | Años con máximos diferentes | Escala compartida por defecto; normalización identificada | **Verificado** (`test/acceptance-etapa4.test.js`) |
-| A18 | Comparación con base cero y rango parcial | Sin NaN/Infinity; ventanas parciales advertidas; deltas exactos | **Verificado** (`test/acceptance-etapa5.test.js`) |
-| A19 | Día/semana/mes y cambios DST | Sumas reconcilian sin perder ni duplicar scrobbles | **Verificado** (`test/acceptance-etapa5.test.js`) |
-| A20 | Canción compartida por álbumes | Atribución específica y global agrupada diferenciadas | **Verificado** (`test/acceptance-etapa6.test.js`) |
-| A21 | A→B→A, filtrado a A y pausas de días | Adyacencia seleccionada, original y de sesión diferenciadas | **Verificado** (`test/acceptance-etapa6.test.js`) |
-| A22 | Sesiones unidas por un intervalo largo | Totales coherentes y detalle exacto de pertenencia | **Verificado** (`test/acceptance-etapa6.test.js`) |
-| A23 | Primera aparición anterior, regreso dentro | No se reinicia descubrimiento ni se inventa pausa | **Verificado** (`test/acceptance-etapa7.test.js`) |
-| A24 | Primera aparición cerca del final del historial | Seguimiento insuficiente explícito; no abandono supuesto | **Verificado** (`test/acceptance-etapa7.test.js`) |
-| A25 | Exportar con filtros y búsqueda | Alcance, cantidad, orden y metadata; exporta todas las filas | **Verificado** (`test/acceptance-etapa8.test.js`) |
-| A26 | CSV con prefijos de fórmula | Neutralización con apóstrofe inicial según RFC 4180 / OWASP | **Verificado** (`test/acceptance-etapa8.test.js`) |
-| A27 | Strings con HTML y caracteres especiales | Sin inyección XSS en vistas ni fallos de formato en CSV | **Verificado** (`test/acceptance-etapa8.test.js`) |
-| A28 | Veinte ciclos de navegación/detalle/filtros | Sin fugas de memoria; heap acotado en ejecución continua | **Verificado** (`test/acceptance-etapa8.test.js`) |
+| A01 | 320/360/393/412/640 px, texto ampliado | Cifras y controles legibles; sin scroll horizontal; layout responsive | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa1.test.js`) |
+| A02 | KPIs móviles | Estilos en 2 columnas útiles, sin desbordes ni texto cortado | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa1.test.js`) |
+| A03 | 59.999, 119.999 y 3.599.999 ms | Redondeo coherente; nunca `60s` en unidad inferior | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa1.test.js`) |
+| A04 | 100 eventos, 20 flags conocidos, 10 saltos | 50 %, base 20, desconocidos 80; ninguna interpretación 10/100 | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa1.test.js`) |
+| A05 | Una reproducción sin artista | Mismo conteo de artistas identificados en Resumen y Años | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa1.test.js`) |
+| A06 | Artista activo ene-jun, período observado ene-dic | Continuidad activa 100 %; cobertura 50 %; denominadores visibles | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa1.test.js`) |
+| A07 | >150 entidades y >100 coincidencias | Acceso a todas las filas con paginación y total correcto | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa3.test.js`) |
+| A08 | Ordenar después de buscar y cambiar de página | Orden global estable; cuota independiente de página | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa3.test.js`) |
+| A09 | Canciones homónimas de artistas distintos | Identidad visible y enlaces correctos por clave compuesta | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa3.test.js`) |
+| A10 | Abrir entidad desde una fila y volver | Misma fila, scroll de página/tabla, consulta y foco conservados | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa2.test.js`) |
+| A11 | Artista A → artista B y nueva pestaña | Encabezado/foco correctos; contexto transportado en href | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa2.test.js`) |
+| A12 | Misma importación con archivos en distinto orden | Rutas semánticas resuelven la misma entidad deterministamente | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa2.test.js`) |
+| A13 | Ráfaga de cinco filtros con Worker ocupado | Máximo 1 en ejecución y 1 pendiente; estado final consistente | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa2.test.js`) |
+| A14 | Error/cancelación de filtro o exportación | Modelo y dataset utilizables; no se descargan resultados truncos | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa2.test.js`) |
+| A15 | Serie larga, horas ausentes, todo cero | 24 posiciones horarias completas; gráfico y tabla coinciden | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa4.test.js`) |
+| A16 | Calendario con teclado y tacto | Inspector de día, selector de rango explícito sin Shift | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa4.test.js`) |
+| A17 | Años con máximos diferentes | Escala compartida por defecto; normalización identificada | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa4.test.js`) |
+| A18 | Comparación con base cero y rango parcial | Sin NaN/Infinity; ventanas parciales advertidas; deltas exactos | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa5.test.js`) |
+| A19 | Día/semana/mes y cambios DST | Sumas reconcilian sin perder ni duplicar scrobbles | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa5.test.js`) |
+| A20 | Canción compartida por álbumes | Atribución específica y global agrupada diferenciadas | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa6.test.js`) |
+| A21 | A→B→A, filtrado a A y pausas de días | Adyacencia seleccionada, original y de sesión diferenciadas | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa6.test.js`) |
+| A22 | Sesiones unidas por un intervalo largo | Totales coherentes y detalle exacto de pertenencia | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa6.test.js`) |
+| A23 | Primera aparición anterior, regreso dentro | No se reinicia descubrimiento ni se inventa pausa | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa7.test.js`) |
+| A24 | Primera aparición cerca del final del historial | Seguimiento insuficiente explícito; no abandono supuesto | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa7.test.js`) |
+| A25 | Exportar con filtros y búsqueda | Alcance, cantidad, orden y metadata; exporta todas las filas | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa8.test.js`) |
+| A26 | HTML y caracteres especiales; CSV con prefijos de fórmula | Sin XSS y con neutralización de fórmulas | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa8.test.js`) |
+| A27 | Guardado, carga y borrado con fallos | Persistencia consentida y errores recuperables | **Manual e integración pendientes** |
+| A28 | Veinte ciclos de navegación/detalle/filtros | Sin fugas de memoria; heap acotado en ejecución continua | **Evidencia parcial en Node; integración/manual pendiente** (`test/acceptance-etapa8.test.js`) |
