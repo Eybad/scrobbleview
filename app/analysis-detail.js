@@ -71,3 +71,22 @@ export function getEventDetail(ds, derived, tz, type, id, page, pageSize) {
     order: 'utc'
   };
 }
+
+export function getTrackDetail(ds, derived, id, firstUtc, page, pageSize) {
+  ({ page, pageSize } = pageOptions(page, pageSize));
+  const trackId = Number(id);
+  if (!Number.isSafeInteger(trackId) || trackId <= 0 || firstUtc == null) return null;
+  const albums = new Map();
+  for (const i of derived.order) {
+    if (trackKey(ds.tr[i], ds.ar[i]) !== trackId) continue;
+    const id = ds.al[i] ? albumKey(ds.ar[i], ds.al[i]) : 0;
+    const item = albums.get(id) ?? { id, name: ds.dicts.albums.get(ds.al[i]) || '(Sin álbum)', plays: 0, ms: 0, durationKnown: 0 };
+    item.plays++;
+    item.ms += ds.m[i];
+    if (!(ds.flags[i] & 8)) item.durationKnown++;
+    albums.set(id, item);
+  }
+  const all = [...albums.values()].sort((a, b) => b.plays - a.plays || b.ms - a.ms || a.name.localeCompare(b.name));
+  if (page > Math.max(1, Math.ceil(all.length / pageSize))) throw new RangeError('Página fuera de rango.');
+  return { firstUtc, page, pageSize, total: all.length, rows: all.slice((page - 1) * pageSize, page * pageSize) };
+}

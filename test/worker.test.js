@@ -86,6 +86,21 @@ test('worker client and controller deliver a day detail to the view', async (t) 
   assert.match(html, /First/);
 });
 
+test('worker client and controller render actual track album attribution', async (t) => {
+  const client = clientForTest(t);
+  const { model } = await client.request('load', { files: [file(events)], timeZone: 'UTC' });
+  const controller = createAnalysisState(client);
+  controller.initialize(model);
+  const id = [...model.tracks.byId.keys()][0];
+  const result = await controller.update(emptyFilterState(), { view: 'track', id });
+  assert.deepEqual(result.detail.rows.map(row => row.plays), [1, 1]);
+  const html = renderView('track', result.model, id, { detail: result.detail, detailRequested: true });
+  assert.match(html, /First/);
+  assert.match(html, /Second/);
+  assert.match(html, /Primera aparición histórica/);
+  assert.doesNotMatch(html, /NaN|undefined/);
+});
+
 test('worker cancellation rejects pending work and permits a fresh load', async (t) => {
   const client = clientForTest(t);
   const loading = client.request('load', { files: [file(events)], timeZone: 'UTC' });

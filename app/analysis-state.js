@@ -39,11 +39,12 @@ export function createAnalysisState(client) {
           if (detail) { album.trackStats = detail.trackStats; albumDetail = album; }
         }
         let nextDetail = null, nextDetailKey = null;
-        if (view === 'day' || view === 'session') {
+        if (view === 'day' || view === 'session' || view === 'track') {
           nextDetailKey = JSON.stringify([key, view, id, page, pageSize]);
           if (detailKey === nextDetailKey) nextDetail = detail;
           else {
-            nextDetail = await client.request(view === 'day' ? 'dayDetail' : 'sessionDetail', { state, id, page, pageSize }, { onProgress: progress });
+            const type = view === 'day' ? 'dayDetail' : view === 'session' ? 'sessionDetail' : 'trackDetail';
+            nextDetail = await client.request(type, { state, id, page, pageSize }, { onProgress: progress });
             if (!isCurrent()) return null;
           }
         }

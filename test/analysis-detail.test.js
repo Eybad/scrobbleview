@@ -69,3 +69,19 @@ test('loaded detail reaches the rendered day through the analysis controller', a
   assert.ok(html.includes('Mostrando 1–1 de 1'));
   assert.ok(html.includes('Album'));
 });
+
+test('track detail attributes plays to albums within the selected history', async () => {
+  const entries = ['First', 'Second', 'Second'].map((album, index) => ({
+    ts: new Date((1704067200 + index * 60) * 1000).toISOString(), ms_played: 60000,
+    master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: album
+  }));
+  const engine = createAnalysisEngine();
+  const { model } = await engine.handle('load', { timeZone: 'UTC', files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(entries)]) }] });
+  const id = [...model.tracks.byId.keys()][0];
+  const detail = await engine.handle('trackDetail', { id });
+  assert.deepEqual(detail.rows.map(row => [row.name, row.plays, row.ms]), [
+    ['Second', 2, 120000], ['First', 1, 60000]
+  ]);
+  assert.equal(detail.firstUtc, 1704067200);
+});

@@ -3,7 +3,7 @@ import { analyze } from '../src/analyze.js';
 import { parse } from '../src/parse/parse.js';
 import { derive, selectDerived } from '../src/aggregate/impl/derive.js';
 import { originalSessionMembership } from '../src/aggregate/impl/sessions.js';
-import { getEventDetail } from './analysis-detail.js';
+import { getEventDetail, getTrackDetail } from './analysis-detail.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, countFiltered, emptyFilterState } from '../src/filters.js';
 import { fileBytes } from '../src/parse/adapters/file-bytes.js';
@@ -70,10 +70,15 @@ export function createAnalysisEngine() {
       }
       if (!ds) throw new Error('Cargá un historial antes de calcular estadísticas.');
       if (type === 'save') return save(ds);
-      if (type === 'dayDetail' || type === 'sessionDetail') {
+      if (type === 'dayDetail' || type === 'sessionDetail' || type === 'trackDetail') {
         const state = payload.state ?? emptyFilterState();
         const indices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : null;
         const selection = indices ? selectDerived(derived, indices) : derived;
+        if (type === 'trackDetail') {
+          const detail = getTrackDetail(ds, selection, payload.id, history.tracks.get(Number(payload.id))?.firstUtc, payload.page, payload.pageSize);
+          if (detail) detail.firstLocal = detail.firstUtc + tz.offsetMinutes(detail.firstUtc) * 60;
+          return detail;
+        }
         return getEventDetail(ds, selection, tz, type === 'dayDetail' ? 'day' : 'session', payload.id, payload.page, payload.pageSize);
       }
       if (type === 'filter') {

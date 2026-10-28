@@ -778,21 +778,21 @@ export function trackView(model, tk, ctx = {}) {
   const originAlbum = originAk != null ? model.albums.byId.get(originAk) : null;
   const originStats = originAlbum?.trackStats?.get(tk);
 
-  const albumList = [...tr.albums]
+  const albumList = ctx.detail ? ctx.detail.rows.map(item => ({ ak: item.id, name: item.name, plays: item.plays, ms: item.ms })) : [...tr.albums]
     .map((ak) => {
       const al = model.albums.byId.get(ak);
       const st = al?.trackStats?.get(tk);
       return {
         ak,
         name: al ? al.name : '(Álbum desconocido)',
-        plays: st ? st.plays : 0,
-        ms: st ? st.ms : 0
+        plays: st ? st.plays : null,
+        ms: st ? st.ms : null
       };
     })
     .sort((a, b) => b.plays - a.plays || b.ms - a.ms);
 
   const albumLinks = albumList
-    .map((a) => entityLink('album', a.ak, a.name))
+    .map((a) => a.ak ? entityLink('album', a.ak, a.name) : esc(a.name))
     .join(' · ');
 
   const run = model.maxRun?.get ? (model.maxRun.get(tk) ?? 0) : 0;
@@ -811,10 +811,10 @@ export function trackView(model, tk, ctx = {}) {
           <a href="#/track/${tk}">Ver ficha global de la canción agrupada</a>
         </p>
        </div>`
-    : (albumList.length > 1
+    : ((ctx.detail?.total ?? albumList.length) > 1
       ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;">
           <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
-            <strong>Canción agrupada:</strong> consolida ${fmtNum(tr.plays)} reproducciones a través de ${fmtNum(albumList.length)} álbumes.
+            <strong>Canción agrupada:</strong> consolida ${fmtNum(tr.plays)} reproducciones a través de ${fmtNum(ctx.detail?.total ?? albumList.length)} atribuciones de álbum.
           </p>
          </div>`
       : '');
@@ -823,13 +823,18 @@ export function trackView(model, tk, ctx = {}) {
     ? card('Álbumes asociados', table(
         ['Álbum', 'Reproducciones', 'Tiempo', 'Cuota de la canción'],
         albumList.map((a) => [
-          entityLink('album', a.ak, a.name),
-          fmtNum(a.plays),
-          fmtMs(a.ms),
-          pctOf(a.plays, tr.plays)
+          a.ak ? entityLink('album', a.ak, a.name) : esc(a.name),
+          a.plays == null ? '—' : fmtNum(a.plays),
+          a.ms == null ? '—' : fmtMs(a.ms),
+          a.plays == null ? '—' : pctOf(a.plays, tr.plays)
         ]),
         '', ['cell-name', 'n', 'n', 'n'], null, 'Atribución por álbum'
-      ))
+      ) + (ctx.detail && ctx.detail.total > ctx.detail.pageSize ? `<nav class="pagination" aria-label="Paginación de álbumes"><div class="pagination-actions">
+        <button type="button" class="btn btn-sm btn-page" data-detail-page="${ctx.detail.page - 1}"${ctx.detail.page <= 1 ? ' disabled' : ''}>Anterior</button>
+        <span class="pagination-current">Página ${fmtNum(ctx.detail.page)} de ${fmtNum(Math.ceil(ctx.detail.total / ctx.detail.pageSize))}</span>
+        <button type="button" class="btn btn-sm btn-page" data-detail-page="${ctx.detail.page + 1}"${ctx.detail.page * ctx.detail.pageSize >= ctx.detail.total ? ' disabled' : ''}>Siguiente</button>
+        <label class="pagination-size-label">Por página <select class="pagination-select" data-detail-size>${[25, 50, 100].map(size => `<option value="${size}"${size === ctx.detail.pageSize ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
+      </div></nav>` : ''))
     : '';
 
   return `
@@ -849,6 +854,7 @@ export function trackView(model, tk, ctx = {}) {
       { label: 'Días activos', value: fmtNum(tr.days.size) },
       { label: 'Meses activos', value: fmtNum(tr.months ? tr.months.size : 0) },
       { label: 'Primera escucha', value: fmtLocal(tr.firstTs) },
+      ...(ctx.detail ? [{ label: 'Primera aparición histórica', value: fmtLocal(ctx.detail.firstLocal) }] : []),
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
     ])}
     <div class="grid-2">

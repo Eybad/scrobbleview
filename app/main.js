@@ -197,7 +197,7 @@ async function clearCached() {
 async function refreshModel() {
   if (!model) return false;
   const [view, id] = parseHash();
-  const nextDetailContext = (view === 'day' || view === 'session') ? JSON.stringify([view, id, filterParams(state)]) : null;
+  const nextDetailContext = (view === 'day' || view === 'session' || view === 'track') ? JSON.stringify([view, id, filterParams(state)]) : null;
   if (nextDetailContext !== detailContext) {
     detailContext = nextDetailContext;
     detailPage = 1;
@@ -455,7 +455,7 @@ function buildViewContext(viewName) {
     query: queryStr,
     exploreState,
     detail: currentDetail,
-    detailRequested: viewName === 'day' || viewName === 'session',
+    detailRequested: viewName === 'day' || viewName === 'session' || viewName === 'track',
     normalizeYears: state.normalizeYears ?? false,
     month: state.calMonth?.month,
     comparePreset: state.comparePreset || 'equal_previous'
