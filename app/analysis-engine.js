@@ -1,8 +1,9 @@
 // Composition root shared by the browser worker and its Node integration tests.
 import { analyze } from '../src/analyze.js';
 import { parse } from '../src/parse/parse.js';
-import { derive } from '../src/aggregate/impl/derive.js';
+import { derive, selectDerived } from '../src/aggregate/impl/derive.js';
 import { originalSessionMembership } from '../src/aggregate/impl/sessions.js';
+import { getEventDetail } from './analysis-detail.js';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, countFiltered, emptyFilterState } from '../src/filters.js';
 import { fileBytes } from '../src/parse/adapters/file-bytes.js';
@@ -69,6 +70,12 @@ export function createAnalysisEngine() {
       }
       if (!ds) throw new Error('Cargá un historial antes de calcular estadísticas.');
       if (type === 'save') return save(ds);
+      if (type === 'dayDetail' || type === 'sessionDetail') {
+        const state = payload.state ?? emptyFilterState();
+        const indices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : null;
+        const selection = indices ? selectDerived(derived, indices) : derived;
+        return getEventDetail(ds, selection, tz, type === 'dayDetail' ? 'day' : 'session', payload.id, payload.page, payload.pageSize);
+      }
       if (type === 'filter') {
         const state = payload.state ?? emptyFilterState();
         const model = isFilterActive(state) ? await aggregateSelection(state, { onProgress: report }) : null;
