@@ -1,4 +1,3 @@
-// Run against the real app DOM and browser history, without external tooling.
 const frame = document.getElementById('app');
 const runButton = document.getElementById('run');
 const results = document.getElementById('results');
@@ -75,7 +74,10 @@ async function run() {
   assert(appWindow.location.hash === filteredHash, 'Saltar al contenido debe conservar la ruta y los filtros');
   assert(frame.contentDocument.activeElement === element('#main-content'), 'Saltar al contenido debe mover el foco');
   assert(kpiValue('Reproducciones') === '2', 'Saltar al contenido debe conservar las cifras');
-  element('.app-nav a[href="#/sessions"]').click();
+  const sessionsLink = [...frame.contentDocument.querySelectorAll('.app-nav a')]
+    .find(link => link.getAttribute('href').split('?')[0] === '#/sessions');
+  assert(sessionsLink, 'Falta el enlace a Sesiones');
+  sessionsLink.click();
   await waitFor(() => element('#view-root h1').textContent === 'Sesiones de escucha', 'abrir Sesiones');
   element('[data-preset="all"]').click();
   await waitFor(() => !element('#view-root').hidden && kpiValue('Sesiones') === '3', 'Todo en Sesiones');
@@ -101,8 +103,9 @@ async function run() {
   assert(kpiValue('Reproducciones') === '3', 'Un hash sin filtros debe restaurar las 3 reproducciones');
   element('[data-preset="4w"]').click();
   element('#cancel-processing').click();
-  assert(element('#view-app').hidden, 'Cancelar debe volver a la carga de archivos');
-  assert(!element('#view-home').hidden, 'Cancelar debe mostrar el inicio');
+  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '3', 'cancelación del filtro');
+  assert(!element('#view-app').hidden, 'Cancelar el filtro debe conservar el análisis');
+  assert(element('#view-home').hidden, 'Cancelar el filtro no debe volver al inicio');
   results.textContent = 'APROBADO: carga, filtros, Atrás, Adelante, comparación y cambios manuales del hash.';
 }
 
