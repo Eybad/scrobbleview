@@ -1034,7 +1034,7 @@ function exportCurrentExploreTable() {
     : [...current.albums.byId.values()];
   const exported = exportExploreTableCSV(pool, {
     metric: activeMetric,
-    totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.plays,
+    totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.records,
     query: exp.query,
     searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
     sortBy: exp.sortBy,
@@ -1120,7 +1120,7 @@ headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
             : [...current.albums.byId.values()];
           const qRes = queryCatalog(pool, {
             metric: activeMetric,
-            totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.plays,
+            totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.records,
             query: exp.query,
             searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
             sortBy: exp.sortBy,

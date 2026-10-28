@@ -1786,7 +1786,7 @@ export function exploreView(model, ctx = {}) {
     : tab === 'tracks' ? model.tracks.byId.values()
     : model.albums.byId.values();
 
-  const totalMetric = byMs ? model.totals.ms : model.totals.plays;
+  const totalMetric = byMs ? model.totals.ms : model.totals.records;
 
   const queryResult = queryCatalog(pool, {
     metric,

@@ -15,6 +15,7 @@
 - C01: la vista de comparación informa que el período B no está calculado; la comparación real queda pendiente en R7. `node --test`: 309 pruebas aprobadas, 0 fallidas. No se verificó en navegador.
 - C18: se actualizó el selector de Sesiones y la expectativa de cancelación de filtro del harness. `node --check browser-tests/navigation.js` aprobó; la ejecución en navegador, la cancelación de importación y la de exportación siguen pendientes.
 - C02 y C03, avance: regresos y retención recorren el orden UTC; los regresos se seleccionan por evento y el extremo histórico usa el máximo UTC. `node --test`: 310 pruebas aprobadas, 0 fallidas; falta verificar el flujo del motor y la cohorte filtrada.
+- C07, avance: Explorar y las opciones de exportación usan `totals.records` para cuotas por reproducciones. `node --test test/explore-view.test.js test/acceptance-etapa8.test.js`: 10 pruebas aprobadas; falta reconciliar la exportación real y su elegibilidad con la pantalla.
 - Siguiente tarea: completar R0 (harness) y R1 (cohorte, motor y denominadores). Los demás fallos del plan siguen pendientes de corrección y verificación integrada.
 - Las secciones históricas siguientes registran lo que se afirmó en cada etapa; no acreditan aceptación actual. La revisión posterior detectó integraciones incompletas y resultados incorrectos.
 

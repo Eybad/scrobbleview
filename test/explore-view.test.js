@@ -85,6 +85,16 @@ test('renderView: dispatches explore view correctly', () => {
   assert.ok(html.includes('data-explore-tab="artists"'));
 });
 
+test('explore view uses all records as the play share denominator', () => {
+  const model = createMockModel();
+  model.totals = { records: 4, ms: 240000 };
+  const artist = model.artists.byId.get(1);
+  artist.plays = 3;
+  model.artists.byId = new Map([[1, artist]]);
+  const html = exploreView(model, { metric: 'plays', exploreState: { query: 'Artist 01' } });
+  assert.ok(html.includes('75%'));
+});
+
 test('rankCardHTML: includes contextual access link to explore view', () => {
   const model = createMockModel();
   const html = rankCardHTML(model, { tab: 'artists', metric: 'ms' });
