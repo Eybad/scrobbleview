@@ -375,7 +375,9 @@ function buildViewContext(viewName) {
     metric: activeMetric,
     rankUI,
     query: queryStr,
-    exploreState
+    exploreState,
+    normalizeYears: state.normalizeYears ?? false,
+    month: state.calMonth?.month
   };
 }
 
@@ -1125,25 +1127,102 @@ appRoot.addEventListener('click', (e) => {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 });
 
-// Selector de rango sobre el calendario: toque = ese día (queda anclado);
-// shift+click = rango desde el día anclado hasta el tocado. El rango activo
-// aparece como chip; "Quitar filtros" lo limpia. En táctil solo hay día
-// simple: los rangos largos quedan cubiertos por Desde/Hasta.
+// Selector de rango e inspector sobre el calendario
 let calAnchor = null;
 appRoot.addEventListener('click', (e) => {
-  const rect = e.target.closest?.('rect[data-day]');
-  if (!rect || !appRoot.contains(rect)) return;
-  const day = Number(rect.dataset.day);
-  if (!Number.isFinite(day)) return;
-  if (e.shiftKey && calAnchor != null) {
-    const [a, b] = calAnchor <= day ? [calAnchor, day] : [day, calAnchor];
-    state.range = { from: a * 86400, to: b * 86400 + 86399 };
-    calAnchor = null;
-  } else {
-    calAnchor = day;
-    state.range = { from: day * 86400, to: day * 86400 + 86399 };
+  const dayEl = e.target.closest?.('[data-day]');
+  if (dayEl && appRoot.contains(dayEl)) {
+    const day = Number(dayEl.dataset.day);
+    if (Number.isFinite(day)) {
+      if (e.shiftKey && calAnchor != null) {
+        const [a, b] = calAnchor <= day ? [calAnchor, day] : [day, calAnchor];
+        state.range = { from: a * 86400, to: b * 86400 + 86399 };
+        calAnchor = null;
+        applyAndRenderView();
+        return;
+      }
+      calAnchor = day;
+      const iso = dayEl.dataset.date || new Date(day * 86400000).toISOString().slice(0, 10);
+      const valLabel = dayEl.dataset.label || dayEl.querySelector?.('title')?.textContent || dayEl.getAttribute?.('aria-label') || '';
+
+      const selDate = appRoot.querySelector('#cal-selected-date');
+      const selVal = appRoot.querySelector('#cal-selected-value');
+      const btnFilter = appRoot.querySelector('#btn-cal-filter-day');
+      const btnStart = appRoot.querySelector('#btn-cal-set-start');
+      const btnEnd = appRoot.querySelector('#btn-cal-set-end');
+      const fromInput = appRoot.querySelector('#cal-range-from');
+      const toInput = appRoot.querySelector('#cal-range-to');
+
+      if (selDate) selDate.textContent = iso;
+      if (selVal) selVal.textContent = valLabel ? `· ${valLabel}` : '';
+      if (btnFilter) btnFilter.disabled = false;
+      if (btnStart) btnStart.disabled = false;
+      if (btnEnd) btnEnd.disabled = false;
+      if (fromInput && !fromInput.value) fromInput.value = iso;
+      if (toInput && fromInput?.value && !toInput.value) toInput.value = iso;
+
+      appRoot.querySelectorAll('.cal-month-cell.is-selected').forEach((c) => c.classList.remove('is-selected'));
+      if (dayEl.classList.contains('cal-month-cell')) dayEl.classList.add('is-selected');
+    }
   }
-  applyAndRenderView();
+
+  const calAction = e.target.closest?.('[data-cal-action]');
+  if (calAction && appRoot.contains(calAction)) {
+    const act = calAction.dataset.calAction;
+    if (act === 'filter-day' && calAnchor != null) {
+      state.range = { from: calAnchor * 86400, to: calAnchor * 86400 + 86399 };
+      applyAndRenderView();
+      return;
+    }
+    if (act === 'set-start' && calAnchor != null) {
+      const fromInput = appRoot.querySelector('#cal-range-from');
+      if (fromInput) fromInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
+      return;
+    }
+    if (act === 'set-end' && calAnchor != null) {
+      const toInput = appRoot.querySelector('#cal-range-to');
+      if (toInput) toInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
+      return;
+    }
+    if (act === 'apply-range') {
+      const fromInput = appRoot.querySelector('#cal-range-from');
+      const toInput = appRoot.querySelector('#cal-range-to');
+      if (fromInput?.value && toInput?.value) {
+        const startSec = Math.floor(new Date(fromInput.value + 'T00:00:00Z').getTime() / 1000);
+        const endSec = Math.floor(new Date(toInput.value + 'T23:59:59Z').getTime() / 1000);
+        if (Number.isFinite(startSec) && Number.isFinite(endSec)) {
+          state.range = { from: Math.min(startSec, endSec), to: Math.max(startSec, endSec) };
+          applyAndRenderView();
+          return;
+        }
+      }
+    }
+  }
+
+  const calNav = e.target.closest?.('[data-cal-nav]');
+  if (calNav && appRoot.contains(calNav)) {
+    state.calMonth = {
+      year: Number(calNav.dataset.calYear),
+      month: Number(calNav.dataset.calMonth)
+    };
+    render();
+    return;
+  }
+
+  const scaleToggle = e.target.closest?.('[data-action="toggle-cal-scale"]');
+  if (scaleToggle && appRoot.contains(scaleToggle)) {
+    state.normalizeYears = scaleToggle.dataset.normalize === 'true';
+    render();
+    return;
+  }
+
+  const closeInspector = e.target.closest?.('[data-action="close-inspector"]');
+  if (closeInspector && appRoot.contains(closeInspector)) {
+    const card = closeInspector.closest?.('.chart-card');
+    const inspector = card?.querySelector('.chart-inspector');
+    if (inspector) inspector.hidden = true;
+    return;
+  }
 });
 
 window.addEventListener('resize', () => syncTallTables(appRoot), { passive: true });

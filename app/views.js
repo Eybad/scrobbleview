@@ -13,6 +13,7 @@ import { matchRangeShortcut, rangeChipLabel } from './filter-ui.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 import { queryCatalog } from '../src/query.js';
 import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsPickerHTML } from './catalog-table.js';
+import { calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML } from './calendar-ui.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -860,7 +861,7 @@ export function sessionsView(model, ctx = {}) {
     label: ['Madrugada', 'Mañana', 'Tarde', 'Noche'][i],
     value: s.byBlock.get(i) ?? 0
   }));
-  const startHour = [...s.startHour.entries()].sort((a, b) => a[0] - b[0]);
+  const startHour = Array.from({ length: 24 }, (_, h) => [h, s.startHour.get(h) ?? 0]);
   const monthPoints = fillMonths(sortedMonths(s.byMonth)).map((mi) => ({
     label: monthLabel(mi),
     y: s.byMonth.get(mi) ?? 0
@@ -1030,12 +1031,17 @@ export function calendarView(model, year, ctx = {}) {
     ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
     : null;
 
+  const daysMap = new Map(days.map((d) => [d.date, d]));
+  const currentMonth = ctx?.month ? Number(ctx.month) : 1;
+
   return `
     <header class="view-header">
       <p><a href="#/calendar">← Todos los años</a></p>
       <h1>Calendario ${esc(String(year))}</h1>
       <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin registros dentro del período observado · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
+    ${calendarInspectorHTML({ year, byMs })}
+    ${calendarMonthViewHTML({ year, month: currentMonth, daysMap, colorScale: makeScale(maxVal), byMs, dataRange })}
     ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(year))}">${calendarGrid({
       days,
       year,
@@ -1043,7 +1049,7 @@ export function calendarView(model, year, ctx = {}) {
       cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin registros'}`,
       dataRange,
       interactive: true
-    })}</div>` + heatLegend() + calendarTable(days, year, byMs))}
+    })}</div>` + heatLegend({ max: maxVal, unit: byMs ? 'tiempo' : 'reproducciones', format: valFmt }) + calendarTable(days, year, byMs))}
 `;
 }
 
@@ -1051,9 +1057,14 @@ export function calendarIndexView(model, ctx = {}) {
   const byMs = ctx?.metric ? ctx.metric === 'ms' : true;
   const valFmt = byMs ? fmtMs : fmtNum;
   const years = [...model.yearly.keys()].sort((a, b) => b - a);
+  const normalizeYears = Boolean(ctx?.normalizeYears);
+  const allDailyValues = [...model.daily.values()].map((v) => (byMs ? v.ms : v.plays));
+  const sharedMax = allDailyValues.length ? Math.max(...allDailyValues, 1) : 1;
+
   const dataRange = model.meta.firstTs != null
     ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
     : null;
+
   const yearGrid = (y) => {
     const days = [...model.daily.entries()]
       .filter(([d]) => civilFromDays(d).y === y)
@@ -1062,21 +1073,37 @@ export function calendarIndexView(model, ctx = {}) {
         const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
         return { date: iso, value: byMs ? v.ms : v.plays };
       });
-    const maxVal = Math.max(...days.map((d) => d.value), 1);
+    const yearMax = Math.max(...days.map((d) => d.value), 1);
+    const effectiveScale = normalizeYears ? makeScale(yearMax) : makeScale(sharedMax);
+    const legendMax = normalizeYears ? yearMax : sharedMax;
+
     return calendarGrid({
       days, year: y,
-      colorScale: makeScale(maxVal),
+      colorScale: effectiveScale,
       cellTitle: (d) => `${d.date}: ${d.value > 0 ? valFmt(d.value) : 'sin registros'}`,
       dataRange,
       interactive: true
-    }) + heatLegend() + calendarTable(days, y, byMs);
+    }) + heatLegend({ max: legendMax, unit: byMs ? 'tiempo' : 'reproducciones', format: valFmt }) + calendarTable(days, y, byMs);
   };
   const [last, ...prev] = years;
+  const latestYear = last ?? (years.length ? years[0] : new Date().getFullYear());
+  const latestDaysMap = new Map([...model.daily.entries()]
+    .filter(([d]) => civilFromDays(d).y === latestYear)
+    .map(([d, v]) => {
+      const c = civilFromDays(d);
+      const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
+      return [iso, { date: iso, value: byMs ? v.ms : v.plays, ms: v.ms, plays: v.plays }];
+    }));
+  const currentMonth = ctx?.month ? Number(ctx.month) : (new Date().getMonth() + 1);
+
   return `
     <header class="view-header">
       <h1>Calendario</h1>
       <p class="view-meta">${fmtNum(model.zeroDays.length)} días sin registros entre primera y última escucha · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
+    ${calendarScaleToggleHTML({ normalizeYears, maxValFormatted: valFmt(sharedMax) })}
+    ${calendarInspectorHTML({ year: latestYear, byMs })}
+    ${calendarMonthViewHTML({ year: latestYear, month: currentMonth, daysMap: latestDaysMap, colorScale: normalizeYears ? makeScale(Math.max(...[...latestDaysMap.values()].map((d) => d.value), 1)) : makeScale(sharedMax), byMs, dataRange })}
     ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${yearGrid(last)}</div>`, '', true) : ''}
     ${prev.map((y) => {
       const yd = model.yearly.get(y);

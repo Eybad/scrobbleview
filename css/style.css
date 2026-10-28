@@ -2397,3 +2397,246 @@ details.calendar-year summary:hover {
 .table-hint-link:hover {
   text-decoration: underline;
 }
+
+/* Etapa 4: Contrato de gráficos, inspector accesible y calendario táctil */
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-4) var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+
+.chart-card__header {
+  margin-bottom: var(--sp-3);
+}
+
+.chart-card__title {
+  font-size: var(--fs-lg);
+  margin: 0 0 var(--sp-1);
+}
+
+.chart-card__meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.chart-interactive-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.chart-inspector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.chart-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.chart-nav__status {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+  flex: 1;
+}
+
+.btn-step {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-step:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.calendar-scale-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--sp-4);
+  font-size: var(--fs-sm);
+}
+
+.calendar-inspector {
+  margin-bottom: var(--sp-4);
+}
+
+.calendar-inspector__head h2 {
+  font-size: var(--fs-md);
+  margin-bottom: var(--sp-1);
+}
+
+.calendar-inspector__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.calendar-inspector__body {
+  margin-top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.calendar-inspector__selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.calendar-inspector__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.calendar-inspector__range-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
+
+.calendar-inspector__range-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.calendar-inspector__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.calendar-inspector__field input[type="date"] {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: var(--sp-1) var(--sp-2);
+  min-height: 38px;
+}
+
+.calendar-month {
+  margin-bottom: var(--sp-4);
+}
+
+.calendar-month__header {
+  margin-bottom: var(--sp-3);
+}
+
+.calendar-month__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.calendar-month__title {
+  font-size: var(--fs-md);
+  margin: 0;
+}
+
+.calendar-month__grid-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.calendar-month__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+
+.cal-month-head-col {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: var(--sp-1);
+}
+
+.cal-month-day-cell {
+  padding: 0;
+  text-align: center;
+}
+
+.cal-month-cell {
+  width: 100%;
+  min-width: 38px;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+}
+
+.cal-month-cell:hover,
+.cal-month-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.cal-month-cell.is-selected {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+.cal-month-empty {
+  background: transparent;
+}
