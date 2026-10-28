@@ -92,7 +92,7 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 | **3** | Catálogo completo y tablas reutilizables | **Completada** |
 | **4** | Gráficos y calendario accesibles | **Completada** |
 | **5** | Comparación A/B y evolución | **Completada** |
-| **6** | Día, sesiones y secuencias explicables | Pendiente |
+| **6** | Día, sesiones y secuencias explicables | **Completada** |
 | **7** | Descubrimiento, regresos y hábitos longitudinales | Pendiente |
 | **8** | Exportación, personalización y cierre de calidad | Pendiente |
 
@@ -151,6 +151,9 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 - **A17**: Escala compartida entre años por defecto en el índice de calendarios y modo explícito de normalización anual identificada.
 - **A18**: Comparación A/B con base cero sin `Infinity` ni `NaN` (`nuevo`/`0,0%`), fechas y bases explícitas, y aviso visible ante ventanas que exceden el intervalo registrado.
 - **A19**: Reconciliación exacta de series diaria, semanal y mensual sin duplicación ni pérdida de eventos en transiciones DST, con banderas de períodos parciales identificadas.
+- **A20**: Canción compartida por álbumes distingue totales globales agrupados de atribución por álbum específico (`trackView` con selector de alcance y tabla de álbumes asociados).
+- **A21**: Adyacencia en selección, consecutivas en historial original y dentro de sesiones originales diferenciadas en transiciones y rachas (`maxRun`), con probabilidades condicionadas en transiciones.
+- **A22**: Sesiones fusionadas por intervalos largos preservan membresía exacta, totales coherentes y vista individual `sessionView` con inicio/fin estimados, pausas y advertencia descriptiva.
 
 ## 9. Detalle de Cambios — Etapa 4
 
@@ -167,10 +170,25 @@ Ninguno de los siguientes componentes, métricas o capacidades puede ser removid
 3. **Ranking comparativo de entidades y transiciones**: Cálculo de variaciones ordinales, permanencias, entradas (`Entrada`), salidas (`Salida`) y diferencias de cuota analítica expresadas en puntos porcentuales (`pp`).
 4. **Vista `Comparar` (`app/compare-view.js`, `app/main.js`, `app/views.js`)**: Incorporación de sección `Comparar` (`#/v1/compare`), navegación dedicada en `navHTML`, selector de presets, resumen de rangos, grid de KPIs comparados y tabla de transiciones con tabla fallback accesible.
 
-## 11. Siguiente Tarea Exacta
+## 11. Detalle de Cambios — Etapa 6
 
-- Iniciar **Etapa 6 — Día, sesiones y secuencias explicables**:
-  1. Diseñar vistas de detalle de día y ficha de sesión individual bajo demanda desde el Worker sin hinchar el modelo global.
-  2. Implementar secuencia paginada de eventos y totales de sesión (inicio/fin estimados, pausas, repeticiones).
-  3. Diferenciar atribución de álbum vs. totales agrupados en canciones.
-  4. Incorporar transiciones y rachas con modalidades: adyacencia seleccionada, consecutivas en historial original y dentro de sesiones originales.
+1. **Tres modalidades para rachas y transiciones (`src/aggregate/impl/derive.js`, `src/aggregate/impl/transitions.js`, `src/aggregate/impl/behavior.js`, `src/aggregate/aggregate.js`)**:
+   - `utcPositions` derivado para trazar la posición cronológica original exacta de cada evento.
+   - Seguimiento paralelo en tres modalidades: `selection` (adyacencia en subconjunto filtrado), `originalConsecutive` (adyacencia estricta en el historial original donde ambos cumplen el filtro) y `originalSession` (adyacencia original perteneciente a la misma sesión calculada antes de filtrar).
+   - Cálculo de probabilidad observada por artista de origen (`baseCounts`, `prob`) en transiciones (criterio A21).
+2. **Atribución de álbum vs. canción agrupada (`app/views.js`)**:
+   - En `trackView`: si se accede desde un álbum (`ctx.albumOrigin` o parámetro `?album=<ak>`), se presenta aviso de alcance con cifras específicas en ese álbum y enlace a los totales de la canción agrupada.
+   - Tabla de atribución por álbum mostrando todas las apariciones asociadas con sus reproducciones, tiempo y cuota (criterio A20).
+3. **Ficha de sesión individual (`sessionView` en `app/views.js`, `app/routes.js`)**:
+   - Detalle accesible para `#/v1/session/:id` (y enlace desde rankings de sesiones más largas y con más reproducciones).
+   - Exhibición de inicio y fin estimados, duración estimada transcurrida, tiempo sumado, estimación de pausas, canciones y artistas más reproducidos, y advertencia metodológica explícita sobre estimación de tiempos y solapamientos (criterio A22).
+4. **Detalle de día (`dayView` en `app/views.js`, `app/routes.js`)**:
+   - Detalle para `#/v1/day/:date` con totales de reproducciones, tiempo, canciones y artistas del día, sesiones ocurridas y botón de acción para filtrar por el día.
+
+## 12. Siguiente Tarea Exacta
+
+- Iniciar **Etapa 7 — Descubrimiento, regresos y hábitos longitudinales**:
+  1. Primeras apariciones históricas de canciones y artistas dentro del período seleccionado (independientes de filtros temporales).
+  2. Detección y lista de "Regresos" tras pausas de 30/90/180 días calculados sobre la secuencia original.
+  3. Retorno acumulado en 30/90 días con bandera de "seguimiento insuficiente" para entidades cuya primera aparición ocurre cerca del final del dataset cargado (criterios A23, A24).
+  4. Evolución mensual de concentración (número efectivo de entidades, Top 1/5/10) y tasas de salto/aleatorio con denominadores conocidos.
