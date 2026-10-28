@@ -32,7 +32,6 @@ test('parseRoute: recognizes versioned semantic routes and legacy routes', () =>
 });
 
 test('A12: semantic routes resolve the same entity regardless of file order / internal IDs', () => {
-  // Simulating dataset 1 (Radiohead seen first -> id 1, Daft Punk seen second -> id 2)
   const modelOrder1 = {
     artists: {
       byId: new Map([
@@ -53,7 +52,6 @@ test('A12: semantic routes resolve the same entity regardless of file order / in
     }
   };
 
-  // Simulating dataset 2 (same files loaded in reverse order -> Daft Punk gets id 1, Radiohead gets id 2)
   const modelOrder2 = {
     artists: {
       byId: new Map([
@@ -80,7 +78,6 @@ test('A12: semantic routes resolve the same entity regardless of file order / in
 
   assert.equal(resolvedInOrder1.entity.name, 'Radiohead');
   assert.equal(resolvedInOrder2.entity.name, 'Radiohead');
-  // Internal IDs differ, but semantic resolution resolves the EXACT same artist!
   assert.equal(resolvedInOrder1.id, 1);
   assert.equal(resolvedInOrder2.id, 2);
 
@@ -88,7 +85,6 @@ test('A12: semantic routes resolve the same entity regardless of file order / in
   assert.equal(resolveRoute(semanticTrackRoute, modelOrder1).entity.name, 'Creep');
   assert.equal(resolveRoute(semanticTrackRoute, modelOrder2).entity.name, 'Creep');
 
-  // Conversely, legacy route #/artist/1 blindly resolves to different entities:
   const legacyRoute = parseRoute('#/artist/1');
   assert.equal(resolveRoute(legacyRoute, modelOrder1).entity.name, 'Radiohead');
   assert.equal(resolveRoute(legacyRoute, modelOrder2).entity.name, 'Daft Punk');
@@ -123,4 +119,11 @@ test('formatSemanticRoute: correctly formats semantic URLs with encoding and que
     formatSemanticRoute('dashboard', null, 'm=ms'),
     '#/v1/dashboard?m=ms'
   );
+});
+
+test('semantic routes preserve isolated surrogates without colliding with literal escape text', () => {
+  const names = ['A\ud800B', 'A%uD800B', 'A\udc00B', 'A😀B', 'A/B?C'];
+  const routes = names.map(name => formatSemanticRoute('artist', name));
+  assert.equal(new Set(routes).size, names.length);
+  assert.deepEqual(routes.map(route => parseRoute(route).params.artist), names);
 });

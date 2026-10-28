@@ -10,12 +10,29 @@
 // Manejo de rutas legadas (#/artist/:id, #/track/:tk, #/album/:id) y recuperación de no encontrados.
 
 export function encodeRouteSegment(str) {
-  return encodeURIComponent(String(str ?? ''));
+  const value = String(str ?? '');
+  let encoded = '';
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < value.length) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        encoded += encodeURIComponent(value.slice(i, i + 2));
+        i++;
+        continue;
+      }
+    }
+    encoded += code >= 0xd800 && code <= 0xdfff
+      ? `%u${code.toString(16).toUpperCase()}` : encodeURIComponent(value[i]);
+  }
+  return encoded;
 }
 
 export function decodeRouteSegment(str) {
   try {
-    return decodeURIComponent(String(str ?? ''));
+    return String(str ?? '').split(/(%u[dD][89aAbBcCdDeEfF][0-9a-fA-F]{2})/)
+      .map(part => /^%u[dD][89aAbBcCdDeEfF][0-9a-fA-F]{2}$/.test(part)
+        ? String.fromCharCode(Number.parseInt(part.slice(2), 16)) : decodeURIComponent(part)).join('');
   } catch (_) {
     return String(str ?? '');
   }
