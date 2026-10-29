@@ -60,9 +60,9 @@ export function paginationControlsHTML(queryResult) {
         Mostrando ${startRow}–${endRow} de ${totalMatches} ${totalMatches === 1 ? 'resultado' : 'resultados'}
       </div>
       <div class="pagination-actions">
-        <button type="button" class="btn btn-sm btn-page" data-page="${page - 1}" ${prevDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página anterior">← Anterior</button>
+        <button type="button" class="btn btn-sm btn-page" data-page="${page - 1}" data-page-action="previous" ${prevDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página anterior">← Anterior</button>
         <span class="pagination-current">Página ${page} de ${totalPages}</span>
-        <button type="button" class="btn btn-sm btn-page" data-page="${page + 1}" ${nextDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página siguiente">Siguiente →</button>
+        <button type="button" class="btn btn-sm btn-page" data-page="${page + 1}" data-page-action="next" ${nextDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página siguiente">Siguiente →</button>
         <label class="pagination-size-label">
           <span>Filas:</span>
           <select class="pagination-select" data-page-size aria-label="Filas por página">

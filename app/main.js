@@ -817,18 +817,33 @@ function wireExploreView() {
     return new URLSearchParams(q ? q.replace(/^\?/, '') : '');
   };
 
-  const updateExploreQuery = (updater) => {
+  const updateExploreQuery = (updater, focusSelector = null, selection = null) => {
+    const tableScroll = card.querySelector('.table-scroll');
+    const scrollLeft = tableScroll?.scrollLeft ?? 0;
+    const scrollTop = tableScroll?.scrollTop ?? 0;
+    const columnsOpen = card.querySelector('.col-picker')?.open ?? false;
     const params = getExploreQuery();
     updater(params);
     const [, id] = parseHash();
     const queryStr = params.toString() ? `?${params.toString()}` : '';
     const hash = formatSemanticRoute('explore', null, queryStr);
-    history.replaceState(null, '', hash);
+    history.replaceState(history.state, '', hash);
+    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric });
     const root = document.getElementById('view-root');
     if (root && current) {
       const viewCtx = buildViewContext('explore');
       root.innerHTML = renderView('explore', current, id, viewCtx);
       wireView();
+      const nextScroll = root.querySelector('.table-scroll');
+      if (nextScroll) { nextScroll.scrollLeft = scrollLeft; nextScroll.scrollTop = scrollTop; }
+      const columns = root.querySelector('.col-picker');
+      if (columns) columns.open = columnsOpen;
+      const target = focusSelector && root.querySelector(focusSelector);
+      const focusTarget = !focusSelector ? null : target && !target.disabled ? target : root.querySelector('[data-explore-search]');
+      focusTarget?.focus({ preventScroll: true });
+      if (selection && target && typeof target.setSelectionRange === 'function') {
+        target.setSelectionRange(selection.start, selection.end, selection.direction);
+      }
     }
   };
 
@@ -842,33 +857,44 @@ function wireExploreView() {
         p.delete('dir');
         p.delete('minPlays');
         p.delete('minMonths');
-      });
+      }, `[data-explore-tab="${tab}"]`);
     });
+  });
+
+  const tablist = card.querySelector('[role="tablist"][aria-label="Explorar catálogo"]');
+  tablist?.addEventListener('keydown', (event) => {
+    const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+    const index = tabs.indexOf(document.activeElement);
+    if (index < 0) return;
+    const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length]
+      : event.key === 'ArrowLeft' ? tabs[(index - 1 + tabs.length) % tabs.length]
+        : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : null;
+    if (!next) return;
+    event.preventDefault();
+    next.click();
   });
 
   let exploreSearchTimer;
   const searchInput = card.querySelector('[data-explore-search]');
   if (searchInput) {
-    searchInput.addEventListener('input', () => {
+    let composing = false;
+    const scheduleSearch = () => {
       clearTimeout(exploreSearchTimer);
-      const v = searchInput.value;
-      const start = searchInput.selectionStart;
-      const end = searchInput.selectionEnd;
       exploreSearchTimer = setTimeout(() => {
+        if (!searchInput.isConnected) return;
+        const v = searchInput.value;
+        const wasFocused = document.activeElement === searchInput;
+        const selection = { start: searchInput.selectionStart, end: searchInput.selectionEnd, direction: searchInput.selectionDirection };
         updateExploreQuery((p) => {
-          if (v.trim()) p.set('q', v.trim());
+          if (v) p.set('q', v);
           else p.delete('q');
           p.delete('page');
-        });
-        const again = card.querySelector('[data-explore-search]');
-        if (again) {
-          again.focus({ preventScroll: true });
-          if (start != null && end != null) {
-            again.setSelectionRange(start, end);
-          }
-        }
+        }, wasFocused ? '[data-explore-search]' : null, wasFocused && selection.start != null && selection.end != null ? selection : null);
       }, 200);
-    });
+    };
+    searchInput.addEventListener('compositionstart', () => { composing = true; clearTimeout(exploreSearchTimer); });
+    searchInput.addEventListener('compositionend', () => { composing = false; scheduleSearch(); });
+    searchInput.addEventListener('input', (event) => { if (!composing && !event.isComposing) scheduleSearch(); });
   }
 
   card.querySelectorAll('[data-clear-search]').forEach((btn) => {
@@ -876,7 +902,7 @@ function wireExploreView() {
       updateExploreQuery((p) => {
         p.delete('q');
         p.delete('page');
-      });
+      }, '[data-explore-search]');
     });
   });
 
@@ -888,7 +914,7 @@ function wireExploreView() {
         p.set('sort', sort);
         p.set('dir', dir);
         p.delete('page');
-      });
+      }, `[data-sort="${sort}"]`);
     });
   });
 
@@ -898,7 +924,7 @@ function wireExploreView() {
       if (!page || page < 1) return;
       updateExploreQuery((p) => {
         p.set('page', String(page));
-      });
+      }, `[data-page-action="${btn.dataset.pageAction}"]`);
     });
   });
 
@@ -909,7 +935,7 @@ function wireExploreView() {
       updateExploreQuery((p) => {
         p.set('pageSize', String(size));
         p.delete('page');
-      });
+      }, '[data-page-size]');
     });
   }
 
@@ -917,7 +943,7 @@ function wireExploreView() {
     btn.addEventListener('click', () => {
       const d = btn.dataset.density;
       if (typeof localStorage !== 'undefined') localStorage.setItem('scrobbleview:density', d);
-      updateExploreQuery(() => {});
+      updateExploreQuery(() => {}, `[data-density="${d}"]`);
     });
   });
 
@@ -927,12 +953,9 @@ function wireExploreView() {
       const [, , q] = parseHash();
       const p = new URLSearchParams(q ? q.replace(/^\?/, '') : '');
       const tab = p.get('tab') || 'artists';
-      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(`scrobbleview:cols:${tab}`) : null;
-      const set = stored ? new Set(JSON.parse(stored)) : new Set();
-      if (chk.checked) set.add(col);
-      else set.delete(col);
+      const set = new Set([...card.querySelectorAll('[data-col-toggle]:checked')].map(input => input.dataset.colToggle));
       if (typeof localStorage !== 'undefined') localStorage.setItem(`scrobbleview:cols:${tab}`, JSON.stringify([...set]));
-      updateExploreQuery(() => {});
+      updateExploreQuery(() => {}, `[data-col-toggle="${col}"]`);
     });
   });
 
@@ -942,7 +965,7 @@ function wireExploreView() {
       const p = new URLSearchParams(q ? q.replace(/^\?/, '') : '');
       const tab = p.get('tab') || 'artists';
       if (typeof localStorage !== 'undefined') localStorage.removeItem(`scrobbleview:cols:${tab}`);
-      updateExploreQuery(() => {});
+      updateExploreQuery(() => {}, '[data-reset-cols]');
     });
   });
 
@@ -965,7 +988,7 @@ function wireExploreView() {
       updateExploreQuery((p) => {
         p.set('minPlays', String(val));
         p.delete('page');
-      });
+      }, '[data-min-plays]');
     });
   }
 
@@ -976,7 +999,7 @@ function wireExploreView() {
       updateExploreQuery((p) => {
         p.set('minMonths', String(val));
         p.delete('page');
-      });
+      }, '[data-min-months]');
     });
   }
 

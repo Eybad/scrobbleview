@@ -106,7 +106,23 @@ async function run() {
   await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '3', 'cancelación del filtro');
   assert(!element('#view-app').hidden, 'Cancelar el filtro debe conservar el análisis');
   assert(element('#view-home').hidden, 'Cancelar el filtro no debe volver al inicio');
-  results.textContent = 'APROBADO: carga, filtros, Atrás, Adelante, comparación y cambios manuales del hash.';
+  const exploreLink = [...frame.contentDocument.querySelectorAll('.app-nav a')]
+    .find(link => link.getAttribute('href').split('?')[0] === '#/explore');
+  assert(exploreLink, 'Falta el enlace a Explorar');
+  exploreLink.click();
+  await waitFor(() => Boolean(frame.contentDocument.querySelector('[data-explore-search]')), 'abrir Explorar');
+  const search = element('[data-explore-search]');
+  search.focus();
+  search.value = 'Synthetic artist';
+  search.setSelectionRange(4, 4);
+  search.dispatchEvent(new appWindow.Event('input', { bubbles: true }));
+  await waitFor(() => frame.contentDocument.querySelector('[data-explore-search]') !== search, 'buscar en Explorar');
+  const updatedSearch = element('[data-explore-search]');
+  assert(frame.contentDocument.activeElement === updatedSearch, 'La búsqueda debe conservar el foco');
+  assert(updatedSearch.selectionStart === 4 && updatedSearch.selectionEnd === 4, 'La búsqueda debe conservar la posición del cursor');
+  element('[data-sort="name"]').click();
+  assert(frame.contentDocument.activeElement === element('[data-sort="name"]'), 'Ordenar debe conservar el foco');
+  results.textContent = 'APROBADO: carga, filtros, historial, cancelación y búsqueda en Explorar.';
 }
 
 runButton.addEventListener('click', async () => {
