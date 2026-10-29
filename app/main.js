@@ -9,7 +9,7 @@ import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText
 import { exportExploreTableCSV, exportFilename } from '../src/export.js';
 import { queryCatalog } from '../src/query.js';
 import { describeCatalogQuery, catalogOrderLabel } from './catalog-query.js';
-import { esc, fmtNum, fmtMs } from '../src/charts.js';
+import { esc, fmtNum, fmtMs, lineChart, barChart } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
@@ -109,6 +109,21 @@ function chartPoints(card) {
   } catch {
     return [];
   }
+}
+
+function resizeContractCharts() {
+  appRoot.querySelectorAll('.chart-card[data-chart-type="line"], .chart-card[data-chart-type="bar"]').forEach((card) => {
+    const svg = card.querySelector('svg.chart');
+    const chart = card.dataset.chartType;
+    const width = Math.floor(svg?.parentElement?.clientWidth ?? 0);
+    const points = chartPoints(card);
+    if (!svg || width <= 0 || points.length === 0) return;
+    const format = card.dataset.chartUnit === 'tiempo escuchado' ? fmtMs : fmtNum;
+    const markup = chart === 'line'
+      ? lineChart({ points: points.map((point) => ({ label: point.label, y: point.value })), format, width })
+      : barChart({ data: points.map((point) => ({ label: point.label, value: point.value })), format, width, showValue: svg.querySelector('.chart-value') != null });
+    svg.outerHTML = markup;
+  });
 }
 
 function selectChartPoint(card, index) {
@@ -666,6 +681,7 @@ function render() {
   }
   const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
   appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
+  resizeContractCharts();
   restoreChartSelections();
   restoreCalendarInspector();
   updateCacheToast();
@@ -1809,4 +1825,8 @@ appRoot.addEventListener('change', (e) => {
   analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
 });
 
-window.addEventListener('resize', () => syncTallTables(appRoot), { passive: true });
+window.addEventListener('resize', () => {
+  resizeContractCharts();
+  restoreChartSelections();
+  syncTallTables(appRoot);
+}, { passive: true });

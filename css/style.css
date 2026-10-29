@@ -1298,6 +1298,20 @@ td a:hover {
   min-width: 480px;
 }
 
+.chart-card[data-chart-type="line"] .chart-scroll--bar svg,
+.chart-card[data-chart-type="bar"] .chart-scroll--bar svg {
+  width: 100%;
+  min-width: 0;
+}
+
+.chart-card[data-chart-type="line"] .chart-scroll--bar,
+.chart-card[data-chart-type="bar"] .chart-scroll--bar {
+  overflow: hidden;
+  padding-bottom: 0;
+  scrollbar-gutter: auto;
+  background: none;
+}
+
 .chart-scroll--cal svg {
   min-width: 620px;
 }

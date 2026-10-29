@@ -167,7 +167,7 @@ export function renderChartWithContract(contract, chartSvg) {
     shareText: showShare && total > 0 ? `${((point.value / total) * 100).toFixed(1).replace('.', ',')}%` : ''
   })));
 
-  return `<div class="chart-card" data-chart-id="${esc(id)}" data-chart-type="${esc(chartType)}" data-chart-points="${esc(pointData)}">
+  return `<div class="chart-card" data-chart-id="${esc(id)}" data-chart-type="${esc(chartType)}" data-chart-unit="${esc(unit)}" data-chart-points="${esc(pointData)}">
     <div class="chart-card__header">
       <h3 class="chart-card__title">${esc(title)}</h3>
       ${metaHtml}

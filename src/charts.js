@@ -118,6 +118,13 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
   const labelH = 18;
   const topPad = showValue ? 16 : 6;
   const plotH = height - labelH - topPad;
+  const minLabelGap = data.reduce((maxGap, d) => Math.max(maxGap, String(d.label ?? '').length * 7 + 8), 1);
+  const labelStep = Math.max(1, Math.ceil(minLabelGap / slot));
+  const labelIndices = [];
+  for (let i = 0; i < n; i += labelStep) labelIndices.push(i);
+  while (labelIndices.length > 1 && n - 1 - labelIndices[labelIndices.length - 1] < Math.ceil(minLabelGap / slot)) labelIndices.pop();
+  if (labelIndices.at(-1) !== n - 1) labelIndices.push(n - 1);
+  const visibleLabels = new Set(labelIndices);
   const bars = data.map((d, i) => {
     const h = Math.max(1, (d.value / max) * plotH);
     const x = i * slot + (slot - barW) / 2;
@@ -133,7 +140,7 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
     return `<g data-chart-index="${i}" class="chart-point"><title>${esc(title)}</title>
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${accent}" rx="2"/>
       ${value}
-      <text x="${(x + barW / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="12">${label}</text>
+      ${visibleLabels.has(i) ? `<text x="${(x + barW / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="12">${label}</text>` : ''}
     </g>`;
   }).join('');
   const aria = `Gráfico de barras: ${data.map((d) => `${d.label}: ${format(d.value)}`).join(', ')}`;
