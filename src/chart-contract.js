@@ -8,6 +8,9 @@ export function createChartContract({
   range = '',
   data = [],
   format = fmtNum,
+  showShare = true,
+  chartType = 'line',
+  pageSize = 25,
   emptyNotice = 'Sin datos disponibles para esta visualización.'
 } = {}) {
   const points = data.map((d, i) => {
@@ -35,6 +38,9 @@ export function createChartContract({
     unit,
     base,
     range,
+    showShare,
+    chartType,
+    pageSize,
     points,
     total,
     max,
@@ -46,25 +52,34 @@ export function createChartContract({
 }
 
 export function chartDataTableHTML(contract) {
-  const { title, unit, points, format, total } = contract;
+  const { title, unit, points, format, total, showShare, pageSize } = contract;
   if (!points || points.length === 0) return '';
 
   const hasDates = points.some((p) => p.date != null);
   const caption = `${title}${unit ? ` (${unit})` : ''}`;
 
   let rowsHtml = '';
-  for (const p of points) {
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
     const pct = total > 0 ? ((p.value / total) * 100).toFixed(1).replace('.', ',') : '0,0';
     const dateCell = hasDates ? `<td>${esc(p.date || '—')}</td>` : '';
-    rowsHtml += `<tr>
+    rowsHtml += `<tr data-chart-row="${i}"${i >= pageSize ? ' hidden' : ''}>
       <th scope="row">${esc(p.label)}</th>
       ${dateCell}
       <td class="n">${esc(format(p.value))}</td>
-      <td class="n">${pct}%</td>
+      ${showShare ? `<td class="n">${pct}%</td>` : ''}
     </tr>`;
   }
 
   const dateHeader = hasDates ? '<th scope="col">Fecha</th>' : '';
+  const shareHeader = showShare ? '<th scope="col" class="n">Cuota</th>' : '';
+  const pagination = points.length > pageSize
+    ? `<div class="chart-table-controls" data-chart-table="${esc(contract.id)}" data-page-size="${pageSize}" data-page="0">
+        <button type="button" class="btn btn-secondary" data-chart-page="${esc(contract.id)}" data-dir="-1" disabled>Anterior</button>
+        <span class="chart-table-status" aria-live="polite">Mostrando 1–${pageSize} de ${points.length}</span>
+        <button type="button" class="btn btn-secondary" data-chart-page="${esc(contract.id)}" data-dir="1">Siguiente</button>
+      </div>`
+    : '';
 
   return `<details class="table-fallback">
     <summary>Ver como tabla</summary>
@@ -76,7 +91,7 @@ export function chartDataTableHTML(contract) {
             <th scope="col">Etiqueta</th>
             ${dateHeader}
             <th scope="col" class="n">Valor${unit ? ` (${esc(unit)})` : ''}</th>
-            <th scope="col" class="n">Cuota</th>
+            ${shareHeader}
           </tr>
         </thead>
         <tbody>
@@ -84,11 +99,12 @@ export function chartDataTableHTML(contract) {
         </tbody>
       </table>
     </div>
+    ${pagination}
   </details>`;
 }
 
 export function renderChartWithContract(contract, chartSvg) {
-  const { id, title, unit, base, range, isEmpty, emptyNotice } = contract;
+  const { id, title, unit, base, range, isEmpty, emptyNotice, points, format, total, showShare, chartType } = contract;
 
   if (isEmpty) {
     return `<div class="chart-card" data-chart-id="${esc(id)}">
@@ -108,8 +124,15 @@ export function renderChartWithContract(contract, chartSvg) {
     : '';
 
   const tableHtml = chartDataTableHTML(contract);
+  const pointData = JSON.stringify(points.map((point) => ({
+    label: point.label,
+    date: point.date,
+    value: point.value,
+    valueText: format(point.value),
+    shareText: showShare && total > 0 ? `${((point.value / total) * 100).toFixed(1).replace('.', ',')}%` : ''
+  })));
 
-  return `<div class="chart-card" data-chart-id="${esc(id)}">
+  return `<div class="chart-card" data-chart-id="${esc(id)}" data-chart-type="${esc(chartType)}" data-chart-points="${esc(pointData)}">
     <div class="chart-card__header">
       <h3 class="chart-card__title">${esc(title)}</h3>
       ${metaHtml}
@@ -127,7 +150,7 @@ export function renderChartWithContract(contract, chartSvg) {
         </div>
       </div>
       <div class="chart-nav" role="toolbar" aria-label="Navegación de puntos de ${esc(title)}">
-        <button type="button" class="btn-step btn-step--prev" data-chart-step="${esc(id)}" data-dir="-1" aria-label="Punto anterior">‹</button>
+        <button type="button" class="btn-step btn-step--prev" data-chart-step="${esc(id)}" data-dir="-1" aria-label="Punto anterior" disabled>‹</button>
         <span class="chart-nav__status" id="nav-status-${esc(id)}">Tocar o usar flechas para inspeccionar</span>
         <button type="button" class="btn-step btn-step--next" data-chart-step="${esc(id)}" data-dir="1" aria-label="Punto siguiente">›</button>
       </div>

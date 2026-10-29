@@ -17,6 +17,7 @@ import { calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML }
 import { compareView } from './compare-view.js';
 import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 import { describeCatalogQuery } from './catalog-query.js';
+import { createChartContract, renderChartWithContract } from '../src/chart-contract.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -262,6 +263,22 @@ function nextMonth(mi) {
 // focable con nombre: el scroll horizontal es inalcanzable por teclado sin él.
 function scrollChart(svg, label) {
   return svg ? `<div class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label="${esc(label)}">${svg}</div>` : '';
+}
+
+function contractedLineChart({ id, title, points, format, unit, base }) {
+  const range = points.length ? `${points[0].label} → ${points[points.length - 1].label}` : '';
+  const contract = createChartContract({
+    id,
+    title,
+    unit,
+    base,
+    range,
+    data: points.map((point) => ({ label: point.label, date: point.date, value: point.y })),
+    format,
+    showShare: false,
+    chartType: 'line'
+  });
+  return renderChartWithContract(contract, scrollChart(lineChart({ points, format }), title));
 }
 
 // Rellena los meses huecos entre el primero y el último (índices YYYYMM):
@@ -552,7 +569,11 @@ export function dashboard(model, ctx = {}) {
     label: monthLabel(mi),
     y: model.monthly.get(mi)?.[byMs ? 'ms' : 'plays'] ?? 0
   }));
-  const evolution = lineChart({ points: monthly, format: valFmt });
+  const evolution = contractedLineChart({
+    id: 'dashboard-monthly', title: 'Evolución mensual', points: monthly, format: valFmt,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'duración conocida' : 'eventos registrados'
+  });
 
   const dist = hbarChart({
     rows: t.msDist.map((b) => ({ label: b.label, value: b.count })),
@@ -621,7 +642,7 @@ export function dashboard(model, ctx = {}) {
     ${card('Récords', recordsGridHTML(model, ctx))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
-      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
+      ${evolution}
       ${card('Duración de reproducciones', dist)}
     </div>
     ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
@@ -712,9 +733,12 @@ export function artistView(model, ar, ctx = {}) {
     .filter((x) => x.from === ar || x.to === ar)
     .slice(0, transLimit);
 
-  const evolution = lineChart({
+  const evolution = contractedLineChart({
+    id: 'artist-monthly', title: 'Evolución mensual',
     points: monthlySeries(byMs ? model.monthlyArtistMs : model.monthlyArtistPlays, ar),
-    format: valFmt
+    format: valFmt,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'duración conocida de este artista' : 'reproducciones de este artista'
   });
 
   const albumRows = [...a.albums]
@@ -757,7 +781,7 @@ export function artistView(model, ar, ctx = {}) {
       { label: 'Última escucha', value: fmtLocal(a.lastTs) }
     ])}
     <div class="grid-2">
-      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
+      ${evolution}
       ${cardWithLimit('Tus canciones de este artista', 'artist-tracks', tracksLimit, rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk })), {
         valueFmt: valFmt,
         subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
@@ -824,9 +848,12 @@ export function trackView(model, tk, ctx = {}) {
     .join(' · ');
 
   const run = model.maxRun?.get ? (model.maxRun.get(tk) ?? 0) : 0;
-  const evolution = lineChart({
+  const evolution = contractedLineChart({
+    id: 'track-monthly', title: 'Evolución mensual',
     points: monthlySeries(byMs ? model.monthlyTrackMs : model.monthlyTrackPlays, tk),
-    format: byMs ? fmtMs : fmtNum
+    format: byMs ? fmtMs : fmtNum,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'duración conocida de esta canción' : 'reproducciones de esta canción'
   });
 
   const scopeNotice = originAlbum && originStats
@@ -888,7 +915,7 @@ export function trackView(model, tk, ctx = {}) {
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
     ])}
     <div class="grid-2">
-      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
+      ${evolution}
       ${albumsCard}
     </div>`;
 }
@@ -909,9 +936,12 @@ export function albumView(model, ak, ctx = {}) {
     .sort((x, y) => (byMs ? y.ms - x.ms || y.plays - x.plays : y.plays - x.plays || y.ms - x.ms))
     .slice(0, tracksLimit)
     .map((tr) => ({ name: model.tracks.byId.get(tr.tk).name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk }));
-  const evolution = lineChart({
+  const evolution = contractedLineChart({
+    id: 'album-monthly', title: 'Evolución mensual',
     points: albumSeries(model, al.monthly, evoByMs ? 'ms' : 'plays'),
-    format: evoByMs ? fmtMs : fmtNum
+    format: evoByMs ? fmtMs : fmtNum,
+    unit: evoByMs ? 'tiempo escuchado' : 'reproducciones',
+    base: evoByMs ? 'duración conocida de este álbum' : 'reproducciones de este álbum'
   });
   return `
     <header class="view-header">
@@ -930,7 +960,7 @@ export function albumView(model, ak, ctx = {}) {
       { label: 'Última escucha', value: fmtLocal(al.lastTs) }
     ])}
     <div class="grid-2">
-      ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
+      ${evolution}
       ${cardWithLimit('Canciones del álbum', 'album-tracks', tracksLimit, songRows.length
         ? rankTable(songRows, {
           valueFmt: valFmt,
@@ -995,7 +1025,7 @@ export function sessionsView(model, ctx = {}) {
       ${card('Hora de inicio', scrollChart(barChart({ data: startHour.map(([h, n]) => ({ label: `${h}`, value: n })), showValue: false }), 'Hora de inicio'))}
     </div>
     <div class="grid-2">
-      ${card('Sesiones por mes', scrollChart(lineChart({ points: monthPoints, format: fmtNum }), 'Sesiones por mes'))}
+      ${contractedLineChart({ id: 'sessions-monthly', title: 'Sesiones por mes', points: monthPoints, format: fmtNum, unit: 'sesiones', base: 'sesiones registradas' })}
       ${card('Sesiones por día de la semana', scrollChart(barChart({ data: dowData, showValue: true }), 'Sesiones por día de la semana'))}
     </div>
     <div class="grid-2">
@@ -1220,12 +1250,15 @@ export function dayView(model, id, ctx = {}) {
 export function discoveryView(model, ctx = {}) {
   const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const disc = [...model.monthlyDiscovery.entries()].sort((a, b) => a[0] - b[0]);
-  const line = lineChart({
+  const line = contractedLineChart({
+    id: 'discovery-monthly', title: 'Canciones nuevas por mes',
     points: fillMonths(sortedMonths(model.monthlyDiscovery)).map((mi) => ({
       label: monthLabel(mi),
       y: model.monthlyDiscovery.get(mi)?.new ?? 0
     })),
-    format: fmtNum
+    format: fmtNum,
+    unit: 'primeras apariciones',
+    base: 'canciones cuya primera aparición histórica ocurrió en el mes'
   });
   const absLimit = resolveLimit(ctx, 'disc-abs', 10);
   const relLimit = resolveLimit(ctx, 'disc-rel', 10);
@@ -1282,7 +1315,7 @@ export function discoveryView(model, ctx = {}) {
         sub: r90 ? `${fmtNum(r90.returned)}/${fmtNum(r90.eligible)} elegibles${r90.insufficient ? ` (${fmtNum(r90.insufficient)} con seguimiento insuficiente)` : ''}` : ''
       }
     ])}
-    ${card('Canciones nuevas por mes', scrollChart(line, 'Canciones nuevas por mes'))}
+    ${line}
     <div class="grid-2">
       ${cardWithLimit('Meses con más descubrimientos', 'disc-abs', absLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones'], abs.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays)]), '', ['c', '', 'n', 'n', 'n'], null, 'Meses con más descubrimientos'))}
       ${cardWithLimit('Meses con mayor proporción de nuevas', 'disc-rel', relLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones', 'Proporción'], rel.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
@@ -1607,13 +1640,19 @@ export function habitsView(model, ctx = {}) {
   ];
 
   const months = fillMonths(sortedMonths(model.monthlyBehavior));
-  const skipsLine = lineChart({
+  const skipsLine = contractedLineChart({
+    id: 'habits-skips-monthly', title: 'Saltos por mes',
     points: months.map((mi) => ({ label: monthLabel(mi), y: model.monthlyBehavior.get(mi)?.skips ?? 0 })),
-    format: fmtNum
+    format: fmtNum,
+    unit: 'reproducciones saltadas',
+    base: 'eventos con bandera de salto conocida'
   });
-  const shuffleLine = lineChart({
+  const shuffleLine = contractedLineChart({
+    id: 'habits-shuffle-monthly', title: 'Aleatorio por mes',
     points: months.map((mi) => ({ label: monthLabel(mi), y: model.monthlyBehavior.get(mi)?.shuffle ?? 0 })),
-    format: fmtNum
+    format: fmtNum,
+    unit: 'reproducciones en aleatorio',
+    base: 'eventos con bandera de aleatorio conocida'
   });
 
   const transLimit = resolveLimit(ctx, 'habits-transitions', 10);
@@ -1699,8 +1738,8 @@ export function habitsView(model, ctx = {}) {
       ${card(`Curva de Pareto (% acumulado por ${byMs ? 'tiempo' : 'reproducciones'})`, table(['Entidad', 'Top 1', 'Top 5', 'Top 10', 'Top 50'], paretoRows, '', ['', 'n', 'n', 'n', 'n'], null, 'Porcentaje acumulado del catálogo por los primeros N elementos'))}
     </div>
     <div class="grid-2">
-      ${card('Saltos por mes', scrollChart(skipsLine, 'Saltos por mes'))}
-      ${card('Aleatorio por mes', scrollChart(shuffleLine, 'Aleatorio por mes'))}
+      ${skipsLine}
+      ${shuffleLine}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Transiciones entre artistas', 'habits-transitions', transLimit, transRows.length
@@ -1747,7 +1786,12 @@ export function wrappedView(model, id, ctx) {
     ? monthlySeries(evoByMs ? model.monthlyArtistMs : model.monthlyArtistPlays, topArtist.id)
     : [];
   const sprintChart = topArtist
-    ? lineChart({ points: sprint, format: evoByMs ? fmtMs : fmtNum })
+    ? contractedLineChart({
+      id: 'wrapped-artist-monthly', title: `Evolución de ${topArtist.name}`, points: sprint,
+      format: evoByMs ? fmtMs : fmtNum,
+      unit: evoByMs ? 'tiempo escuchado' : 'reproducciones',
+      base: evoByMs ? 'duración conocida del artista' : 'reproducciones del artista'
+    })
     : '';
 
   // Concentración legible: los efectivos redondeados como valor principal y
@@ -1798,7 +1842,7 @@ export function wrappedView(model, id, ctx) {
       { label: 'Concentración (HHI)', value: hhiPct }
     ])}
     <div class="grid-2">
-      ${topArtist ? card(`Evolución de ${topArtist.name}`, scrollChart(sprintChart, `Evolución de ${topArtist.name}`)) : ''}
+      ${sprintChart}
       ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Tu semana típica">${listeningClock({
         cells: clockCells,
         colorScale: makeScale(maxVal),

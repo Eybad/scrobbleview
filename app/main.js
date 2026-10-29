@@ -74,6 +74,7 @@ const tableLimits = initialLimits.map;
 let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
 let advState = null;
 let popReturnState = null;
+const chartSelections = new Map();
 
 // Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
 // re-renders porque vive fuera de #app-root; el texto va por textContent).
@@ -98,6 +99,49 @@ document.body.appendChild(liveRegion);
 
 function announce(text) {
   liveRegion.textContent = text;
+}
+
+function chartPoints(card) {
+  try {
+    const points = JSON.parse(card.dataset.chartPoints ?? '[]');
+    return Array.isArray(points) ? points : [];
+  } catch {
+    return [];
+  }
+}
+
+function selectChartPoint(card, index) {
+  const points = chartPoints(card);
+  if (!points.length) return;
+  const selectedIndex = Math.max(0, Math.min(points.length - 1, index));
+  const point = points[selectedIndex];
+  chartSelections.set(card.dataset.chartId, { index: selectedIndex, key: point.date || point.label });
+  const inspector = card.querySelector('.chart-inspector');
+  if (!inspector) return;
+  inspector.querySelector('.chart-inspector__label').textContent = point.date || point.label;
+  inspector.querySelector('.chart-inspector__value').textContent = point.valueText;
+  inspector.querySelector('.chart-inspector__pct').textContent = point.shareText ? ` · ${point.shareText}` : '';
+  inspector.hidden = false;
+  const status = card.querySelector('.chart-nav__status');
+  if (status) status.textContent = `${selectedIndex + 1} de ${points.length}: ${point.label}`;
+  card.querySelectorAll('[data-chart-step]').forEach((button) => {
+    const direction = Number(button.dataset.dir);
+    button.disabled = direction < 0 ? selectedIndex === 0 : selectedIndex === points.length - 1;
+  });
+  card.querySelectorAll('[data-chart-index]').forEach((item) => {
+    item.classList.toggle('is-selected', Number(item.dataset.chartIndex) === selectedIndex);
+  });
+}
+
+function restoreChartSelections() {
+  appRoot.querySelectorAll('.chart-card[data-chart-id]').forEach((card) => {
+    const selection = chartSelections.get(card.dataset.chartId);
+    if (!selection) return;
+    const points = chartPoints(card);
+    const matchingIndex = points.findIndex((point) => (point.date || point.label) === selection.key);
+    if (matchingIndex >= 0) selectChartPoint(card, matchingIndex);
+    else chartSelections.delete(card.dataset.chartId);
+  });
 }
 
 function announceFilters() {
@@ -529,6 +573,7 @@ function render() {
   }
   const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
   appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
+  restoreChartSelections();
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -1431,6 +1476,7 @@ appRoot.addEventListener('click', (e) => {
 // Delegado una sola vez (sobrevive a los re-renders). Solo sin hover.
 appRoot.addEventListener('click', (e) => {
   if (!window.matchMedia('(hover: none)').matches) return;
+  if (e.target.closest?.('.chart-card .chart-interactive-wrap')) return;
   const svg = e.target.closest?.('svg.chart');
   if (!svg) return;
   const holder = e.target.closest('g') ?? e.target;
@@ -1552,13 +1598,76 @@ appRoot.addEventListener('click', (e) => {
     return;
   }
 
+  const chartStep = e.target.closest?.('[data-chart-step]');
+  if (chartStep && appRoot.contains(chartStep)) {
+    const chart = chartStep.closest('.chart-card');
+    const selected = chartSelections.get(chart.dataset.chartId)?.index;
+    const direction = Number(chartStep.dataset.dir);
+    const start = selected ?? (direction > 0 ? -1 : 1);
+    selectChartPoint(chart, start + direction);
+    return;
+  }
+
+  const chartPage = e.target.closest?.('[data-chart-page]');
+  if (chartPage && appRoot.contains(chartPage)) {
+    const chart = chartPage.closest('.chart-card');
+    const controls = chartPage.closest('[data-chart-table]');
+    const rows = [...chart.querySelectorAll('[data-chart-row]')];
+    const pageSize = Number(controls.dataset.pageSize);
+    const pageCount = Math.ceil(rows.length / pageSize);
+    const page = Math.max(0, Math.min(pageCount - 1, Number(controls.dataset.page) + Number(chartPage.dataset.dir)));
+    const start = page * pageSize;
+    rows.forEach((row, index) => { row.hidden = index < start || index >= start + pageSize; });
+    controls.dataset.page = String(page);
+    controls.querySelector('.chart-table-status').textContent = `Mostrando ${start + 1}–${Math.min(start + pageSize, rows.length)} de ${rows.length}`;
+    controls.querySelector('[data-dir="-1"]').disabled = page === 0;
+    controls.querySelector('[data-dir="1"]').disabled = page >= pageCount - 1;
+    return;
+  }
+
+  const chartWrap = e.target.closest?.('.chart-card .chart-interactive-wrap');
+  const clickedChart = e.target.closest?.('svg.chart');
+  if (chartWrap && clickedChart) {
+    const svg = clickedChart;
+    const chart = chartWrap.closest('.chart-card');
+    const points = chartPoints(chart);
+    const bounds = svg?.getBoundingClientRect();
+    if (bounds && bounds.width > 0 && points.length) {
+      const position = Math.max(0, Math.min(1, (e.clientX - bounds.left) / bounds.width));
+      selectChartPoint(chart, Math.round(position * (points.length - 1)));
+    }
+    return;
+  }
+
   const closeInspector = e.target.closest?.('[data-action="close-inspector"]');
   if (closeInspector && appRoot.contains(closeInspector)) {
     const card = closeInspector.closest?.('.chart-card');
     const inspector = card?.querySelector('.chart-inspector');
-    if (inspector) inspector.hidden = true;
+    if (inspector) {
+      inspector.hidden = true;
+      chartSelections.delete(card.dataset.chartId);
+      card.querySelectorAll('[data-chart-index]').forEach((item) => item.classList.remove('is-selected'));
+      const status = card.querySelector('.chart-nav__status');
+      if (status) status.textContent = `Tocar o usar flechas para inspeccionar (${chartPoints(card).length} puntos)`;
+      card.querySelector('[data-chart-step][data-dir="-1"]')?.setAttribute('disabled', '');
+      card.querySelector('[data-chart-step][data-dir="1"]')?.removeAttribute('disabled');
+    }
     return;
   }
+});
+
+appRoot.addEventListener('keydown', (e) => {
+  const nav = e.target.closest?.('.chart-nav');
+  if (!nav || !appRoot.contains(nav) || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+  const chart = nav.closest('.chart-card');
+  const points = chartPoints(chart);
+  if (!points.length) return;
+  const selected = chartSelections.get(chart.dataset.chartId)?.index;
+  const next = e.key === 'Home' ? 0 : e.key === 'End' ? points.length - 1 : Math.max(0, Math.min(points.length - 1, (selected ?? (e.key === 'ArrowRight' ? -1 : points.length)) + (e.key === 'ArrowRight' ? 1 : -1)));
+  e.preventDefault();
+  selectChartPoint(chart, next);
+  const activeStep = e.target.closest('[data-chart-step]');
+  if (activeStep?.disabled) chart.querySelector(`[data-dir="${-Number(activeStep.dataset.dir)}"]`)?.focus();
 });
 
 window.addEventListener('resize', () => syncTallTables(appRoot), { passive: true });

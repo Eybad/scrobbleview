@@ -164,7 +164,7 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   const dots = points.map((p, i) => {
     const raw = p.label != null ? String(p.label) : '';
     const title = raw ? `${raw}: ${format(p.y)}` : format(p.y);
-    return `<circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
+    return `<circle data-chart-index="${i}" class="chart-point" cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
   }).join('');
   // Cadencia regular + último siempre: el greedy ("los que entran + último")
   // dejaba intervalos irregulares (9, 6, 6… 13 meses) y el eje se leía mal.
