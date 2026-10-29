@@ -1692,10 +1692,10 @@ appRoot.addEventListener('click', (e) => {
       if (fromInput?.value && toInput?.value) {
         state.calRangeFrom = fromInput.value;
         state.calRangeTo = toInput.value;
-        const startSec = Math.floor(new Date(fromInput.value + 'T00:00:00Z').getTime() / 1000);
-        const endSec = Math.floor(new Date(toInput.value + 'T23:59:59Z').getTime() / 1000);
-        if (Number.isFinite(startSec) && Number.isFinite(endSec)) {
-          state.range = { from: Math.min(startSec, endSec), to: Math.max(startSec, endSec) };
+        const fromDay = Math.floor(Date.parse(`${fromInput.value}T00:00:00Z`) / 86400000);
+        const toDay = Math.floor(Date.parse(`${toInput.value}T00:00:00Z`) / 86400000);
+        if (Number.isFinite(fromDay) && Number.isFinite(toDay)) {
+          state.range = { from: Math.min(fromDay, toDay) * 86400, to: Math.max(fromDay, toDay) * 86400 + 86399 };
           applyAndRenderView();
           return;
         }
