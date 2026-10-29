@@ -144,6 +144,35 @@ function restoreChartSelections() {
   });
 }
 
+function chartIndexAt(svg, chart, event, points) {
+  const rect = svg.getBoundingClientRect();
+  if (chart.dataset.chartType === 'grid' || chart.dataset.chartType === 'stacked') {
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return 0;
+    const cursor = svg.createSVGPoint();
+    cursor.x = event.clientX;
+    cursor.y = event.clientY;
+    const position = cursor.matrixTransform(matrix.inverse());
+    if (chart.dataset.chartType === 'stacked') {
+      const rowHeight = (svg.viewBox.baseVal.height - 4) / points.length;
+      return Math.max(0, Math.min(points.length - 1, Math.floor(position.y / rowHeight)));
+    }
+    const cols = Number(svg.dataset.gridCols);
+    const rows = Number(svg.dataset.gridRows);
+    const labelWidth = Number(svg.dataset.gridLabelWidth);
+    const labelTop = Number(svg.dataset.gridLabelTop ?? 0);
+    const cellWidth = Number(svg.dataset.gridCellWidth);
+    const cellHeight = Number(svg.dataset.gridCellHeight);
+    const gap = Number(svg.dataset.gridGap);
+    const x = Math.max(0, Math.min(cols - 1, Math.floor((position.x - labelWidth) / (cellWidth + gap))));
+    const y = Math.max(0, Math.min(rows - 1, Math.floor((position.y - labelTop) / (cellHeight + gap))));
+    return points.findIndex((point) => point.extra?.x === x && point.extra?.y === y);
+  }
+  if (rect.width <= 0) return 0;
+  const position = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  return Math.round(position * (points.length - 1));
+}
+
 function announceFilters() {
   if (!current) return;
   announce(filterStatusMessage(current.totals));
@@ -1638,10 +1667,9 @@ appRoot.addEventListener('click', (e) => {
     const svg = clickedChart;
     const chart = chartWrap.closest('.chart-card');
     const points = chartPoints(chart);
-    const bounds = svg?.getBoundingClientRect();
-    if (bounds && bounds.width > 0 && points.length) {
-      const position = Math.max(0, Math.min(1, (e.clientX - bounds.left) / bounds.width));
-      selectChartPoint(chart, Math.round(position * (points.length - 1)));
+    if (points.length) {
+      const selectedIndex = chartIndexAt(svg, chart, e, points);
+      if (selectedIndex >= 0) selectChartPoint(chart, selectedIndex);
     }
     return;
   }

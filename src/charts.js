@@ -235,10 +235,10 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
   const gridH = rows * (ch + gap) - gap;
   const vbW = Math.ceil(labelW + gridW + 8);
   const vbH = Math.ceil(gridH + (labelH ? 14 + 6 : 0));
-  const rects = cells.map((c) => {
+  const rects = cells.map((c, i) => {
     const x = labelW + c.x * (cw + gap);
     const y = c.y * (ch + gap);
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="${colorScale(c.value)}" rx="1.5"><title>${esc(cellTitle(c))}</title></rect>`;
+    return `<rect data-chart-index="${i}" class="chart-point" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="${colorScale(c.value)}" rx="1.5"><title>${esc(cellTitle(c))}</title></rect>`;
   }).join('');
   // Ticks posicionados por VALOR (no por índice) + ancla variable en los
   // extremos para que no se corten contra el borde del viewBox.
@@ -249,7 +249,7 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
     return `<text x="${(labelW + h * (cw + gap) + cw / 2).toFixed(1)}" y="${gridH + 14}" text-anchor="${anchor}" class="chart-label" font-size="${fs}">${esc(String(l))}</text>`;
   }).join('');
   const yl = yLabels.map((l, i) => `<text x="${labelW - 4}" y="${(i * (ch + gap) + ch / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="${fs}">${esc(String(l))}</text>`).join('');
-  return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(ariaLabel)}" class="chart">${rects}${xl}${yl}</svg>`;
+  return `<svg viewBox="0 0 ${vbW} ${vbH}" data-grid-cols="${cols}" data-grid-rows="${rows}" data-grid-label-width="${labelW}" data-grid-label-top="0" data-grid-label-height="${labelH ? 20 : 0}" data-grid-cell-width="${cw.toFixed(1)}" data-grid-cell-height="${ch.toFixed(1)}" data-grid-gap="${gap}" role="img" aria-label="${esc(ariaLabel)}" class="chart">${rects}${xl}${yl}</svg>`;
 }
 
 // Tabla fallback cell-navegable para heatmaps (SC 2.5.8 / no solo hover).
@@ -395,7 +395,7 @@ export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LO
   // Gutter bajo celdas: baseline de labels a 12px del borde de celda + 4px
   // para descendentes (el `y=height-3` con font 8 pisaba la fila dom).
   const height = 7 * (cellSize + gap) + 28;
-  const byKey = new Map(cells.map((c) => [`${c.hour}-${c.dow}`, c]));
+  const byKey = new Map(cells.map((c, index) => [`${c.hour}-${c.dow}`, { ...c, index }]));
   const rects = [];
   for (let h = 0; h < 24; h++) {
     for (let d = 0; d < 7; d++) {
@@ -403,7 +403,7 @@ export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LO
       const v = c ? c.value : 0;
       const x = 30 + h * (cellSize + gap);
       const y = 14 + d * (cellSize + gap);
-      rects.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${colorScale(v)}" rx="2"><title>${esc(cellTitle({ hour: h, dow: d, value: v }))}</title></rect>`);
+      rects.push(`<rect data-chart-index="${c?.index ?? d * 24 + h}" class="chart-point" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${colorScale(v)}" rx="2"><title>${esc(cellTitle({ hour: h, dow: d, value: v }))}</title></rect>`);
     }
   }
   const hourLabels = [];
@@ -411,7 +411,7 @@ export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LO
     hourLabels.push(`<text x="${(30 + h * (cellSize + gap) + cellSize / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="12">${h}</text>`);
   }
   const dowLabels = DOW_SHORT.map((l, d) => `<text x="26" y="${(14 + d * (cellSize + gap) + cellSize / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="12">${l}</text>`).join('');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Reloj de escucha: hora del día por día de semana" class="chart clock">${rects}${hourLabels}${dowLabels}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" data-grid-cols="24" data-grid-rows="7" data-grid-label-width="30" data-grid-label-top="14" data-grid-cell-width="${cellSize}" data-grid-cell-height="${cellSize}" data-grid-gap="${gap}" role="img" aria-label="Reloj de escucha: hora del día por día de semana" class="chart clock">${rects}${hourLabels}${dowLabels}</svg>`;
 }
 
 // ---------- stackedBar ----------
@@ -437,7 +437,7 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
       x += w;
       return seg;
     }).join('');
-    return `<g><text x="${labelW - 6}" y="${(y + rowH / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="12">${esc(s.label)}</text>${segs}</g>`;
+    return `<g data-chart-index="${i}" class="chart-point"><text x="${labelW - 6}" y="${(y + rowH / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="12">${esc(s.label)}</text>${segs}</g>`;
   }).join('');
   const legend = segmentLabels != null
     ? `<ul class="legend">${segmentLabels.map((l, j) => {

@@ -11,6 +11,8 @@ export function createChartContract({
   showShare = true,
   chartType = 'line',
   pageSize = 25,
+  seriesLabels = null,
+  fallbackTable = '',
   emptyNotice = 'Sin datos disponibles para esta visualización.'
 } = {}) {
   const points = data.map((d, i) => {
@@ -23,6 +25,7 @@ export function createChartContract({
       label,
       value: val,
       date,
+      values: Array.isArray(d.values) ? d.values.map((value) => Number.isFinite(value) ? value : 0) : null,
       extra: d.extra ?? null
     };
   });
@@ -41,6 +44,8 @@ export function createChartContract({
     showShare,
     chartType,
     pageSize,
+    seriesLabels,
+    fallbackTable,
     points,
     total,
     max,
@@ -53,12 +58,40 @@ export function createChartContract({
 
 export function chartDataTableHTML(contract) {
   const { title, unit, points, format, total, showShare, pageSize } = contract;
+  if (contract.fallbackTable) return contract.fallbackTable;
   if (!points || points.length === 0) return '';
 
   const hasDates = points.some((p) => p.date != null);
   const caption = `${title}${unit ? ` (${unit})` : ''}`;
 
   let rowsHtml = '';
+  if (contract.seriesLabels?.length) {
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      rowsHtml += `<tr data-chart-row="${i}"${i >= pageSize ? ' hidden' : ''}>
+        <th scope="row">${esc(point.label)}</th>
+        ${contract.seriesLabels.map((_, index) => `<td class="n">${esc(format(point.values?.[index] ?? 0))}</td>`).join('')}
+        <td class="n">${esc(format(point.value))}</td>
+      </tr>`;
+    }
+    const pagination = points.length > pageSize
+      ? `<div class="chart-table-controls" data-chart-table="${esc(contract.id)}" data-page-size="${pageSize}" data-page="0">
+          <button type="button" class="btn btn-secondary" data-chart-page="${esc(contract.id)}" data-dir="-1" disabled>Anterior</button>
+          <span class="chart-table-status" aria-live="polite">Mostrando 1–${pageSize} de ${points.length}</span>
+          <button type="button" class="btn btn-secondary" data-chart-page="${esc(contract.id)}" data-dir="1">Siguiente</button>
+        </div>`
+      : '';
+    return `<details class="table-fallback">
+      <summary>Ver como tabla</summary>
+      <div class="table-scroll"><table>
+        <caption>${esc(`${title}${unit ? ` (${unit})` : ''}`)}</caption>
+        <thead><tr><th scope="col">Etiqueta</th>${contract.seriesLabels.map((label) => `<th scope="col" class="n">${esc(label)}</th>`).join('')}<th scope="col" class="n">Total${unit ? ` (${esc(unit)})` : ''}</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table></div>
+      ${pagination}
+    </details>`;
+  }
+
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
     const pct = total > 0 ? ((p.value / total) * 100).toFixed(1).replace('.', ',') : '0,0';
@@ -128,6 +161,8 @@ export function renderChartWithContract(contract, chartSvg) {
     label: point.label,
     date: point.date,
     value: point.value,
+    values: point.values,
+    extra: point.extra,
     valueText: format(point.value),
     shareText: showShare && total > 0 ? `${((point.value / total) * 100).toFixed(1).replace('.', ',')}%` : ''
   })));

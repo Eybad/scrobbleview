@@ -298,6 +298,26 @@ function contractedBarChart({ id, title, data, format = fmtNum, unit, base, orie
   return renderChartWithContract(contract, chart);
 }
 
+function contractedClockChart({ id, title, cells, format, byMs, base, svg }) {
+  const contract = createChartContract({
+    id,
+    title,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base,
+    data: cells.map((cell) => ({
+      label: `${DOW_LONG[cell.dow]} ${cell.hour}:00`,
+      value: cell.value,
+      extra: { x: cell.hour, y: cell.dow }
+    })),
+    format,
+    showShare: false,
+    chartType: 'grid',
+    fallbackTable: clockTable(cells, byMs)
+  });
+  const chart = `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="${esc(title)}">${svg}</div>${heatLegend()}`;
+  return renderChartWithContract(contract, chart);
+}
+
 // Rellena los meses huecos entre el primero y el último (índices YYYYMM):
 // sin esto, lineChart espaciaba los puntos por posición del dato y la línea
 // mentía (dos puntos consecutivos en el eje aunque distaran un año).
@@ -581,6 +601,21 @@ export function dashboard(model, ctx = {}) {
     cellText: (c) => valFmt(c.value),
     caption: byMs ? 'Tiempo escuchado por hora y día' : 'Reproducciones por hora y día'
   });
+  const heatChart = renderChartWithContract(createChartContract({
+    id: 'dashboard-day-hour',
+    title: 'Cuándo escuchás (día y hora)',
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'eventos con duración conocida' : 'eventos registrados',
+    data: heatCells.map((cell) => ({
+      label: `${DOW_LONG[cell.y]} ${cell.x}:00`,
+      value: cell.value,
+      extra: { x: cell.x, y: cell.y }
+    })),
+    format: valFmt,
+    showShare: false,
+    chartType: 'grid',
+    fallbackTable: heatTable
+  }), `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>${heatLegend()}`);
 
   const monthly = fillMonths(sortedMonths(model.monthly)).map((mi) => ({
     label: monthLabel(mi),
@@ -663,7 +698,7 @@ export function dashboard(model, ctx = {}) {
       ${evolution}
       ${dist}
     </div>
-    ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
+    ${heatChart}
     <div class="grid-2">
       ${cardWithLimit('Obsesión (reproducciones por día activo)', 'dash-obsession', obsLimit, table(['#', 'Canción', 'Intensidad', 'Días', 'Reproducciones', 'Tiempo'], model.tables.obsession.slice(0, obsLimit).map((o, i) => [
         String(i + 1),
@@ -776,6 +811,19 @@ export function artistView(model, ar, ctx = {}) {
       clockCells.push({ hour: h, dow: d, value: v });
     }
   }
+  const clockChart = contractedClockChart({
+    id: 'artist-week-clock',
+    title: 'Tu semana con este artista',
+    cells: clockCells,
+    format: valFmt,
+    byMs,
+    base: byMs ? 'duración conocida de este artista' : 'reproducciones de este artista',
+    svg: listeningClock({
+      cells: clockCells,
+      colorScale: makeScale(maxVal),
+      cellTitle: (cell) => `${DOW_LONG[cell.dow]} ${cell.hour}:00 — ${byMs ? fmtMs(cell.value) : `${fmtNum(cell.value)} reproducciones`}`
+    })
+  });
 
   const firstTr = a.firstTrackTk ? model.tracks.byId.get(a.firstTrackTk) : null;
 
@@ -810,11 +858,7 @@ export function artistView(model, ar, ctx = {}) {
       }))}
     </div>
     <div class="grid-2">
-      ${card('Tu semana con este artista', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Reloj de escucha del artista">${listeningClock({
-        cells: clockCells,
-        colorScale: makeScale(maxVal),
-        cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${byMs ? fmtMs(x.value) : `${fmtNum(x.value)} reproducciones`}`
-      })}</div>` + heatLegend() + clockTable(clockCells, byMs))}
+      ${clockChart}
       ${cardWithLimit('Álbumes de este artista', 'artist-albums', albumsLimit, albumRows.length
         ? rankTable(albumRows, {
           valueFmt: valFmt,
@@ -1389,25 +1433,38 @@ export function yearlyView(model, ctx = {}) {
       st ? `${st.len} días` : '—'
     ];
   });
-  const stacked = stackedBar({
-    series: years.map((y) => {
+  const stackedSeries = years.map((y) => {
       const d = model.yearly.get(y);
       return {
         label: String(y),
         values: byMs ? d.blocksMs : d.blocks,
         total: byMs ? d.ms : d.plays
       };
-    }),
-    segmentLabels: ['Madrugada', 'Mañana', 'Tarde', 'Noche'],
+    });
+  const segmentLabels = ['Madrugada', 'Mañana', 'Tarde', 'Noche'];
+  const stacked = stackedBar({
+    series: stackedSeries,
+    segmentLabels,
     format: byMs ? fmtMs : fmtNum
   });
+  const stackedChart = renderChartWithContract(createChartContract({
+    id: 'yearly-time-blocks',
+    title: 'Franjas por año',
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'duración conocida por año' : 'eventos registrados por año',
+    data: stackedSeries.map((row) => ({ label: row.label, value: row.total, values: row.values })),
+    format: byMs ? fmtMs : fmtNum,
+    showShare: false,
+    chartType: 'stacked',
+    seriesLabels: segmentLabels
+  }), scrollChart(stacked, 'Franjas por año'));
 
   return `
     <header class="view-header">
       <h1>Comparación anual</h1>
     </header>
     ${card('Año a año', table(['Año', 'Reproducciones', 'Tiempo', 'Artistas', 'Canciones', 'Álbumes', 'Nuevos art.', 'Nuevas canc.', 'Artista #1', 'Canción #1', 'Saltadas', 'Racha'], rows, '', ['', 'n', 'n', 'n', 'n', 'n', 'n', 'n', '', '', 'n', 'n'], null, 'Comparación año a año'))}
-    ${card('Franjas por año', scrollChart(stacked, 'Franjas por año'))}`;
+    ${stackedChart}`;
 }
 
 export function calendarView(model, year, ctx = {}) {
@@ -1835,6 +1892,19 @@ export function wrappedView(model, id, ctx) {
       clockCells.push({ hour: h, dow: d, value: v });
     }
   }
+  const clockChart = contractedClockChart({
+    id: 'wrapped-week-clock',
+    title: 'Tu semana típica',
+    cells: clockCells,
+    format: byMs ? fmtMs : fmtNum,
+    byMs,
+    base: byMs ? 'duración conocida del período' : 'reproducciones del período',
+    svg: listeningClock({
+      cells: clockCells,
+      colorScale: makeScale(maxVal),
+      cellTitle: (cell) => `${DOW_LONG[cell.dow]} ${cell.hour}:00 — ${byMs ? fmtMs(cell.value) : `${fmtNum(cell.value)} reproducciones`}`
+    })
+  });
 
   const unknownFlagsNote = (t.records - t.skippedKnown > 0)
     ? ` Nota: ${fmtNum(t.records - t.skippedKnown)} eventos tienen bandera de salto desconocida.`
@@ -1868,11 +1938,7 @@ export function wrappedView(model, id, ctx) {
     ])}
     <div class="grid-2">
       ${sprintChart}
-      ${card('Tu semana típica', `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="Tu semana típica">${listeningClock({
-        cells: clockCells,
-        colorScale: makeScale(maxVal),
-        cellTitle: (x) => `${DOW_LONG[x.dow]} ${x.hour}:00 — ${byMs ? fmtMs(x.value) : `${fmtNum(x.value)} reproducciones`}`
-      })}</div>` + heatLegend() + clockTable(clockCells, byMs))}
+      ${clockChart}
     </div>
     <div class="grid-2">
       ${card('Así empezó', `<ul class="receipt">
