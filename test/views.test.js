@@ -60,6 +60,19 @@ test('entity links in views retain semantic identity and filter context', async 
   assert.ok(checked > 0);
 });
 
+test('auxiliary ranking links retain their criteria and analytical context', async () => {
+  const model = await demoModel();
+  const ctx = { query: '?r=1700000000-1705000000&m=plays' };
+  const dashboardHtml = renderView('dashboard', model, null, ctx);
+  const discoveryHtml = renderView('discovery', model, null, ctx);
+  for (const [html, sort, tab] of [[dashboardHtml, 'intensity', 'tracks'], [dashboardHtml, 'skipRate', 'artists'], [discoveryHtml, 'constancy', 'artists'], [discoveryHtml, 'longevity', 'artists']]) {
+    const links = [...html.matchAll(/href="(#\/v1\/explore\?[^\"]+)"/g)].map(match => parseRoute(match[1].replaceAll('&amp;', '&')));
+    const found = links.find(route => new URLSearchParams(route.query).get('sort') === sort && new URLSearchParams(route.query).get('tab') === tab);
+    assert.ok(found, `${sort} link`);
+    assert.equal(new URLSearchParams(found.query).get('r'), '1700000000-1705000000');
+  }
+});
+
 function json2y() {
   return JSON.stringify([
     { ts: '2023-06-01T02:00:00Z', ms_played: 60000, master_metadata_track_name: 'A', master_metadata_album_artist_name: 'X', spotify_track_uri: 'spotify:track:1' },

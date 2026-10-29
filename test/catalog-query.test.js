@@ -25,3 +25,22 @@ test('screen, count and export share skip eligibility and the full denominator',
   assert.doesNotMatch(html, /Unknown/);
   assert.match(html, /Exportar CSV \(1\)/);
 });
+
+test('auxiliary rankings sort the full catalog with continuity and longevity criteria', () => {
+  const artists = Array.from({ length: 130 }, (_, id) => ({
+    id, name: `Artist ${id}`, plays: 20, ms: 60000,
+    firstTs: 1704067200, lastTs: 1717200000,
+    months: new Set(Array.from({ length: id === 129 ? 6 : 5 }, (_, month) => 202401 + month)),
+    years: new Set(id === 129 ? [2023, 2024] : [2024]), days: new Set([1])
+  }));
+  const model = { totals: { records: 2600, ms: 7800000 }, artists: { byId: new Map(artists.map(item => [item.id, item])) }, monthlyArtistMs: new Map() };
+  const continuity = describeCatalogQuery(model, { exploreState: { sortBy: 'constancy', minMonths: 5, pageSize: 25 } });
+  const ranked = queryCatalog(continuity.pool, continuity.options);
+  assert.equal(ranked.totalMatches, 130);
+  assert.equal(ranked.rows[0].item.name, 'Artist 129');
+  const longevity = describeCatalogQuery(model, { exploreState: { sortBy: 'longevity', pageSize: 25 } });
+  assert.equal(queryCatalog(longevity.pool, longevity.options).rows[0].item.name, 'Artist 129');
+  const html = exploreView(model, { exploreState: { sortBy: 'constancy', minMonths: 5 } });
+  assert.match(html, /data-label="Constancia">100%/);
+  assert.match(html, /6\/6 meses/);
+});

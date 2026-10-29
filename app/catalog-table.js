@@ -1,6 +1,7 @@
 import { fmtMs, fmtNum, fmtPct, esc, sparkline } from '../src/charts.js';
 import { locToISODate } from './filter-ui.js';
 import { formatSemanticRoute } from './routes.js';
+import { calculateConstancy } from '../src/query.js';
 
 export const ALL_COLUMNS = {
   artists: [
@@ -15,6 +16,8 @@ export const ALL_COLUMNS = {
     { key: 'lastTs', label: 'Última vez', defaultVisible: false, sortKey: 'lastTs' },
     { key: 'intensity', label: 'Intensidad', defaultVisible: false, sortKey: 'intensity' },
     { key: 'skipRate', label: 'Tasa de salto', defaultVisible: false, sortKey: 'skipRate' },
+    { key: 'constancy', label: 'Constancia', defaultVisible: false, sortKey: 'constancy' },
+    { key: 'longevity', label: 'Años activos', defaultVisible: false, sortKey: 'longevity' },
     { key: 'trend', label: 'Tendencia', defaultVisible: true, sortKey: null }
   ],
   tracks: [
@@ -141,6 +144,7 @@ export function catalogTableHTML(queryResult, {
   const defs = ALL_COLUMNS[tab] || ALL_COLUMNS.artists;
   const activeCols = defs.filter((col) => {
     if (['rank', 'name', 'ms', 'plays', 'share'].includes(col.key)) return true;
+    if (col.sortKey === sortBy || (col.key === 'skipRate' && sortBy === 'lowSkipRate')) return true;
     if (col.key === 'trend' && !spark) return false;
     return visibleCols ? visibleCols.has(col.key) : col.defaultVisible;
   });
@@ -149,9 +153,8 @@ export function catalogTableHTML(queryResult, {
     if (!col.sortKey) {
       return `<th scope="col" class="${col.key === 'trend' ? 'col-trend' : ''}">${esc(col.label)}</th>`;
     }
-    const isSorted = (sortBy === col.sortKey) ||
-      (col.sortKey === 'metric' && (sortBy === 'metric' || sortBy === metric || sortBy === 'rank')) ||
-      (col.sortKey === 'rank' && (sortBy === 'rank' || sortBy === 'metric'));
+    const isSorted = (col.key === 'rank' && (sortBy === 'rank' || sortBy === 'metric')) ||
+      (col.key !== 'share' && col.key !== 'rank' && (sortBy === col.sortKey || (col.key === 'skipRate' && sortBy === 'lowSkipRate')));
 
     const currentAriaSort = isSorted
       ? (sortDir === 'asc' ? 'ascending' : 'descending')
@@ -162,7 +165,7 @@ export function catalogTableHTML(queryResult, {
       : (col.sortKey === 'name' || col.sortKey === 'artist' || col.sortKey === 'rank' ? 'asc' : 'desc');
 
     const sortIndicator = isSorted ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    const numericClass = ['ms', 'plays', 'share', 'days', 'months', 'intensity', 'skipRate'].includes(col.key) ? 'n' : '';
+    const numericClass = ['ms', 'plays', 'share', 'days', 'months', 'intensity', 'skipRate', 'constancy', 'longevity'].includes(col.key) ? 'n' : '';
 
     return `<th scope="col" class="${numericClass} ${col.key === 'name' ? 'col-name-head' : ''}" aria-sort="${currentAriaSort}">
       <button type="button" class="btn-sort" data-sort="${col.sortKey}" data-dir="${nextDir}" aria-label="Ordenar por ${esc(col.label)}">
@@ -232,6 +235,12 @@ export function catalogTableHTML(queryResult, {
           const known = it.skipKnown ?? 0;
           return `<td class="n" data-label="Tasa de salto">${known > 0 ? `${fmtPct((it.skips ?? 0) / known)} <small>(${fmtNum(it.skips ?? 0)}/${fmtNum(known)})</small>` : '—'}</td>`;
         }
+        case 'constancy': {
+          const value = calculateConstancy(it);
+          return `<td class="n" data-label="Constancia">${value ? `${fmtPct(value.coverage)} <small>(${fmtNum(value.months)}/${fmtNum(value.span)} meses)</small>` : '—'}</td>`;
+        }
+        case 'longevity':
+          return `<td class="n" data-label="Años activos">${fmtNum(it.years?.size ?? 0)}</td>`;
         case 'trend': {
           if (!spark) return `<td></td>`;
           const pts = spark(it);

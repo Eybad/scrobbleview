@@ -29,11 +29,21 @@ function limitSelect(key, currentLimit, label) {
   return `<select class="table-limit" name="limit-${esc(key)}" autocomplete="off" data-table-limit="${esc(key)}" aria-label="${esc(label)}">${[10, 25, 50, 100].map((n) => `<option value="${n}"${currentLimit === n ? ' selected' : ''}>Top ${n}</option>`).join('')}</select>`;
 }
 
-function cardWithLimit(title, key, limit, body, cls = '') {
+function cardWithLimit(title, key, limit, body, cls = '', catalogHref = '') {
   const content = limit >= 25
     ? body.replace('class="table-scroll"', 'class="table-scroll table-scroll--tall"')
     : body;
-  return `<section class="card ${cls}"><div class="card-head"><h2>${esc(title)}</h2>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${content}</section>`;
+  const catalog = catalogHref ? `<p><a href="${esc(catalogHref)}">Ver todos en Explorar</a></p>` : '';
+  return `<section class="card ${cls}"><div class="card-head"><h2>${esc(title)}</h2>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${content}${catalog}</section>`;
+}
+
+function catalogHref(ctx, tab, sort, thresholdKey, threshold) {
+  const params = new URLSearchParams((ctx.query ?? '').replace(/^\?/, ''));
+  params.set('tab', tab);
+  params.set('sort', sort);
+  params.set('dir', sort === 'lowSkipRate' ? 'asc' : 'desc');
+  if (thresholdKey) params.set(thresholdKey, String(threshold));
+  return `#/v1/explore?${params}`;
 }
 
 function resolveLimit(ctx, key, fallback = 10) {
@@ -623,7 +633,7 @@ export function dashboard(model, ctx = {}) {
         fmtNum(o.days.size),
         fmtNum(o.plays),
         fmtMs(o.ms)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'), '', catalogHref(ctx, 'tracks', 'intensity', 'minPlays', 15))}
       ${cardWithLimit('Rachas (misma canción seguida)', 'dash-binge', bingeLimit, table(['#', 'Canción', 'Racha', 'Reproducciones'], model.tables.binge.slice(0, bingeLimit).map((b, i) => [
         String(i + 1),
         trackSubLink(b.tk, b.track.name, b.track.artist),
@@ -639,7 +649,7 @@ export function dashboard(model, ctx = {}) {
         fmtNum(a.plays),
         fmtNum(a.plays - a.skipKnown),
         fmtPct(a.skips / a.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'artists', 'skipRate', 'minPlays', 20))}
       ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['#', 'Canción', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr, i) => [
         String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
@@ -647,7 +657,7 @@ export function dashboard(model, ctx = {}) {
         fmtNum(tr.plays),
         fmtNum(tr.plays - tr.skipKnown),
         fmtPct(tr.skips / tr.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'tracks', 'skipRate', 'minPlays', 20))}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['#', 'Artista', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a, i) => [
@@ -657,7 +667,7 @@ export function dashboard(model, ctx = {}) {
         fmtNum(a.plays),
         fmtNum(a.plays - a.skipKnown),
         fmtPct(a.skips / a.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'artists', 'lowSkipRate', 'minPlays', 20))}
       ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['#', 'Canción', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr, i) => [
         String(i + 1),
         trackSubLink(tr.tk, tr.name, tr.artist),
@@ -665,7 +675,7 @@ export function dashboard(model, ctx = {}) {
         fmtNum(tr.plays),
         fmtNum(tr.plays - tr.skipKnown),
         fmtPct(tr.skips / tr.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'))}
+      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'tracks', 'lowSkipRate', 'minPlays', 20))}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['#', 'Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d, i) => [
@@ -1288,14 +1298,14 @@ export function discoveryView(model, ctx = {}) {
         fmtNum(a.months.size),
         `${fmtPct(a.coverage)} (${fmtNum(a.months.size)}/${fmtNum(a.activeMonthsSpan)})`,
         `${fmtPct(a.periodCoverage)} (${fmtNum(a.months.size)}/${fmtNum(a.observedMonths)})`
-      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Continuidad durante etapa activa y cobertura del período total (mín. 6 meses activos)'))}
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Continuidad durante etapa activa y cobertura del período total (mín. 6 meses activos)'), '', catalogHref(ctx, 'artists', 'constancy', 'minMonths', 6))}
       ${cardWithLimit('Longevidad (años activos)', 'disc-longevity', longLimit, table(['#', 'Artista', 'Años', 'Meses', 'Días'], model.tables.longevity.slice(0, longLimit).map((a, i) => [
         String(i + 1),
         entityLink('artist', a.id, a.name),
         fmtNum(a.years.size),
         fmtNum(a.months.size),
         fmtNum(a.days.size)
-      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con más años activos'))}
+      ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con más años activos'), '', catalogHref(ctx, 'artists', 'longevity'))}
     </div>
     <p class="view-meta" style="margin-top:1rem;font-size:0.85rem;color:var(--text-sub, #b3b3b3);">
       El retorno acumulado incluye canciones cuya primera aparición histórica coincide con la selección. Busca escuchas posteriores en todo el historial cargado, aunque no coincidan con los filtros. Requiere que el historial alcance la ventana de 30 o 90 días; de lo contrario se reporta seguimiento insuficiente y se excluye del denominador. Los regresos usan la cronología histórica completa para no crear pausas artificiales al filtrar.

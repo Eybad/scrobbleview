@@ -119,3 +119,12 @@ test('catalogTableHTML: renders informative empty state on zero search results',
   assert.ok(html.includes('Sin coincidencias para “nonexistent”'));
   assert.ok(html.includes('data-clear-search'));
 });
+
+test('metric ordering marks only one table column as sorted', () => {
+  const result = {
+    rows: [{ item: { id: 1, name: 'Artist', plays: 2, ms: 1000 }, metricRank: 1, share: 1, resultRow: 1 }],
+    totalItems: 1, totalMatches: 1, page: 1, pageSize: 25, totalPages: 1, startRow: 1, endRow: 1
+  };
+  const html = catalogTableHTML(result, { tab: 'artists', metric: 'plays', sortBy: 'metric', sortDir: 'asc' });
+  assert.equal((html.match(/aria-sort="ascending"/g) ?? []).length, 1);
+});

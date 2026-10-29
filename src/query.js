@@ -1,8 +1,13 @@
-// src/query.js — Funciones puras de consulta sobre entidades y catálogo (Etapa 3)
-//
-// Responsabilidad única: filtrado de texto, ordenamiento determinista, desempates,
-// cálculo de cuota global, rangos de resultados y paginación sobre entidades.
-// Cero dependencias de DOM, renderizado o APIs del navegador.
+import { civilFromDays } from './aggregate/impl/derive.js';
+
+export function calculateConstancy(entity) {
+  if (entity.firstTs == null || entity.lastTs == null) return null;
+  const first = civilFromDays(Math.floor(entity.firstTs / 86400));
+  const last = civilFromDays(Math.floor(entity.lastTs / 86400));
+  const span = Math.max(1, (last.y - first.y) * 12 + last.m - first.m + 1);
+  const months = entity.months?.size ?? 0;
+  return { months, span, coverage: months / span };
+}
 
 export function normalizeSearchText(str) {
   if (!str) return '';
@@ -95,6 +100,11 @@ function getItemSortValue(entry, sortBy) {
       const known = it.skipKnown ?? 0;
       return known > 0 ? (it.skips ?? 0) / known : 1;
     }
+    case 'constancy': {
+      return calculateConstancy(it)?.coverage ?? 0;
+    }
+    case 'longevity':
+      return it.years?.size ?? 0;
     default:
       return it[sortBy] ?? 0;
   }
@@ -123,6 +133,7 @@ export function queryCatalog(items, {
     if (minPlays != null && (it.plays ?? 0) < minPlays) return false;
     if (minMonths != null && (it.months?.size ?? it.months ?? 0) < minMonths) return false;
     if (minKnownSkips != null && (it.skipKnown ?? 0) < minKnownSkips) return false;
+    if (sortBy === 'constancy' && (it.firstTs == null || it.lastTs == null)) return false;
     if (filterFn != null && !filterFn(it)) return false;
     if (normQuery && !matchesQuery(it, normQuery, searchFields)) return false;
     return true;
@@ -153,6 +164,20 @@ export function queryCatalog(items, {
 
     if (effectiveDir === 'desc') cmp = -cmp;
     if (cmp !== 0) return cmp;
+
+    if (sortBy === 'constancy' || sortBy === 'longevity') {
+      const monthDifference = (b.item.months?.size ?? 0) - (a.item.months?.size ?? 0);
+      const yearDifference = (b.item.years?.size ?? 0) - (a.item.years?.size ?? 0);
+      const dayDifference = (b.item.days?.size ?? 0) - (a.item.days?.size ?? 0);
+      const tie = sortBy === 'constancy' ? monthDifference || yearDifference : yearDifference || monthDifference;
+      if (tie || dayDifference) return tie || dayDifference;
+      const playDifference = (b.item.plays ?? 0) - (a.item.plays ?? 0);
+      if (playDifference) return playDifference;
+    }
+    if (sortBy === 'skipRate' || sortBy === 'lowSkipRate' || sortBy === 'intensity') {
+      const difference = (b.item.plays ?? 0) - (a.item.plays ?? 0) || (b.item.ms ?? 0) - (a.item.ms ?? 0);
+      if (difference) return difference;
+    }
 
     // Desempates deterministas estables
     if (a.metricRank !== b.metricRank) return a.metricRank - b.metricRank;
