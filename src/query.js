@@ -184,6 +184,7 @@ export function queryCatalog(items, {
     totalMatches,
     page: validPage,
     pageSize: validPageSize,
+    effectiveDir,
     totalPages,
     startRow: totalMatches === 0 ? 0 : start + 1,
     endRow: end

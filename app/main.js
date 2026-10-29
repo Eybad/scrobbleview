@@ -8,6 +8,7 @@ import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText, calendarYearGridHTML } from './views.js';
 import { exportExploreTableCSV, exportFilename } from '../src/export.js';
 import { queryCatalog } from '../src/query.js';
+import { describeCatalogQuery, catalogOrderLabel } from './catalog-query.js';
 import { esc, fmtNum } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
@@ -1092,21 +1093,8 @@ function wireView() {
 function exportCurrentExploreTable() {
   if (!current) return;
   const viewCtx = buildViewContext('explore');
-  const exp = viewCtx.exploreState || {};
-  const tab = exp.tab || 'artists';
-  const pool = tab === 'artists' ? [...current.artists.byId.values()]
-    : tab === 'tracks' ? [...current.tracks.byId.values()]
-    : [...current.albums.byId.values()];
-  const exported = exportExploreTableCSV(pool, {
-    metric: activeMetric,
-    totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.records,
-    query: exp.query,
-    searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
-    sortBy: exp.sortBy,
-    sortDir: exp.sortDir,
-    minPlays: exp.minPlays,
-    minMonths: exp.minMonths
-  }, tab);
+  const { tab, pool, options } = describeCatalogQuery(current, viewCtx);
+  const exported = exportExploreTableCSV(pool, options, tab);
 
   const blob = new Blob([exported.csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -1177,23 +1165,10 @@ headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
         if (viewName === 'explore' && current) {
           optTable.hidden = false;
           const viewCtx = buildViewContext('explore');
-          const exp = viewCtx.exploreState || {};
-          const tab = exp.tab || 'artists';
+          const { tab, pool, options } = describeCatalogQuery(current, viewCtx);
           const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
-          const pool = tab === 'artists' ? [...current.artists.byId.values()]
-            : tab === 'tracks' ? [...current.tracks.byId.values()]
-            : [...current.albums.byId.values()];
-          const qRes = queryCatalog(pool, {
-            metric: activeMetric,
-            totalMetric: activeMetric === 'ms' ? current.totals.ms : current.totals.records,
-            query: exp.query,
-            searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
-            sortBy: exp.sortBy,
-            sortDir: exp.sortDir,
-            minPlays: exp.minPlays,
-            minMonths: exp.minMonths
-          });
-          if (tableDesc) tableDesc.textContent = `${fmtNum(qRes.totalMatches)} ${tabName} coincidentes en formato CSV.`;
+          const qRes = queryCatalog(pool, options);
+          if (tableDesc) tableDesc.textContent = `${fmtNum(qRes.totalMatches)} ${tabName} coincidentes; orden: ${catalogOrderLabel(options.sortBy, qRes.effectiveDir)}. Formato CSV.`;
         } else {
           optTable.hidden = true;
           const tableRadio = optTable.querySelector('input');

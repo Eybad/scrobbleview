@@ -16,6 +16,7 @@ import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsP
 import { calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML } from './calendar-ui.js';
 import { compareView } from './compare-view.js';
 import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
+import { describeCatalogQuery } from './catalog-query.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -1856,38 +1857,11 @@ export function receiptText(model, ctx = {}) {
 
 export function exploreView(model, ctx = {}) {
   const exp = ctx.exploreState || {};
-  const tab = exp.tab || 'artists';
-  const metric = ctx.metric || 'ms';
-  const byMs = metric === 'ms';
-  const query = (exp.query || '').trim();
-  const sortBy = exp.sortBy || 'metric';
-  const sortDir = exp.sortDir || null;
-  const page = Number(exp.page) || 1;
-  const pageSize = Number(exp.pageSize) || 25;
+  const { tab, pool, options } = describeCatalogQuery(model, ctx);
+  const { metric, query, sortBy, sortDir, minPlays, minMonths, minKnownSkips } = options;
   const density = exp.density || 'comfortable';
   const visibleCols = exp.visibleCols || null;
-  const minPlays = exp.minPlays != null ? Number(exp.minPlays) : null;
-  const minMonths = exp.minMonths != null ? Number(exp.minMonths) : null;
-
-  const pool = tab === 'artists' ? model.artists.byId.values()
-    : tab === 'tracks' ? model.tracks.byId.values()
-    : model.albums.byId.values();
-
-  const totalMetric = byMs ? model.totals.ms : model.totals.records;
-
-  const queryResult = queryCatalog(pool, {
-    metric,
-    totalMetric,
-    query,
-    searchFields: tab === 'artists' ? ['name'] : ['name', 'artist'],
-    sortBy,
-    sortDir,
-    page,
-    pageSize,
-    minPlays,
-    minMonths,
-    minKnownSkips: (sortBy === 'skipRate' || sortBy === 'lowSkipRate') ? (minPlays ?? 20) : null
-  });
+  const queryResult = queryCatalog(pool, options);
 
   const tabBtn = (id, label) => `<button type="button" role="tab" id="explore-tab-${id}" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}" class="${tab === id ? 'active' : ''}" data-explore-tab="${id}">${label}</button>`;
   const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
@@ -1897,7 +1871,7 @@ export function exploreView(model, ctx = {}) {
     thresholdControl = `
       <label class="explore-threshold-label">
         <span>Mín. eventos conocidos:</span>
-        <input type="number" min="1" max="10000" data-min-plays value="${minPlays ?? 20}" class="pagination-select" aria-label="Mínimo de eventos con bandera conocida">
+        <input type="number" min="1" max="10000" data-min-plays value="${minKnownSkips}" class="pagination-select" aria-label="Mínimo de eventos con bandera conocida">
       </label>`;
   } else if (sortBy === 'intensity') {
     thresholdControl = `
