@@ -1574,6 +1574,11 @@ td a:hover {
   cursor: pointer;
 }
 
+.calendar rect[data-day].is-selected {
+  stroke: var(--text);
+  stroke-width: 2px;
+}
+
 .table-fallback {
   margin-top: var(--sp-3);
   font-size: var(--fs-sm);

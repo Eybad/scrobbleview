@@ -15,13 +15,39 @@ export function parseCalendarState(query) {
   };
 }
 
-export function calendarQuery(query, calMonth, normalizeYears) {
+function validCalendarDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (year < 100 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? value : null;
+}
+
+export function parseCalendarSelection(query) {
+  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
+  return {
+    calDate: validCalendarDate(params.get('cd')),
+    calRangeFrom: validCalendarDate(params.get('cf')),
+    calRangeTo: validCalendarDate(params.get('ct'))
+  };
+}
+
+export function calendarQuery(query, calMonth, normalizeYears, selection = {}) {
   const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
   if (calMonth && Number.isInteger(calMonth.year) && calMonth.year >= 100 && calMonth.year <= 9999 && Number.isInteger(calMonth.month) && calMonth.month >= 1 && calMonth.month <= 12) {
     params.set('cm', `${String(calMonth.year).padStart(4, '0')}-${String(calMonth.month).padStart(2, '0')}`);
   } else params.delete('cm');
   if (normalizeYears) params.set('cn', '1');
   else params.delete('cn');
+  const selectedDate = validCalendarDate(selection.date);
+  const rangeFrom = validCalendarDate(selection.rangeFrom);
+  const rangeTo = validCalendarDate(selection.rangeTo);
+  if (selectedDate) params.set('cd', selectedDate);
+  else params.delete('cd');
+  if (rangeFrom) params.set('cf', rangeFrom);
+  else params.delete('cf');
+  if (rangeTo) params.set('ct', rangeTo);
+  else params.delete('ct');
   return params.toString();
 }
 

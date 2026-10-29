@@ -9,14 +9,14 @@ import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText
 import { exportExploreTableCSV, exportFilename } from '../src/export.js';
 import { queryCatalog } from '../src/query.js';
 import { describeCatalogQuery, catalogOrderLabel } from './catalog-query.js';
-import { esc, fmtNum } from '../src/charts.js';
+import { esc, fmtNum, fmtMs } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
 import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } from './routes.js';
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { contextBarHTML } from './context-bar.js';
-import { parseCalendarState, calendarQuery } from './calendar-ui.js';
+import { parseCalendarState, parseCalendarSelection, calendarQuery } from './calendar-ui.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -75,6 +75,7 @@ let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
 let advState = null;
 let popReturnState = null;
 const chartSelections = new Map();
+let calAnchor = null;
 
 // Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
 // re-renders porque vive fuera de #app-root; el texto va por textContent).
@@ -142,6 +143,50 @@ function restoreChartSelections() {
     if (matchingIndex >= 0) selectChartPoint(card, matchingIndex);
     else chartSelections.delete(card.dataset.chartId);
   });
+}
+
+function restoreCalendarInspector() {
+  const dateOutput = appRoot.querySelector('#cal-selected-date');
+  if (!dateOutput) return;
+  const fromInput = appRoot.querySelector('#cal-range-from');
+  const toInput = appRoot.querySelector('#cal-range-to');
+  if (fromInput) fromInput.value = state.calRangeFrom ?? '';
+  if (toInput) toInput.value = state.calRangeTo ?? '';
+  const iso = state.calDate;
+  if (!iso) {
+    calAnchor = null;
+    return;
+  }
+  const day = Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86400000);
+  calAnchor = day;
+  dateOutput.textContent = iso;
+  const matchingCells = [...appRoot.querySelectorAll('[data-day]')].filter((cell) => Number(cell.dataset.day) === day);
+  const title = matchingCells[0]?.dataset.label || matchingCells[0]?.querySelector('title')?.textContent;
+  const record = current.daily?.get(day);
+  const firstDay = current.meta.firstTs == null ? null : Math.floor(current.meta.firstTs / 86400);
+  const lastDay = current.meta.lastTs == null ? null : Math.floor(current.meta.lastTs / 86400);
+  const isOutOfData = firstDay == null || day < firstDay || day > lastDay;
+  const value = record?.[activeMetric === 'ms' ? 'ms' : 'plays'] ?? 0;
+  const label = title || (isOutOfData ? 'sin datos' : (value > 0 ? (activeMetric === 'ms' ? fmtMs(value) : fmtNum(value)) : 'sin actividad'));
+  const valueOutput = appRoot.querySelector('#cal-selected-value');
+  if (valueOutput) valueOutput.textContent = `· ${label}`;
+  appRoot.querySelector('#btn-cal-filter-day')?.removeAttribute('disabled');
+  appRoot.querySelector('#btn-cal-set-start')?.removeAttribute('disabled');
+  appRoot.querySelector('#btn-cal-set-end')?.removeAttribute('disabled');
+  const detailLink = appRoot.querySelector('#cal-day-detail');
+  if (detailLink) {
+    const params = new URLSearchParams(portableFilterParams(state, model).replace(/^\?/, ''));
+    params.set('m', activeMetric);
+    const query = calendarQuery(`?${params}`, state.calMonth, state.normalizeYears, {
+      date: state.calDate,
+      rangeFrom: state.calRangeFrom,
+      rangeTo: state.calRangeTo
+    });
+    detailLink.href = formatSemanticRoute('day', iso, query);
+    detailLink.hidden = false;
+  }
+  appRoot.querySelectorAll('[data-day].is-selected').forEach((cell) => cell.classList.remove('is-selected'));
+  matchingCells.forEach((cell) => cell.classList.add('is-selected'));
 }
 
 function chartIndexAt(svg, chart, event, points) {
@@ -352,7 +397,11 @@ function syncHash() {
     const merged = mergeExploreParams(queryStr, rawQuery);
     hash = `#/v1/explore${merged ? `?${merged}` : ''}`;
   } else if (name === 'calendar') {
-    const merged = calendarQuery(queryStr, state.calMonth, state.normalizeYears);
+    const merged = calendarQuery(queryStr, state.calMonth, state.normalizeYears, {
+      date: state.calDate,
+      rangeFrom: state.calRangeFrom,
+      rangeTo: state.calRangeTo
+    });
     hash = formatSemanticRoute('calendar', id, merged);
   } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
     const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
@@ -370,14 +419,21 @@ function syncHash() {
 // The URL is authoritative on load, Back/Forward and manual hash changes.
 // Restore state and its model together before any view reads either one.
 async function applyHashParams() {
-  const [, , query] = parseHash();
+  const [view, id, query] = parseHash();
   const parsed = parseQueryParams(query);
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null;
   activeMetric = resolveMetric(parsed.metric, stored);
   rankUI.metric = activeMetric;
   const restored = resolvePortableFilters(query, model);
   state = restored.state;
-  Object.assign(state, parseCalendarState(query));
+  const calendarState = parseCalendarState(query);
+  if (view === 'calendar' && id != null && Number(id) >= 100 && Number(id) <= 9999) {
+    calendarState.calMonth = {
+      year: Number(id),
+      month: calendarState.calMonth?.month ?? (new Date().getMonth() + 1)
+    };
+  }
+  Object.assign(state, calendarState, parseCalendarSelection(query));
   unresolvedFilter = restored.unresolved;
   return refreshModel();
 }
@@ -558,6 +614,14 @@ function buildViewContext(viewName) {
     };
   }
 
+  const contextQuery = viewName === 'calendar' || viewName === 'day'
+    ? `?${calendarQuery(queryStr, state.calMonth, state.normalizeYears, {
+      date: state.calDate,
+      rangeFrom: state.calRangeFrom,
+      rangeTo: state.calRangeTo
+    })}`
+    : queryStr;
+
   return {
     years: state.years,
     range: state.range,
@@ -565,14 +629,14 @@ function buildViewContext(viewName) {
     limits: tableLimits,
     metric: activeMetric,
     rankUI,
-    query: queryStr,
+    query: contextQuery,
     exploreState,
     detail: currentDetail,
     rawQuery,
     detailRequested: viewName === 'day' || viewName === 'session' || viewName === 'track',
     normalizeYears: state.normalizeYears ?? false,
     calMonth: state.calMonth,
-    month: state.calMonth?.month,
+    month: state.calMonth?.month ?? (new Date().getMonth() + 1),
     comparePreset: state.comparePreset || 'equal_previous'
   };
 }
@@ -603,6 +667,7 @@ function render() {
   const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
   appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
   restoreChartSelections();
+  restoreCalendarInspector();
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -1518,21 +1583,26 @@ appRoot.addEventListener('click', (e) => {
 });
 
 // Selector de rango e inspector sobre el calendario
-let calAnchor = null;
 appRoot.addEventListener('click', (e) => {
   const dayEl = e.target.closest?.('[data-day]');
   if (dayEl && appRoot.contains(dayEl)) {
     const day = Number(dayEl.dataset.day);
     if (Number.isFinite(day)) {
+      const iso = dayEl.dataset.date || new Date(day * 86400000).toISOString().slice(0, 10);
+      const [selectedYear, selectedMonth] = iso.split('-').map(Number);
+      state.calMonth = { year: selectedYear, month: selectedMonth };
       if (e.shiftKey && calAnchor != null) {
         const [a, b] = calAnchor <= day ? [calAnchor, day] : [day, calAnchor];
+        state.calDate = iso;
+        state.calRangeFrom = new Date(a * 86400000).toISOString().slice(0, 10);
+        state.calRangeTo = new Date(b * 86400000).toISOString().slice(0, 10);
         state.range = { from: a * 86400, to: b * 86400 + 86399 };
-        calAnchor = null;
+        calAnchor = day;
         applyAndRenderView();
         return;
       }
       calAnchor = day;
-      const iso = dayEl.dataset.date || new Date(day * 86400000).toISOString().slice(0, 10);
+      state.calDate = iso;
       const valLabel = dayEl.dataset.label || dayEl.querySelector?.('title')?.textContent || dayEl.getAttribute?.('aria-label') || '';
 
       const selDate = appRoot.querySelector('#cal-selected-date');
@@ -1545,21 +1615,30 @@ appRoot.addEventListener('click', (e) => {
       const toInput = appRoot.querySelector('#cal-range-to');
 
       if (selDate) selDate.textContent = iso;
-      if (detailLink) {
-        const params = new URLSearchParams(portableFilterParams(state, model).replace(/^\?/, ''));
-        params.set('m', activeMetric);
-        detailLink.href = formatSemanticRoute('day', iso, `?${params}`);
-        detailLink.hidden = false;
-      }
       if (selVal) selVal.textContent = valLabel ? `· ${valLabel}` : '';
       if (btnFilter) btnFilter.disabled = false;
       if (btnStart) btnStart.disabled = false;
       if (btnEnd) btnEnd.disabled = false;
       if (fromInput && !fromInput.value) fromInput.value = iso;
       if (toInput && fromInput?.value && !toInput.value) toInput.value = iso;
+      state.calRangeFrom = fromInput?.value || null;
+      state.calRangeTo = toInput?.value || null;
+      if (detailLink) {
+        const params = new URLSearchParams(portableFilterParams(state, model).replace(/^\?/, ''));
+        params.set('m', activeMetric);
+        const query = calendarQuery(`?${params}`, state.calMonth, state.normalizeYears, {
+          date: state.calDate,
+          rangeFrom: state.calRangeFrom,
+          rangeTo: state.calRangeTo
+        });
+        detailLink.href = formatSemanticRoute('day', iso, query);
+        detailLink.hidden = false;
+      }
 
-      appRoot.querySelectorAll('.cal-month-cell.is-selected').forEach((c) => c.classList.remove('is-selected'));
-      if (dayEl.classList.contains('cal-month-cell')) dayEl.classList.add('is-selected');
+      appRoot.querySelectorAll('[data-day].is-selected').forEach((cell) => cell.classList.remove('is-selected'));
+      dayEl.classList.add('is-selected');
+      syncHash();
+      analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
     }
   }
 
@@ -1573,18 +1652,30 @@ appRoot.addEventListener('click', (e) => {
     }
     if (act === 'set-start' && calAnchor != null) {
       const fromInput = appRoot.querySelector('#cal-range-from');
-      if (fromInput) fromInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
+      if (fromInput) {
+        fromInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
+        state.calRangeFrom = fromInput.value;
+        syncHash();
+        analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
+      }
       return;
     }
     if (act === 'set-end' && calAnchor != null) {
       const toInput = appRoot.querySelector('#cal-range-to');
-      if (toInput) toInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
+      if (toInput) {
+        toInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
+        state.calRangeTo = toInput.value;
+        syncHash();
+        analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
+      }
       return;
     }
     if (act === 'apply-range') {
       const fromInput = appRoot.querySelector('#cal-range-from');
       const toInput = appRoot.querySelector('#cal-range-to');
       if (fromInput?.value && toInput?.value) {
+        state.calRangeFrom = fromInput.value;
+        state.calRangeTo = toInput.value;
         const startSec = Math.floor(new Date(fromInput.value + 'T00:00:00Z').getTime() / 1000);
         const endSec = Math.floor(new Date(toInput.value + 'T23:59:59Z').getTime() / 1000);
         if (Number.isFinite(startSec) && Number.isFinite(endSec)) {
@@ -1604,7 +1695,11 @@ appRoot.addEventListener('click', (e) => {
     };
     const [view, year] = parseHash();
     const fParams = portableFilterParams(state, model);
-    const query = calendarQuery(`${fParams || '?'}${fParams ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears);
+    const query = calendarQuery(`${fParams || '?'}${fParams ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears, {
+      date: state.calDate,
+      rangeFrom: state.calRangeFrom,
+      rangeTo: state.calRangeTo
+    });
     pendingCalendarFocus = calNav.dataset.calNav;
     location.hash = formatSemanticRoute('calendar', view === 'calendar' && year != null ? state.calMonth.year : null, query);
     return;
@@ -1703,6 +1798,15 @@ appRoot.addEventListener('keydown', (e) => {
   selectChartPoint(chart, next);
   const activeStep = e.target.closest('[data-chart-step]');
   if (activeStep?.disabled) chart.querySelector(`[data-dir="${-Number(activeStep.dataset.dir)}"]`)?.focus();
+});
+
+appRoot.addEventListener('change', (e) => {
+  const input = e.target;
+  if (input.id === 'cal-range-from') state.calRangeFrom = input.value || null;
+  else if (input.id === 'cal-range-to') state.calRangeTo = input.value || null;
+  else return;
+  syncHash();
+  analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
 });
 
 window.addEventListener('resize', () => syncTallTables(appRoot), { passive: true });
