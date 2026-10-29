@@ -58,6 +58,13 @@ function navLink(label) {
   return link;
 }
 
+function trackLinkFor(artist, title) {
+  const link = [...frame.contentDocument.querySelectorAll('#explore-card a[href^="#/v1/track/"]')]
+    .find(candidate => decodeURIComponent(candidate.getAttribute('href')).includes(`/v1/track/${artist}/${title}`));
+  assert(link, `Falta la ficha de ${title} — ${artist}`);
+  return link;
+}
+
 function nextFrame() {
   return new Promise(resolve => frame.contentWindow.requestAnimationFrame(() => resolve()));
 }
@@ -80,58 +87,96 @@ async function run() {
   });
   const appWindow = frame.contentWindow;
   const appDocument = frame.contentDocument;
-  const json = JSON.stringify(['2024-01-10', '2024-02-10', '2024-02-11'].map(date => ({
+  const syntheticEvents = ['2024-01-10', '2024-02-10', '2024-02-11'].map(date => ({
     ts: `${date}T12:00:00Z`, ms_played: 180000,
     master_metadata_track_name: 'Synthetic track',
     master_metadata_album_artist_name: 'Synthetic artist',
     master_metadata_album_album_name: 'Synthetic album',
     spotify_track_uri: 'spotify:track:synthetic'
-  })));
+  }));
+  syntheticEvents.push(
+    { ts: '2024-01-11T12:00:00Z', ms_played: 180000, master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'Artist A', master_metadata_album_album_name: 'Album A' },
+    { ts: '2024-01-12T12:00:00Z', ms_played: 180000, master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'Artist B', master_metadata_album_album_name: 'Album B' },
+    { ts: '2024-01-13T12:00:00Z', ms_played: 180000, master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist C', master_metadata_album_album_name: 'Album One' },
+    { ts: '2024-01-14T12:00:00Z', ms_played: 180000, master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist C', master_metadata_album_album_name: 'Album Two' },
+    { ts: '2024-01-15T12:00:00Z', ms_played: 180000, master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist C', master_metadata_album_album_name: 'Album Two' }
+  );
+  const json = JSON.stringify(syntheticEvents);
   const transfer = new appWindow.DataTransfer();
   transfer.items.add(new appWindow.File([json], 'Streaming_History_Audio_synthetic.json', { type: 'application/json' }));
   const input = element('#file-input');
   input.files = transfer.files;
   input.dispatchEvent(new appWindow.Event('change', { bubbles: true }));
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
-  assert(kpiValue('Reproducciones') === '3', 'La carga debe mostrar 3 reproducciones');
+  assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
+  const hourlyChart = appDocument.querySelector('.chart-card[data-chart-id="dashboard-day-hour"]');
+  const hourlyPoints = JSON.parse(hourlyChart.dataset.chartPoints);
+  assert(hourlyPoints.length === 168, 'El mapa horario debe exponer todos sus puntos');
+  const nextHourlyPoint = hourlyChart.querySelector('[data-chart-step][data-dir="1"]');
+  nextHourlyPoint.focus();
+  nextHourlyPoint.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  assert(hourlyChart.querySelector('.chart-inspector__label').textContent === 'Lunes 0:00', 'Las flechas deben seleccionar el primer punto de la serie');
+  const hourlyValue = hourlyChart.querySelector('.chart-inspector__value').textContent;
+  assert(hourlyValue === '0 ms', `El inspector debe conservar los ceros reales: ${hourlyValue}`);
+  const hourlyCell = hourlyChart.querySelector('svg.chart [data-chart-index="35"]');
+  const hourlyCellRect = hourlyCell.getBoundingClientRect();
+  hourlyCell.dispatchEvent(new appWindow.MouseEvent('click', {
+    bubbles: true,
+    clientX: hourlyCellRect.left + hourlyCellRect.width / 2,
+    clientY: hourlyCellRect.top + hourlyCellRect.height / 2
+  }));
+  assert(!hourlyChart.querySelector('.chart-inspector').hidden, 'El toque/clic de un punto debe mantener abierto el inspector');
+
+  navLink('Hábitos').click();
+  await waitFor(() => Boolean(element('.chart-card[data-chart-id="habits-skips-monthly"]')), 'abrir serie mensual con banderas desconocidas');
+  const skipsChart = element('.chart-card[data-chart-id="habits-skips-monthly"]');
+  const skipsPoints = JSON.parse(skipsChart.dataset.chartPoints);
+  assert(skipsPoints.length > 0 && skipsPoints.every(point => point.value == null && point.valueText === 'Sin base'), 'Las banderas desconocidas deben conservar su estado sin convertirse en cero');
+  const nextSkipsPoint = skipsChart.querySelector('[data-chart-step][data-dir="1"]');
+  nextSkipsPoint.focus();
+  nextSkipsPoint.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  assert(skipsChart.querySelector('.chart-inspector__value').textContent === 'Sin base', 'El inspector debe anunciar que el mes no tiene base conocida');
+  assert(skipsChart.querySelector('.table-fallback').textContent.includes('Sin base'), 'La tabla del gráfico debe conservar los puntos desconocidos');
+  navLink('Resumen').click();
+  await waitFor(() => viewHeading() === 'Resumen', 'volver al resumen tras inspeccionar gráficos');
 
   element('[data-preset="4w"]').click();
-  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '2', 'filtro de 4 semanas');
-  assert(kpiValue('Reproducciones') === '2', 'El rango de 4 semanas debe mostrar 2 reproducciones');
+  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '4', 'filtro de 4 semanas');
+  assert(kpiValue('Reproducciones') === '4', 'El rango de 4 semanas debe mostrar 4 reproducciones');
   assert(element('#status[aria-live="polite"]'), 'El estado de carga debe estar anunciado');
   const filteredHash = appWindow.location.hash;
   element('.skip-link').click();
   assert(appWindow.location.hash === filteredHash, 'Saltar al contenido debe conservar la ruta y los filtros');
   assert(frame.contentDocument.activeElement === element('#main-content'), 'Saltar al contenido debe mover el foco');
-  assert(kpiValue('Reproducciones') === '2', 'Saltar al contenido debe conservar las cifras');
+  assert(kpiValue('Reproducciones') === '4', 'Saltar al contenido debe conservar las cifras');
   navLink('Sesiones').click();
   await waitFor(() => viewHeading() === 'Sesiones de escucha', 'abrir Sesiones');
   element('[data-preset="all"]').click();
-  await waitFor(() => !element('#view-root').hidden && kpiValue('Sesiones') === '3', 'Todo en Sesiones');
+  await waitFor(() => !element('#view-root').hidden && kpiValue('Sesiones') === '8', 'Todo en Sesiones');
   const allHash = appWindow.location.hash;
 
   appWindow.history.back();
   await waitFor(() => appWindow.location.hash === filteredHash && !element('#view-root').hidden && viewHeading() === 'Resumen', 'Atrás');
   assert(element('[data-preset="4w"]').getAttribute('aria-pressed') === 'true', 'Atrás debe restaurar el filtro');
-  assert(kpiValue('Reproducciones') === '2', 'Atrás debe restaurar las cifras filtradas');
+  assert(kpiValue('Reproducciones') === '4', 'Atrás debe restaurar las cifras filtradas');
   const comparison = [...frame.contentDocument.querySelectorAll('.kpi-sub')].map(node => node.textContent).join(' ');
-  assert(comparison.includes('100%') && comparison.includes('▲'), 'La comparación debe usar el período filtrado');
+  assert(comparison.includes('▲'), 'La comparación debe usar el período filtrado');
 
   appWindow.history.forward();
   await waitFor(() => appWindow.location.hash === allHash && !element('#view-root').hidden && viewHeading() === 'Sesiones de escucha', 'Adelante');
   assert(element('[data-preset="all"]').getAttribute('aria-pressed') === 'true', 'Adelante debe restaurar Todo');
-  assert(kpiValue('Sesiones') === '3', 'Adelante debe restaurar el modelo completo');
+  assert(kpiValue('Sesiones') === '8', 'Adelante debe restaurar el modelo completo');
 
   appWindow.location.hash = filteredHash;
-  await waitFor(() => !element('#view-root').hidden && viewHeading() === 'Resumen' && kpiValue('Reproducciones') === '2', 'hash filtrado');
-  assert(kpiValue('Reproducciones') === '2', 'Un cambio manual del hash debe filtrar las cifras');
+  await waitFor(() => !element('#view-root').hidden && viewHeading() === 'Resumen' && kpiValue('Reproducciones') === '4', 'hash filtrado');
+  assert(kpiValue('Reproducciones') === '4', 'Un cambio manual del hash debe filtrar las cifras');
   appWindow.location.hash = '#/dashboard';
-  await waitFor(() => !element('#view-root').hidden && element('[data-preset="all"]').getAttribute('aria-pressed') === 'true' && kpiValue('Reproducciones') === '3', 'hash sin filtros');
-  assert(kpiValue('Reproducciones') === '3', 'Un hash sin filtros debe restaurar las 3 reproducciones');
+  await waitFor(() => !element('#view-root').hidden && element('[data-preset="all"]').getAttribute('aria-pressed') === 'true' && kpiValue('Reproducciones') === '8', 'hash sin filtros');
+  assert(kpiValue('Reproducciones') === '8', 'Un hash sin filtros debe restaurar las 8 reproducciones');
 
   element('[data-preset="4w"]').click();
   element('#cancel-processing').click();
-  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '3', 'cancelación del filtro');
+  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '8', 'cancelación del filtro');
   assert(!element('#view-app').hidden, 'Cancelar el filtro debe conservar el análisis');
   assert(element('#view-home').hidden, 'Cancelar el filtro no debe volver al inicio');
 
@@ -170,7 +215,7 @@ async function run() {
   await waitFor(() => Boolean(element('#explore-card')), 'volver al catálogo');
   element('[data-explore-tab="tracks"]').click();
   await waitFor(() => element('[data-explore-tab="tracks"]').getAttribute('aria-selected') === 'true', 'catálogo de canciones');
-  const trackLink = element('#explore-card a[href^="#/v1/track/"]');
+  const trackLink = trackLinkFor('Synthetic artist', 'Synthetic track');
   trackLink.click();
   await waitFor(() => viewHeading() === 'Synthetic track', 'ficha de canción');
   assert(kpiValue('Reproducciones') === '3', 'La ficha de canción debe reconciliar sus reproducciones');
@@ -182,6 +227,35 @@ async function run() {
   element('#explore-card a[href^="#/v1/album/"]').click();
   await waitFor(() => viewHeading() === 'Synthetic album', 'ficha de álbum');
   assert(kpiValue('Reproducciones') === '3', 'La ficha de álbum debe reconciliar sus reproducciones');
+
+  navLink('Explorar').click();
+  await waitFor(() => Boolean(element('#explore-card')), 'abrir catálogo de homónimos');
+  element('[data-explore-tab="tracks"]').click();
+  await waitFor(() => element('[data-explore-tab="tracks"]').getAttribute('aria-selected') === 'true', 'preparar catálogo de homónimos');
+  const homonymSearch = element('[data-explore-search]');
+  homonymSearch.value = 'Echo';
+  homonymSearch.dispatchEvent(new appWindow.Event('input', { bubbles: true }));
+  await waitFor(() => element('[data-action="export-table"]').dataset.totalMatches === '2', 'buscar canciones homónimas');
+  const homonymLinks = [...element('#explore-card').querySelectorAll('a[href^="#/v1/track/"]')];
+  assert(homonymLinks.length === 2, 'Cada homónimo debe tener su fila propia');
+  const homonymHrefs = homonymLinks.map(link => decodeURIComponent(link.getAttribute('href')));
+  assert(homonymHrefs.some(href => href.includes('/Artist A/Echo')) && homonymHrefs.some(href => href.includes('/Artist B/Echo')), 'Las rutas deben separar canciones por artista');
+  const returnHref = homonymLinks[0].getAttribute('href');
+  homonymLinks[0].focus();
+  homonymLinks[0].click();
+  await waitFor(() => viewHeading() === 'Echo', 'abrir canción homónima');
+  appWindow.history.back();
+  await waitFor(() => viewHeading() === 'Explorar catálogo completo' && element('[data-explore-search]').value === 'Echo', 'volver a la consulta de homónimos');
+  assert(frame.contentDocument.activeElement.getAttribute('href') === returnHref, 'Atrás debe restaurar el foco en el enlace de origen');
+
+  const sharedSearch = element('[data-explore-search]');
+  sharedSearch.value = 'Shared';
+  sharedSearch.dispatchEvent(new appWindow.Event('input', { bubbles: true }));
+  await waitFor(() => element('[data-action="export-table"]').dataset.totalMatches === '1', 'buscar canción compartida por álbum');
+  trackLinkFor('Artist C', 'Shared').click();
+  await waitFor(() => viewHeading() === 'Shared', 'abrir canción compartida por álbum');
+  assert(kpiValue('Reproducciones') === '3', 'La canción agrupada debe conservar sus tres reproducciones');
+  assert(element('#view-root').textContent.includes('Album One') && element('#view-root').textContent.includes('Album Two'), 'La ficha agrupada debe mostrar sus dos atribuciones de álbum');
 
   navLink('Calendario').click();
   await waitFor(() => viewHeading().startsWith('Calendario'), 'abrir calendario');
@@ -219,11 +293,11 @@ async function run() {
   navLink('Resumen').click();
   await waitFor(() => viewHeading() === 'Resumen', 'volver al resumen para exportar la selección');
   element('[data-preset="4w"]').click();
-  await waitFor(() => kpiValue('Reproducciones') === '2', 'confirmar selección exportable');
+  await waitFor(() => kpiValue('Reproducciones') === '4', 'confirmar selección exportable');
   element('[data-action="export"]').click();
   await waitFor(() => element('#dialog-export').open, 'abrir exportación de selección');
   const selectionScope = element('[name="export-scope"][value="selection"]');
-  assert(!selectionScope.disabled && element('#export-selection-desc').textContent.includes('2 reproducciones'), 'La exportación debe conservar la selección analítica confirmada');
+  assert(!selectionScope.disabled && element('#export-selection-desc').textContent.includes('4 reproducciones'), 'La exportación debe conservar la selección analítica confirmada');
   selectionScope.click();
   element('#btn-confirm-export').click();
   await waitFor(() => !element('#processing').hidden, 'iniciar ZIP de selección');
@@ -237,25 +311,41 @@ async function run() {
   await waitFor(() => !element('#processing').hidden, 'iniciar ZIP completo');
   await waitFor(() => element('#processing').hidden, 'finalizar ZIP completo');
 
+  element('[data-preset="all"]').click();
+  await waitFor(() => kpiValue('Reproducciones') === '8', 'limpiar selección antes de exportar la tabla');
   navLink('Explorar').click();
   await waitFor(() => Boolean(element('#explore-card')), 'abrir catálogo para exportar');
   element('[data-explore-tab="tracks"]').click();
   await waitFor(() => element('[data-explore-tab="tracks"]').getAttribute('aria-selected') === 'true', 'preparar tabla de canciones');
   const trackSearch = element('[data-explore-search]');
-  trackSearch.value = 'Synthetic track';
+  trackSearch.value = 'Echo';
   trackSearch.dispatchEvent(new appWindow.Event('input', { bubbles: true }));
-  await waitFor(() => element('[data-explore-search]').value === 'Synthetic track' && element('[data-action="export-table"]').dataset.totalMatches === '1', 'confirmar consulta de exportación');
+  await waitFor(() => {
+    const params = new URLSearchParams(appWindow.location.hash.split('?')[1] ?? '');
+    const card = frame.contentDocument.querySelector('#explore-card');
+    if (!card) return false;
+    const rows = [...card.querySelectorAll('tbody tr')];
+    const rowNames = rows.map(row => row.textContent);
+    const links = rows.map(row => row.querySelector('a[href^="#/v1/track/"]')?.getAttribute('href') ?? '');
+    return params.get('q') === 'Echo'
+      && element('[data-explore-search]').value === 'Echo'
+      && element('[data-action="export-table"]').dataset.totalMatches === '2'
+      && rows.length === 2
+      && rowNames.every(name => name.includes('Echo'))
+      && links.some(href => decodeURIComponent(href).includes('/Artist A/Echo'))
+      && links.some(href => decodeURIComponent(href).includes('/Artist B/Echo'));
+  }, 'confirmar consulta de exportación');
   element('[data-action="export"]').click();
   await waitFor(() => element('#dialog-export').open, 'abrir opciones de exportación');
   assert(!element('[name="export-scope"][value="table"]').disabled, 'La tabla confirmada debe poder exportarse');
-  assert(element('#export-table-desc').textContent.includes('1 canciones'), 'El diálogo debe mostrar el total de la consulta confirmada');
+  assert(element('#export-table-desc').textContent.includes('2 canciones') && element('#export-table-desc').textContent.includes('búsqueda “Echo”'), 'El diálogo debe mostrar los criterios y total de la consulta confirmada');
   element('[data-action="close-export"]').click();
   assert(!element('#dialog-export').open, 'Cancelar debe cerrar el diálogo sin exportar');
   element('[data-action="export"]').click();
   await waitFor(() => element('#dialog-export').open, 'reabrir opciones de exportación');
   element('[name="export-scope"][value="table"]').click();
   element('#btn-confirm-export').click();
-  await waitFor(() => !element('#dialog-export').open && element('#live-status').textContent.includes('Descargadas 1 filas'), 'descargar tabla completa con metadata');
+  await waitFor(() => !element('#dialog-export').open && element('#live-status').textContent.includes('Descargadas 2 filas'), 'descargar tabla completa con metadata');
 
   appWindow.localStorage.setItem('scrobbleview_metric', 'plays');
   appWindow.localStorage.setItem('scrobbleview:tableLimits', '{"sessions-plays":25}');
@@ -263,13 +353,15 @@ async function run() {
   appWindow.localStorage.setItem('scrobbleview:density', 'compact');
   navLink('Resumen').click();
   await waitFor(() => viewHeading() === 'Resumen', 'volver al resumen antes de preferencias');
+  element('[data-preset="4w"]').click();
+  await waitFor(() => kpiValue('Reproducciones') === '4', 'preparar selección para preferencias');
   element('[data-action="reset-preferences"]').click();
   await waitFor(() => appWindow.localStorage.getItem('scrobbleview_metric') === null, 'restablecer preferencias');
-  assert(kpiValue('Reproducciones') === '2', 'Restablecer preferencias debe conservar el análisis y sus filtros');
+  assert(kpiValue('Reproducciones') === '4', 'Restablecer preferencias debe conservar el análisis y sus filtros');
   assert(element('[data-preset="4w"]').getAttribute('aria-pressed') === 'true', 'Restablecer preferencias no debe borrar filtros analíticos');
   assert(element('#live-status').textContent.includes('Preferencias restablecidas'), 'El resultado de preferencias debe anunciarse');
   element('[data-preset="all"]').click();
-  await waitFor(() => kpiValue('Reproducciones') === '3', 'limpiar selección antes de los ciclos');
+  await waitFor(() => kpiValue('Reproducciones') === '8', 'limpiar selección antes de los ciclos');
 
   let actionEffects = 0;
   let routeEffects = 0;
@@ -292,7 +384,7 @@ async function run() {
     actionEffects++;
 
     previousHash = appWindow.location.hash;
-    element('#explore-card a[href^="#/v1/track/"]').click();
+    trackLinkFor('Synthetic artist', 'Synthetic track').click();
     await waitFor(() => appWindow.location.hash !== previousHash && viewHeading() === 'Synthetic track', `ciclo ${cycle + 1}: detalle de canción`);
     assert(appWindow.location.hash !== previousHash, `Ciclo ${cycle + 1}: el detalle no produjo un cambio de ruta`);
     actionEffects++;
@@ -306,10 +398,10 @@ async function run() {
     routeEffects++;
 
     element('[data-preset="4w"]').click();
-    await waitFor(() => kpiValue('Reproducciones') === '2', `ciclo ${cycle + 1}: filtro 4 semanas`);
+    await waitFor(() => kpiValue('Reproducciones') === '4', `ciclo ${cycle + 1}: filtro 4 semanas`);
     actionEffects++;
     element('[data-preset="all"]').click();
-    await waitFor(() => kpiValue('Reproducciones') === '3', `ciclo ${cycle + 1}: restablecer filtro`);
+    await waitFor(() => kpiValue('Reproducciones') === '8', `ciclo ${cycle + 1}: restablecer filtro`);
     actionEffects++;
     cycleMemory.push(appWindow.performance.memory?.usedJSHeapSize ?? null);
   }

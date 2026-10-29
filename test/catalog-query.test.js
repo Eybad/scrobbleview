@@ -5,7 +5,7 @@ import { queryCatalog } from '../src/query.js';
 import { exportExploreTableCSV } from '../src/export.js';
 import { exploreView } from '../app/views.js';
 
-test('screen, count and export share skip eligibility and the full denominator', () => {
+test('B20: screen, count and export share the eligible skip-rate ranking and denominator', () => {
   const artists = [
     { id: 1, name: 'Eligible', plays: 20, ms: 1200000, skips: 10, skipKnown: 20 },
     { id: 2, name: 'Unknown', plays: 20, ms: 1200000, skips: 0, skipKnown: 0 }
@@ -19,6 +19,7 @@ test('screen, count and export share skip eligibility and the full denominator',
   assert.equal(displayed.effectiveDir, 'desc');
   assert.equal(exported.totalMatches, 1);
   assert.match(exported.csv, /Eligible/);
+  assert.match(exported.csv, /,Eligible,1200000,,20,50\.00,/);
   assert.doesNotMatch(exported.csv, /Unknown/);
   const html = exploreView(model, { metric: 'plays', exploreState: { tab: 'artists', sortBy: 'skipRate' } });
   assert.match(html, /Eligible/);

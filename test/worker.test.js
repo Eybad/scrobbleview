@@ -5,10 +5,13 @@ import { createAnalysisClient } from '../app/analysis-client.js';
 import { emptyFilterState } from '../src/filters.js';
 import { createAnalysisState } from '../app/analysis-state.js';
 import { renderView } from '../app/views.js';
-import { parseRoute, resolveRoute } from '../app/routes.js';
+import { formatSemanticRoute, parseRoute, resolveRoute } from '../app/routes.js';
 import { describeCatalogQuery } from '../app/catalog-query.js';
 import { exportExploreTableCSV } from '../src/export.js';
 import { crc32 } from '../src/export/zip.js';
+import { buildCompareSeries } from '../src/compare.js';
+import { chartDataTableHTML, createChartContract } from '../src/chart-contract.js';
+import { fmtNum } from '../src/charts.js';
 
 function clientForTest(t) {
   const client = createAnalysisClient({ createWorker() {
@@ -162,7 +165,7 @@ test('real worker preserves filters, historical discovery and deferred album att
   assert.deepEqual(albumTracks.slice(1).map((row) => row.slice(1, 4)), [[trackId, '1', '180000'], [trackId, '1', '180000']]);
 });
 
-test('table export reads the worker ZIP and matches the confirmed catalog query and filters', async (t) => {
+test('B21: worker ZIP preserves the confirmed query, selection filters and metadata', async (t) => {
   const client = clientForTest(t);
   const events = [
     { ts: '2024-01-01T00:00:00Z', ms_played: 60000, skipped: null, shuffle: null, offline: null,
@@ -246,8 +249,18 @@ test('table export reads the worker ZIP and matches the confirmed catalog query 
   const selectionArchive = await readCsvArchive(selection.bytes);
   const selectionMetadata = metadataMap(selectionArchive.get('metadata.csv'));
   assert.equal(selectionMetadata.get('scope'), 'selection');
+  assert.equal(selectionMetadata.get('metric'), 'plays');
   assert.equal(selectionMetadata.get('filter.artistId'), String(artistId));
   assert.equal(selectionMetadata.get('filter.artistId.name'), 'A');
+  assert.equal(selectionMetadata.get('filter.range.from'), String(filterState.range.from));
+  assert.equal(selectionMetadata.get('filter.range.to'), String(filterState.range.to));
+  assert.equal(selectionMetadata.get('filter.years'), '2024');
+  assert.equal(selectionMetadata.get('filter.months'), '202401');
+  assert.equal(selectionMetadata.get('filter.dows'), '0;1;2;3');
+  assert.equal(selectionMetadata.get('filter.hours'), '0');
+  assert.equal(selectionMetadata.get('filter.skip'), 'unknown');
+  assert.equal(selectionMetadata.get('filter.shuffle'), 'unknown');
+  assert.equal(selectionMetadata.get('filter.offline'), 'unknown');
   assert.equal(selectionMetadata.get('records_in_scope'), '2');
 
   const completeExport = await client.request('export');
@@ -308,6 +321,111 @@ test('album link opens the track with verified album attribution', async (t) => 
   const html = renderView('track', result.model, resolved.id, { detail: result.detail, rawQuery: parsed.query, query: '?m=plays' });
   assert.match(html, /Alcance: En este álbum/);
   assert.match(html, /First/);
+});
+
+test('B08: worker details and ZIP preserve homonym identity and album attribution', async (t) => {
+  const client = clientForTest(t);
+  const entries = [
+    { ts: '2024-01-01T00:00:00Z', ms_played: 60000, master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'Artist A', master_metadata_album_album_name: 'Album A' },
+    { ts: '2024-01-02T00:00:00Z', ms_played: 60000, master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'Artist B', master_metadata_album_album_name: 'Album B' },
+    { ts: '2024-01-03T00:00:00Z', ms_played: 60000, master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist C', master_metadata_album_album_name: 'Album One' },
+    { ts: '2024-01-04T00:00:00Z', ms_played: 60000, master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist C', master_metadata_album_album_name: 'Album Two' },
+    { ts: '2024-01-05T00:00:00Z', ms_played: 60000, master_metadata_track_name: 'Shared', master_metadata_album_artist_name: 'Artist C', master_metadata_album_album_name: 'Album Two' }
+  ];
+  const { model } = await client.request('load', { files: [file(entries)], timeZone: 'UTC' });
+  const routeA = resolveRoute(parseRoute(formatSemanticRoute('track', { artist: 'Artist A', name: 'Echo' })), model);
+  const routeB = resolveRoute(parseRoute(formatSemanticRoute('track', { artist: 'Artist B', name: 'Echo' })), model);
+  const echoLinks = renderView('explore', model, null, {
+    metric: 'plays',
+    exploreState: { tab: 'tracks', query: 'Echo', sortBy: 'name' }
+  }).match(/href="(#\/v1\/track\/[^\"]+)"/g) ?? [];
+  const shared = [...model.tracks.byId.values()].find(track => track.name === 'Shared');
+  const controller = createAnalysisState(client);
+  controller.initialize(model);
+  const detail = await controller.update(emptyFilterState(), { view: 'track', id: shared.tk });
+  const detailHtml = renderView('track', detail.model, shared.tk, {
+    detail: detail.detail,
+    detailRequested: true
+  });
+  const exported = await client.request('export');
+  const archive = await readCsvArchive(exported.bytes);
+  const tracksCsv = parseCsv(archive.get('tracks.csv'));
+  const echoRows = tracksCsv.slice(1).filter(row => row[2] === 'Echo');
+  const albumRows = parseCsv(archive.get('album_tracks.csv')).slice(1);
+  const sharedAlbumRows = albumRows.filter(row => row[1] === String(shared.tk));
+
+  assert.equal(routeA.notFound, false);
+  assert.equal(routeB.notFound, false);
+  assert.notEqual(routeA.id, routeB.id);
+  assert.equal(echoLinks.length, 2);
+  assert.notEqual(echoLinks[0], echoLinks[1]);
+  assert.deepEqual(detail.detail.rows.map(row => [row.name, row.plays]).sort(), [
+    ['Album One', 1], ['Album Two', 2]
+  ]);
+  assert.match(detailHtml, /Album One/);
+  assert.match(detailHtml, /Album Two/);
+  assert.deepEqual(echoRows.map(row => row[3]).sort(), ['Artist A', 'Artist B']);
+  assert.deepEqual(sharedAlbumRows.map(row => row.slice(2, 4)).sort(), [['1', '60000'], ['2', '120000']]);
+});
+
+test('B18: worker comparison series reconcile partial DST periods and Monday weeks', async (t) => {
+  const client = clientForTest(t);
+  const events = [
+    ['2024-03-10T06:30:00Z', 'Before spring transition'],
+    ['2024-03-10T07:30:00Z', 'After spring transition'],
+    ['2024-03-11T04:30:00Z', 'Next local day'],
+    ['2024-04-01T04:30:00Z', 'April local day']
+  ].map(([ts, track]) => ({
+    ts,
+    ms_played: 60000,
+    master_metadata_track_name: track,
+    master_metadata_album_artist_name: 'Artist',
+    master_metadata_album_album_name: 'Album'
+  }));
+  const rangeA = {
+    from: Date.parse('2024-03-10T00:00:00Z') / 1000,
+    to: Date.parse('2024-04-01T23:59:59Z') / 1000
+  };
+  const { model } = await client.request('load', {
+    files: [file(events)],
+    timeZone: 'America/New_York'
+  });
+  const result = await client.request('compare', {
+    preset: 'manual',
+    rangeA,
+    rangeB: rangeA,
+    state: emptyFilterState()
+  });
+  const range = {
+    from: Date.parse('2024-03-10T00:00:00Z') / 1000,
+    to: Date.parse('2024-04-01T23:59:59Z') / 1000
+  };
+  const daily = buildCompareSeries(result.periodA.daily, range, 'daily');
+  const weekly = buildCompareSeries(result.periodA.daily, range, 'weekly');
+  const monthly = buildCompareSeries(result.periodA.daily, range, 'monthly');
+  const monthTable = chartDataTableHTML(createChartContract({
+    id: 'r10-dst-months',
+    title: 'Eventos mensuales',
+    data: monthly.map(point => ({ label: point.label, value: point.value })),
+    format: fmtNum
+  }));
+
+  assert.equal(model.totals.records, 4);
+  assert.equal(result.periodA.totals.plays, 4);
+  assert.equal(daily.reduce((sum, point) => sum + point.value, 0), 4);
+  assert.equal(daily.find(point => point.label === '2024-03-10').value, 2);
+  assert.equal(daily.find(point => point.label === '2024-03-12').value, 0);
+  assert.equal(weekly.reduce((sum, point) => sum + point.value, 0), 4);
+  assert.equal(weekly[0].startDow, 6);
+  assert.equal(weekly[0].isPartial, true);
+  assert.equal(weekly[1].startDow, 0);
+  assert.equal(monthly.reduce((sum, point) => sum + point.value, 0), 4);
+  assert.deepEqual(monthly.map(point => [point.label, point.value, point.isPartial]), [
+    ['03/2024', 3, true], ['04/2024', 1, true]
+  ]);
+  assert.match(monthTable, /03\/2024/);
+  assert.match(monthTable, />3<\/td>/);
+  assert.match(monthTable, />1<\/td>/);
 });
 
 test('worker cancellation rejects pending work and permits a fresh load', async (t) => {
