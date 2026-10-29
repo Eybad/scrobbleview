@@ -484,9 +484,13 @@ function render() {
   const viewCtx = buildViewContext(name);
   let viewContent;
   if (resolved?.notFound) {
+    const tab = name === 'artist' ? 'artists' : name === 'track' ? 'tracks' : 'albums';
+    const params = new URLSearchParams(viewCtx.query.replace(/^\?/, ''));
+    params.set('tab', tab);
     viewContent = `<div class="empty-state">
       <p class="empty">${name === 'artist' ? 'Artista no encontrado.' : name === 'track' ? 'Canción no encontrada.' : 'Álbum no encontrado.'}</p>
-      <p class="empty-hint">No hay coincidencias en el historial cargado.</p>
+      <p class="empty-hint">${resolved.legacy ? 'Este enlace antiguo no identifica la entidad de forma verificable en este historial.' : 'No hay coincidencias en el historial cargado.'}</p>
+      <p><a href="#/v1/explore?${esc(params.toString())}" class="btn btn-secondary">Buscar en Explorar</a></p>
       <p><a href="#/dashboard" class="btn btn-primary">← Volver al resumen</a></p>
     </div>`;
   } else {

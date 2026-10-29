@@ -86,8 +86,13 @@ test('A12: semantic routes resolve the same entity regardless of file order / in
   assert.equal(resolveRoute(semanticTrackRoute, modelOrder2).entity.name, 'Creep');
 
   const legacyRoute = parseRoute('#/artist/1');
-  assert.equal(resolveRoute(legacyRoute, modelOrder1).entity.name, 'Radiohead');
-  assert.equal(resolveRoute(legacyRoute, modelOrder2).entity.name, 'Daft Punk');
+  assert.equal(resolveRoute(legacyRoute, modelOrder1).notFound, true);
+  assert.equal(resolveRoute(legacyRoute, modelOrder2).notFound, true);
+  assert.equal(resolveRoute(legacyRoute, modelOrder1).entity, null);
+  for (const route of ['#/track/101', '#/album/501']) {
+    assert.equal(resolveRoute(parseRoute(route), modelOrder1).notFound, true);
+    assert.equal(resolveRoute(parseRoute(route), modelOrder1).entity, null);
+  }
 });
 
 test('resolveRoute: reports notFound for nonexistent semantic or legacy entities', () => {

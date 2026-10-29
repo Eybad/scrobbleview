@@ -146,6 +146,9 @@ export function resolveRoute(parsed, model) {
   }
 
   const { view, params, isLegacy, query } = parsed;
+  if (isLegacy && ['artist', 'track', 'album'].includes(view)) {
+    return { view, id: null, entity: null, notFound: true, legacy: true, searchedName: `ID ${params.legacyId}`, query };
+  }
 
   if (view === 'artist') {
     if (!isLegacy) {
@@ -156,11 +159,6 @@ export function resolveRoute(parsed, model) {
       }
       if (match) return { view: 'artist', id: match.id, entity: match, notFound: false, query };
       return { view: 'artist', id: null, entity: null, notFound: true, searchedName: name, query };
-    } else {
-      const id = Number(params.legacyId);
-      const match = model.artists.byId.get(id);
-      if (match) return { view: 'artist', id: match.id, entity: match, notFound: false, legacy: true, query };
-      return { view: 'artist', id: null, entity: null, notFound: true, legacy: true, searchedName: `ID ${params.legacyId}`, query };
     }
   }
 
@@ -173,15 +171,6 @@ export function resolveRoute(parsed, model) {
       }
       if (match) return { view: 'track', id: match.tk, entity: match, notFound: false, query };
       return { view: 'track', id: null, entity: null, notFound: true, searchedArtist: artist, searchedTitle: title, query };
-    } else {
-      const raw = params.legacyId;
-      const tkNum = Number(raw);
-      let match = model.tracks.byId.get(tkNum);
-      if (!match) {
-        try { match = model.tracks.byId.get(BigInt(raw)); } catch (_) {}
-      }
-      if (match) return { view: 'track', id: match.tk, entity: match, notFound: false, legacy: true, query };
-      return { view: 'track', id: null, entity: null, notFound: true, legacy: true, searchedTitle: `ID ${raw}`, query };
     }
   }
 
@@ -194,11 +183,6 @@ export function resolveRoute(parsed, model) {
       }
       if (match) return { view: 'album', id: match.id, entity: match, notFound: false, query };
       return { view: 'album', id: null, entity: null, notFound: true, searchedArtist: artist, searchedTitle: title, query };
-    } else {
-      const id = Number(params.legacyId);
-      const match = model.albums.byId.get(id);
-      if (match) return { view: 'album', id: match.id, entity: match, notFound: false, legacy: true, query };
-      return { view: 'album', id: null, entity: null, notFound: true, legacy: true, searchedTitle: `ID ${params.legacyId}`, query };
     }
   }
 
