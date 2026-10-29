@@ -16,6 +16,7 @@ import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_K
 import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } from './routes.js';
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { contextBarHTML } from './context-bar.js';
+import { parseCalendarState, calendarQuery } from './calendar-ui.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -277,6 +278,9 @@ function syncHash() {
   if (name === 'explore') {
     const merged = mergeExploreParams(queryStr, rawQuery);
     hash = `#/v1/explore${merged ? `?${merged}` : ''}`;
+  } else if (name === 'calendar') {
+    const merged = calendarQuery(queryStr, state.calMonth, state.normalizeYears);
+    hash = formatSemanticRoute('calendar', id, merged);
   } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
     const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
     if (name === 'track') {
@@ -300,6 +304,7 @@ async function applyHashParams() {
   rankUI.metric = activeMetric;
   const restored = resolvePortableFilters(query, model);
   state = restored.state;
+  Object.assign(state, parseCalendarState(query));
   unresolvedFilter = restored.unresolved;
   return refreshModel();
 }
@@ -493,6 +498,7 @@ function buildViewContext(viewName) {
     rawQuery,
     detailRequested: viewName === 'day' || viewName === 'session' || viewName === 'track',
     normalizeYears: state.normalizeYears ?? false,
+    calMonth: state.calMonth,
     month: state.calMonth?.month,
     comparePreset: state.comparePreset || 'equal_previous'
   };
@@ -1313,6 +1319,7 @@ if (cacheAvailable()) {
 }
 
 let lastRoute = location.hash.split('?')[0];
+let pendingCalendarFocus = null;
 function focusMainContent() {
   const main = document.getElementById('main-content');
   main.focus({ preventScroll: true });
@@ -1338,6 +1345,10 @@ window.addEventListener('hashchange', async () => {
   if (popReturnState) {
     restoreHistoryState(popReturnState);
     popReturnState = null;
+    pendingCalendarFocus = null;
+  } else if (pendingCalendarFocus) {
+    appRoot.querySelector(`[data-cal-nav="${pendingCalendarFocus}"]`)?.focus({ preventScroll: true });
+    pendingCalendarFocus = null;
   } else if (route !== lastRoute) {
     if (name === 'artist' || name === 'track' || name === 'album' || name === 'day' || name === 'session') {
       const h = appRoot.querySelector('.view-header h1, .view-header');
@@ -1516,14 +1527,21 @@ appRoot.addEventListener('click', (e) => {
       year: Number(calNav.dataset.calYear),
       month: Number(calNav.dataset.calMonth)
     };
-    render();
+    const [view, year] = parseHash();
+    const fParams = portableFilterParams(state, model);
+    const query = calendarQuery(`${fParams || '?'}${fParams ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears);
+    pendingCalendarFocus = calNav.dataset.calNav;
+    location.hash = formatSemanticRoute('calendar', view === 'calendar' && year != null ? state.calMonth.year : null, query);
     return;
   }
 
   const scaleToggle = e.target.closest?.('[data-action="toggle-cal-scale"]');
   if (scaleToggle && appRoot.contains(scaleToggle)) {
     state.normalizeYears = scaleToggle.dataset.normalize === 'true';
+    syncHash();
+    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
     render();
+    appRoot.querySelector('[data-action="toggle-cal-scale"]')?.focus({ preventScroll: true });
     return;
   }
 

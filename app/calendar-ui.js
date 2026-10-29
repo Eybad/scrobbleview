@@ -5,6 +5,26 @@ export const MONTHS_LONG = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+export function parseCalendarState(query) {
+  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(params.get('cm') ?? '');
+  const year = match ? Number(match[1]) : null;
+  return {
+    calMonth: match && year >= 100 ? { year, month: Number(match[2]) } : null,
+    normalizeYears: params.get('cn') === '1'
+  };
+}
+
+export function calendarQuery(query, calMonth, normalizeYears) {
+  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
+  if (calMonth && Number.isInteger(calMonth.year) && calMonth.year >= 100 && calMonth.year <= 9999 && Number.isInteger(calMonth.month) && calMonth.month >= 1 && calMonth.month <= 12) {
+    params.set('cm', `${String(calMonth.year).padStart(4, '0')}-${String(calMonth.month).padStart(2, '0')}`);
+  } else params.delete('cm');
+  if (normalizeYears) params.set('cn', '1');
+  else params.delete('cn');
+  return params.toString();
+}
+
 export function calendarInspectorHTML({ year = null, byMs = true } = {}) {
   const metricName = byMs ? 'tiempo escuchado' : 'reproducciones';
   return `<section class="calendar-inspector card" id="calendar-inspector" role="region" aria-label="Inspector de día y selector de rango">

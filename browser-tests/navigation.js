@@ -122,7 +122,14 @@ async function run() {
   assert(updatedSearch.selectionStart === 4 && updatedSearch.selectionEnd === 4, 'La búsqueda debe conservar la posición del cursor');
   element('[data-sort="name"]').click();
   assert(frame.contentDocument.activeElement === element('[data-sort="name"]'), 'Ordenar debe conservar el foco');
-  results.textContent = 'APROBADO: carga, filtros, historial, cancelación y búsqueda en Explorar.';
+  appWindow.location.hash = '#/v1/calendar?cm=2024-12';
+  await waitFor(() => frame.contentDocument.querySelector('.calendar-month__title')?.textContent === 'Diciembre 2024', 'calendario de diciembre');
+  element('[data-cal-nav="next-month"]').click();
+  await waitFor(() => frame.contentDocument.querySelector('.calendar-month__title')?.textContent === 'Enero 2025', 'cruce a enero');
+  assert(appWindow.location.hash.includes('cm=2025-01'), 'El mes y el año deben quedar en la URL');
+  appWindow.history.back();
+  await waitFor(() => frame.contentDocument.querySelector('.calendar-month__title')?.textContent === 'Diciembre 2024', 'volver a diciembre');
+  results.textContent = 'APROBADO: carga, filtros, historial, cancelación, búsqueda y navegación mensual.';
 }
 
 runButton.addEventListener('click', async () => {

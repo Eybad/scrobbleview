@@ -6,8 +6,26 @@ import { renderView } from '../app/views.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { createChartContract, chartDataTableHTML } from '../src/chart-contract.js';
 import { fmtNum } from '../src/charts.js';
+import { calendarQuery, parseCalendarState } from '../app/calendar-ui.js';
 
 import { buildDataset } from './fakes/dataset.js';
+
+test('calendar month keeps its year when crossing December and January', () => {
+  const ds = buildDataset([
+    { t: 1735603200, m: 60000, track: 'December', artist: 'Artist' },
+    { t: 1735776000, m: 120000, track: 'January', artist: 'Artist' }
+  ]);
+  const model = aggregate(ds, { tz: fixedTz('UTC', 0) });
+  const january = renderView('calendar', model, null, { calMonth: { year: 2025, month: 1 } });
+  const december = renderView('calendar', model, null, { calMonth: { year: 2024, month: 12 } });
+  assert.match(january, /Enero 2025/);
+  assert.match(december, /Diciembre 2024/);
+  assert.match(renderView('calendar', model, 2025, { calMonth: { year: 2025, month: 1 } }), /Enero 2025/);
+  assert.match(renderView('calendar', model, 2026, { calMonth: { year: 2026, month: 1 } }), /Enero 2026/);
+  const query = calendarQuery('?r=1-2&m=plays', { year: 2025, month: 1 }, true);
+  assert.deepEqual(parseCalendarState(query), { calMonth: { year: 2025, month: 1 }, normalizeYears: true });
+  assert.equal(new URLSearchParams(query).get('r'), '1-2');
+});
 
 test('A15: sessions startHour always completes 24 positions with zero for absent hours', () => {
   const tz = fixedTz('UTC', 0);

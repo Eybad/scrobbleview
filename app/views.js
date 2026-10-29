@@ -1324,7 +1324,7 @@ export function yearlyView(model, ctx = {}) {
     const topTkEntry = topEntityInMap(byMs ? d.tracksMs : d.tracksC, false);
     const topTr = topTkEntry ? model.tracks.byId.get(topTkEntry[0]) : null;
     return [
-      `<a href="#/calendar/${esc(String(y))}">${esc(String(y))}</a>`,
+      `<a href="${esc(formatSemanticRoute('calendar', y, ctx.query))}">${esc(String(y))}</a>`,
       fmtNum(d.plays),
       fmtMs(d.ms),
       fmtNum(d.artistsC.size) + (d.unknownArtistPlays > 0 ? ` <span class="cell-sub">(${fmtNum(d.unknownArtistPlays)} sin artista)</span>` : ''),
@@ -1360,12 +1360,9 @@ export function yearlyView(model, ctx = {}) {
 }
 
 export function calendarView(model, year, ctx = {}) {
+  if (!Number.isInteger(year) || year < 100 || year > 9999) return '<p class="empty">Año no válido.</p>';
   const byMs = ctx?.metric ? ctx.metric === 'ms' : true;
   const valFmt = byMs ? fmtMs : fmtNum;
-  const years = [...model.yearly.keys()].sort((a, b) => a - b);
-  if (!years.includes(year)) {
-    return `<p class="empty">Sin datos para ${esc(String(year))}.</p>`;
-  }
   const days = [...model.daily.entries()]
     .filter(([d]) => civilFromDays(d).y === year)
     .map(([d, v]) => {
@@ -1381,11 +1378,11 @@ export function calendarView(model, year, ctx = {}) {
     : null;
 
   const daysMap = new Map(days.map((d) => [d.date, d]));
-  const currentMonth = ctx?.month ? Number(ctx.month) : 1;
+  const currentMonth = ctx.calMonth?.year === year ? ctx.calMonth.month : (ctx?.month ? Number(ctx.month) : 1);
 
   return `
     <header class="view-header">
-      <p><a href="#/calendar">← Todos los años</a></p>
+      <p><a href="${esc(formatSemanticRoute('calendar', null, ctx.query))}">← Todos los años</a></p>
       <h1>Calendario ${esc(String(year))}</h1>
       <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin registros dentro del período observado · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
@@ -1446,7 +1443,7 @@ export function calendarIndexView(model, ctx = {}) {
     : null;
 
   const [last, ...prev] = years;
-  const latestYear = last ?? (years.length ? years[0] : new Date().getFullYear());
+  const latestYear = ctx.calMonth?.year ?? last ?? (years.length ? years[0] : new Date().getFullYear());
   const latestDaysMap = new Map([...model.daily.entries()]
     .filter(([d]) => civilFromDays(d).y === latestYear)
     .map(([d, v]) => {
@@ -1454,7 +1451,7 @@ export function calendarIndexView(model, ctx = {}) {
       const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
       return [iso, { date: iso, value: byMs ? v.ms : v.plays, ms: v.ms, plays: v.plays }];
     }));
-  const currentMonth = ctx?.month ? Number(ctx.month) : (new Date().getMonth() + 1);
+  const currentMonth = ctx.calMonth?.month ?? (ctx?.month ? Number(ctx.month) : (new Date().getMonth() + 1));
 
   return `
     <header class="view-header">
@@ -1464,14 +1461,14 @@ export function calendarIndexView(model, ctx = {}) {
     ${calendarScaleToggleHTML({ normalizeYears, maxValFormatted: valFmt(sharedMax) })}
     ${calendarInspectorHTML({ year: latestYear, byMs })}
     ${calendarMonthViewHTML({ year: latestYear, month: currentMonth, daysMap: latestDaysMap, colorScale: normalizeYears ? makeScale(Math.max(...[...latestDaysMap.values()].map((d) => d.value), 1)) : makeScale(sharedMax), byMs, dataRange })}
-    ${last != null ? card(`<a href="#/calendar/${esc(String(last))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${calendarYearGridHTML(model, last, ctx)}</div>`, '', true) : ''}
+    ${last != null ? card(`<a href="${esc(formatSemanticRoute('calendar', last, ctx.query))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${calendarYearGridHTML(model, last, ctx)}</div>`, '', true) : ''}
     ${prev.map((y) => {
       const yd = model.yearly.get(y);
       const isRendered = Boolean(ctx?.renderAllYears);
       return `
       <details class="card calendar-year">
         <summary>${calendarYearSummaryHTML(y, yd)}</summary>
-        <p class="calendar-year-link"><a href="#/calendar/${esc(String(y))}">Ver solo ${esc(String(y))} →</a></p>
+        <p class="calendar-year-link"><a href="${esc(formatSemanticRoute('calendar', y, ctx.query))}">Ver solo ${esc(String(y))} →</a></p>
         <div class="chart-scroll chart-scroll--cal" data-deferred-year="${y}" tabindex="0" role="region" aria-label="Calendario de ${esc(String(y))}">${isRendered ? calendarYearGridHTML(model, y, ctx) : ''}</div>
       </details>`;
     }).join('')}`;

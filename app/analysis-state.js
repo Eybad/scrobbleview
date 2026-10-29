@@ -29,7 +29,9 @@ export function createAnalysisState(client) {
     getConfirmed() { return { model: current, prev, detail, key: appliedKey, context: copyContext(confirmedContext) }; },
     getFailed() { return copyContext(failedContext); },
     updatePresentation(context) {
-      if (confirmedContext && !pendingContext) confirmedContext = { ...confirmedContext, ...context };
+      if (confirmedContext && !pendingContext) {
+        confirmedContext = { ...confirmedContext, ...context, state: context.state ? copyState(context.state) : confirmedContext.state };
+      }
     },
     cancelUpdate() {
       revision++;
