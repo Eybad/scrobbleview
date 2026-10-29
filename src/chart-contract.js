@@ -16,8 +16,8 @@ export function createChartContract({
   emptyNotice = 'Sin datos disponibles para esta visualización.'
 } = {}) {
   const points = data.map((d, i) => {
-    const rawVal = d.value ?? d.y ?? 0;
-    const val = Number.isFinite(rawVal) ? rawVal : 0;
+    const rawVal = d.value === null || d.y === null ? null : (d.value ?? d.y ?? 0);
+    const val = rawVal === null || !Number.isFinite(rawVal) ? null : rawVal;
     const label = d.label != null ? String(d.label) : String(i + 1);
     const date = d.date != null ? String(d.date) : null;
     return {
@@ -25,14 +25,15 @@ export function createChartContract({
       label,
       value: val,
       date,
-      values: Array.isArray(d.values) ? d.values.map((value) => Number.isFinite(value) ? value : 0) : null,
+      values: Array.isArray(d.values) ? d.values.map((value) => value == null || !Number.isFinite(value) ? null : value) : null,
       extra: d.extra ?? null
     };
   });
 
-  const total = points.reduce((acc, p) => acc + p.value, 0);
-  const max = points.length ? Math.max(...points.map((p) => p.value), 0) : 0;
-  const min = points.length ? Math.min(...points.map((p) => p.value), 0) : 0;
+  const knownValues = points.map((point) => point.value).filter(Number.isFinite);
+  const total = knownValues.reduce((acc, value) => acc + value, 0);
+  const max = knownValues.length ? Math.max(...knownValues) : 0;
+  const min = knownValues.length ? Math.min(...knownValues) : 0;
   const isEmpty = points.length === 0;
 
   return {
@@ -70,8 +71,8 @@ export function chartDataTableHTML(contract) {
       const point = points[i];
       rowsHtml += `<tr data-chart-row="${i}"${i >= pageSize ? ' hidden' : ''}>
         <th scope="row">${esc(point.label)}</th>
-        ${contract.seriesLabels.map((_, index) => `<td class="n">${esc(format(point.values?.[index] ?? 0))}</td>`).join('')}
-        <td class="n">${esc(format(point.value))}</td>
+        ${contract.seriesLabels.map((_, index) => `<td class="n">${point.values?.[index] == null ? 'Sin base' : esc(format(point.values[index]))}</td>`).join('')}
+        <td class="n">${point.value == null ? 'Sin base' : esc(format(point.value))}</td>
       </tr>`;
     }
     const pagination = points.length > pageSize
@@ -94,12 +95,12 @@ export function chartDataTableHTML(contract) {
 
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
-    const pct = total > 0 ? ((p.value / total) * 100).toFixed(1).replace('.', ',') : '0,0';
+    const pct = p.value == null ? '—' : total > 0 ? ((p.value / total) * 100).toFixed(1).replace('.', ',') : '0,0';
     const dateCell = hasDates ? `<td>${esc(p.date || '—')}</td>` : '';
     rowsHtml += `<tr data-chart-row="${i}"${i >= pageSize ? ' hidden' : ''}>
       <th scope="row">${esc(p.label)}</th>
       ${dateCell}
-      <td class="n">${esc(format(p.value))}</td>
+      <td class="n">${p.value == null ? 'Sin base' : esc(format(p.value))}</td>
       ${showShare ? `<td class="n">${pct}%</td>` : ''}
     </tr>`;
   }
@@ -163,8 +164,9 @@ export function renderChartWithContract(contract, chartSvg) {
     value: point.value,
     values: point.values,
     extra: point.extra,
-    valueText: format(point.value),
-    shareText: showShare && total > 0 ? `${((point.value / total) * 100).toFixed(1).replace('.', ',')}%` : ''
+    valueText: point.value == null ? 'Sin base' : format(point.value),
+    shareText: showShare && point.value == null ? 'sin base'
+      : showShare && total > 0 ? `${((point.value / total) * 100).toFixed(1).replace('.', ',')}%` : ''
   })));
 
   return `<div class="chart-card" data-chart-id="${esc(id)}" data-chart-type="${esc(chartType)}" data-chart-unit="${esc(unit)}" data-chart-points="${esc(pointData)}">

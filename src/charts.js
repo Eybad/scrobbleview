@@ -156,8 +156,11 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   const plotW = width - pad.l - pad.r;
   const plotH = height - pad.t - pad.b;
   const xs = points.map((_, i) => (n === 1 ? pad.l + plotW / 2 : pad.l + (i / (n - 1)) * plotW));
-  const maxY = Math.max(...points.map((p) => p.y), 1);
-  const ys = points.map((p) => pad.t + plotH - (p.y / maxY) * plotH);
+  const knownIndexes = points.map((point, index) => Number.isFinite(point.y) ? index : -1).filter((index) => index >= 0);
+  const maxY = Math.max(...knownIndexes.map((index) => points[index].y), 1);
+  const ys = points.map((point) => Number.isFinite(point.y)
+    ? pad.t + plotH - (point.y / maxY) * plotH
+    : pad.t + plotH);
   // Guías de referencia a 1, 2/3 y 1/3 del máximo + el máximo rotulado:
   // sin escala, la línea flotaba sin ancla y el lector no podía estimar
   // valores intermedios.
@@ -165,10 +168,31 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const y = pad.t + plotH - f * plotH;
     return `<line x1="${pad.l}" x2="${width - pad.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${GRID}" stroke-width="1"/>`;
   }).join('');
-  const maxLabel = `<text x="${pad.l}" y="${pad.t - 4}" text-anchor="start" class="chart-max" font-size="11">${esc(format(maxY))}</text>`;
-  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  const areaPath = `${line} L${xs[n - 1].toFixed(1)},${(pad.t + plotH).toFixed(1)} L${xs[0].toFixed(1)},${(pad.t + plotH).toFixed(1)} Z`;
+  const maxLabel = `<text x="${pad.l}" y="${pad.t - 4}" text-anchor="start" class="chart-max" font-size="11">${knownIndexes.length ? esc(format(maxY)) : 'Sin base'}</text>`;
+  const segments = [];
+  let currentSegment = [];
+  for (let index = 0; index < n; index++) {
+    if (Number.isFinite(points[index].y)) {
+      currentSegment.push(index);
+    } else if (currentSegment.length) {
+      segments.push(currentSegment);
+      currentSegment = [];
+    }
+  }
+  if (currentSegment.length) segments.push(currentSegment);
+  const pathFor = (indexes) => indexes.map((index, position) => `${position === 0 ? 'M' : 'L'}${xs[index].toFixed(1)},${ys[index].toFixed(1)}`).join(' ');
+  const linePaths = segments.map(pathFor);
+  const areaPaths = segments.map((indexes) => {
+    const line = pathFor(indexes);
+    const first = indexes[0];
+    const last = indexes.at(-1);
+    return `${line} L${xs[last].toFixed(1)},${(pad.t + plotH).toFixed(1)} L${xs[first].toFixed(1)},${(pad.t + plotH).toFixed(1)} Z`;
+  });
   const dots = points.map((p, i) => {
+    if (!Number.isFinite(p.y)) {
+      const label = p.label != null ? String(p.label) : `punto ${i + 1}`;
+      return `<g data-chart-index="${i}" class="chart-point chart-point--unknown"><title>${esc(`${label}: Sin base`)}</title></g>`;
+    }
     const raw = p.label != null ? String(p.label) : '';
     const title = raw ? `${raw}: ${format(p.y)}` : format(p.y);
     return `<circle data-chart-index="${i}" class="chart-point" cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
@@ -210,13 +234,16 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   // Resumen para lectores de pantalla: rango, máximo y último. Enumerar todos
   // los puntos (una evolución mensual multi-año) hacía el aria-label inusable.
   const nameOf = (p, i) => (p.label != null ? String(p.label) : `punto ${i + 1}`);
-  let maxIdx = 0;
-  for (let i = 1; i < n; i++) if (points[i].y > points[maxIdx].y) maxIdx = i;
-  const aria = `Gráfico de líneas de ${nameOf(points[0], 0)} a ${nameOf(points[n - 1], n - 1)}; máximo ${nameOf(points[maxIdx], maxIdx)}: ${format(points[maxIdx].y)}; último: ${format(points[n - 1].y)}`;
+  let maxIdx = knownIndexes[0] ?? -1;
+  for (const index of knownIndexes) if (points[index].y > points[maxIdx].y) maxIdx = index;
+  const maxSummary = maxIdx < 0 ? 'sin base de datos conocidos' : `máximo ${nameOf(points[maxIdx], maxIdx)}: ${format(points[maxIdx].y)}`;
+  const lastPoint = points[n - 1];
+  const lastSummary = Number.isFinite(lastPoint.y) ? format(lastPoint.y) : 'sin base';
+  const aria = `Gráfico de líneas de ${nameOf(points[0], 0)} a ${nameOf(lastPoint, n - 1)}; ${maxSummary}; último: ${lastSummary}`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">
     ${grid}${maxLabel}
-    ${area ? `<path d="${areaPath}" fill="${accent}" opacity="0.15"/>` : ''}
-    <path d="${line}" fill="none" stroke="${accent}" stroke-width="2"/>
+    ${area ? areaPaths.map((path) => `<path d="${path}" fill="${accent}" opacity="0.15"/>`).join('') : ''}
+    ${linePaths.map((path) => `<path d="${path}" fill="none" stroke="${accent}" stroke-width="2"/>`).join('')}
     ${dots}${labels}
   </svg>`;
 }

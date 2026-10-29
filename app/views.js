@@ -1851,21 +1851,30 @@ export function habitsView(model, ctx = {}) {
   const months = fillMonths(sortedMonths(model.monthlyBehavior));
   const skipsLine = contractedLineChart({
     id: 'habits-skips-monthly', title: 'Saltos por mes',
-    points: months.map((mi) => ({ label: monthLabel(mi), y: model.monthlyBehavior.get(mi)?.skips ?? 0 })),
+    points: months.map((mi) => {
+      const data = model.monthlyBehavior.get(mi);
+      return { label: monthLabel(mi), y: data?.skipKnown > 0 ? data.skips : null };
+    }),
     format: fmtNum,
     unit: 'reproducciones saltadas',
     base: 'eventos con bandera de salto conocida'
   });
   const shuffleLine = contractedLineChart({
     id: 'habits-shuffle-monthly', title: 'Aleatorio por mes',
-    points: months.map((mi) => ({ label: monthLabel(mi), y: model.monthlyBehavior.get(mi)?.shuffle ?? 0 })),
+    points: months.map((mi) => {
+      const data = model.monthlyBehavior.get(mi);
+      return { label: monthLabel(mi), y: data?.shuffleKnown > 0 ? data.shuffle : null };
+    }),
     format: fmtNum,
     unit: 'reproducciones en aleatorio',
     base: 'eventos con bandera de aleatorio conocida'
   });
   const offlineLine = contractedLineChart({
     id: 'habits-offline-monthly', title: 'Sin conexión por mes',
-    points: months.map((mi) => ({ label: monthLabel(mi), y: model.monthlyBehavior.get(mi)?.offline ?? 0 })),
+    points: months.map((mi) => {
+      const data = model.monthlyBehavior.get(mi);
+      return { label: monthLabel(mi), y: data?.offlineKnown > 0 ? data.offline : null };
+    }),
     format: fmtNum,
     unit: 'reproducciones sin conexión',
     base: 'eventos con bandera de sin conexión conocida'
