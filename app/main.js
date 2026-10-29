@@ -17,6 +17,8 @@ import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } fro
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { contextBarHTML } from './context-bar.js';
 import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGridTargetDate } from './calendar-ui.js';
+import { parseCompareState, compareQuery, compareDateRange, compareDateAt } from './compare-state.js';
+import { calculateCompareRange } from '../src/compare.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -67,6 +69,13 @@ let currentPrev = null;
 let currentDetail = null, detailContext = null, detailPage = 1, detailPageSize = 25;
 let unresolvedFilter = false;
 let initializing = false;
+let compareResult = null;
+let compareResultKey = null;
+let compareStatus = 'idle';
+let compareLoadError = null;
+let compareInFlight = false;
+let compareActiveKey = null;
+let comparePending = null;
 let state = emptyFilterState();
 let activeMetric = resolveMetric(null, typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null);
 let rankUI = { tab: 'artists', metric: activeMetric, topN: initialLimits.rankTopN, query: '' };
@@ -299,6 +308,11 @@ function reportProcessingError(error, type = 'general') {
 }
 
 async function initializeAnalysis(result) {
+  compareResult = null;
+  compareResultKey = null;
+  compareStatus = 'idle';
+  compareLoadError = null;
+  comparePending = null;
   model = result.model;
   current = model;
   currentPrev = null;
@@ -432,6 +446,8 @@ function syncHash() {
       rangeTo: state.calRangeTo
     });
     hash = formatSemanticRoute('calendar', id, merged);
+  } else if (name === 'compare') {
+    hash = formatSemanticRoute('compare', null, compareQuery(queryStr, state));
   } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
     const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
     if (name === 'track') {
@@ -445,6 +461,13 @@ function syncHash() {
   if (location.hash !== hash) history.replaceState(history.state, '', hash);
 }
 
+function pushCompareHash() {
+  const fParams = portableFilterParams(state, model);
+  const query = fParams ? `${fParams}&${serializeMetricParam(activeMetric)}` : `?${serializeMetricParam(activeMetric)}`;
+  const hash = formatSemanticRoute('compare', null, compareQuery(query, state));
+  if (location.hash !== hash) history.pushState(history.state, '', hash);
+}
+
 // The URL is authoritative on load, Back/Forward and manual hash changes.
 // Restore state and its model together before any view reads either one.
 async function applyHashParams() {
@@ -455,6 +478,7 @@ async function applyHashParams() {
   rankUI.metric = activeMetric;
   const restored = resolvePortableFilters(query, model);
   state = restored.state;
+  Object.assign(state, parseCompareState(query));
   const calendarState = parseCalendarState(query);
   if (view === 'calendar' && id != null && Number(id) >= 100 && Number(id) <= 9999) {
     calendarState.calMonth = {
@@ -524,7 +548,10 @@ function navHTML(active) {
   const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
-  const link = (hash, label, view) => `<a href="#/${hash}${esc(queryStr)}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
+  const link = (hash, label, view) => {
+    const query = view === 'compare' && active === 'compare' ? `?${compareQuery(queryStr, state)}` : queryStr;
+    return `<a href="#/${hash}${esc(query)}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
+  };
 
   let favsHTML = '';
   if (favorites.size > 0) {
@@ -651,6 +678,38 @@ function buildViewContext(viewName) {
     })}`
     : queryStr;
 
+  const observedRange = model?.meta?.firstTs == null ? null : {
+    from: Math.floor(model.meta.firstTs / 86400) * 86400,
+    to: Math.floor(model.meta.lastTs / 86400) * 86400 + 86399
+  };
+  const defaultCompareRange = state.range ?? observedRange;
+  const compareFrom = state.compareFrom ?? compareDateAt(defaultCompareRange, 'from');
+  const compareTo = state.compareTo ?? compareDateAt(defaultCompareRange, 'to');
+  const compareRangeA = compareDateRange(compareFrom, compareTo);
+  const compareRefRange = compareDateRange(state.compareRefFrom, state.compareRefTo);
+  const compareDataRange = model?.meta?.firstTs == null ? null : { minSec: model.meta.firstTs, maxSec: model.meta.lastTs };
+  let compareRangeB = compareRefRange;
+  let compareWarning = '';
+  let compareError = '';
+  if (compareRangeA && state.comparePreset !== 'manual') {
+    try {
+      const calculated = calculateCompareRange(state.comparePreset, compareRangeA, compareDataRange);
+      compareRangeB = calculated.rangeB;
+      compareWarning = calculated.warning;
+    } catch (error) {
+      compareError = error.message;
+    }
+  } else if (compareRangeA && state.comparePreset === 'manual' && compareRefRange) {
+    try {
+      const calculated = calculateCompareRange('manual', compareRangeA, compareDataRange, compareRefRange);
+      compareWarning = calculated.warning;
+    } catch (error) {
+      compareError = error.message;
+    }
+  }
+  if (!compareRangeA) compareError ||= 'Elegí fechas válidas para el período A.';
+  if (state.comparePreset === 'manual' && !compareRefRange) compareError ||= 'Elegí fechas válidas para el período B.';
+
   return {
     years: state.years,
     range: state.range,
@@ -667,8 +726,99 @@ function buildViewContext(viewName) {
     calMonth: state.calMonth,
     calDate: state.calDate,
     month: state.calMonth?.month ?? (new Date().getMonth() + 1),
-    comparePreset: state.comparePreset || 'equal_previous'
+    comparePreset: state.comparePreset,
+    compareGranularity: state.compareGranularity,
+    compareFrom,
+    compareTo,
+    compareRefFrom: state.compareRefFrom,
+    compareRefTo: state.compareRefTo,
+    compareRangeA,
+    compareRangeB,
+    compareDataRange,
+    compareWarning,
+    compareError,
+    compareResult,
+    compareStatus,
+    compareLoadError
   };
+}
+
+function dispatchComparison(job) {
+  compareInFlight = true;
+  compareActiveKey = job.key;
+  analysisClient.request('compare', job.payload).then((result) => {
+    if (job.key !== compareResultKey) return;
+    if (parseHash()[0] !== 'compare') {
+      compareResultKey = null;
+      compareStatus = 'idle';
+      return;
+    }
+    compareResult = result;
+    compareStatus = 'ready';
+    compareLoadError = null;
+    render();
+  }).catch((error) => {
+    if (job.key !== compareResultKey) return;
+    if (error.code === 'E_ABORT' || parseHash()[0] !== 'compare') {
+      compareResultKey = null;
+      compareStatus = 'idle';
+      return;
+    }
+    compareStatus = 'error';
+    compareLoadError = error.message;
+    render();
+  }).finally(() => {
+    compareInFlight = false;
+    compareActiveKey = null;
+    const next = comparePending;
+    comparePending = null;
+    if (next && parseHash()[0] === 'compare') dispatchComparison(next);
+    else if (next && next.key === compareResultKey) {
+      compareResultKey = null;
+      compareStatus = 'idle';
+    }
+  });
+}
+
+function prepareComparison(context) {
+  if (!context.compareRangeA || !context.compareRangeB) {
+    compareResultKey = null;
+    compareResult = null;
+    compareStatus = 'idle';
+    comparePending = null;
+    context.compareResult = null;
+    context.compareStatus = 'idle';
+    context.compareLoadError = null;
+    return;
+  }
+  const filterState = { ...state, range: null, years: null, months: null, dows: null, hours: null };
+  const key = JSON.stringify([
+    filterParams(filterState),
+    context.comparePreset,
+    context.compareRangeA,
+    context.compareRangeB
+  ]);
+  if (key !== compareResultKey) {
+    compareResultKey = key;
+    compareResult = null;
+    compareLoadError = null;
+    compareStatus = 'loading';
+    const job = {
+      key,
+      payload: {
+        state: filterState,
+        preset: context.comparePreset,
+        rangeA: context.compareRangeA,
+        rangeB: context.compareRangeB
+      }
+    };
+    if (compareInFlight && key === compareActiveKey) comparePending = null;
+    else if (compareInFlight) comparePending = job;
+    else dispatchComparison(job);
+  }
+  context.compareResult = compareResult;
+  context.compareStatus = compareStatus;
+  context.compareLoadError = compareLoadError;
 }
 
 function render() {
@@ -678,8 +828,10 @@ function render() {
   // para que navegar no pegue un salto brusco (el bug se veía al tocar una
   // sección con el nav deslizado a la derecha).
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
-  const isEmpty = isFilterActive(state) && current.totals.records === 0;
+  const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);
+  if (name === 'compare') prepareComparison(viewCtx);
+  else comparePending = null;
   let viewContent;
   if (resolved?.notFound) {
     const tab = name === 'artist' ? 'artists' : name === 'track' ? 'tracks' : 'albums';
@@ -743,8 +895,9 @@ async function applyAndRenderView(focusSelector = null) {
   const [name, id] = parseHash();
   const root = document.getElementById('view-root');
   if (root) {
-    const isEmpty = isFilterActive(state) && current.totals.records === 0;
+    const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
     const viewCtx = buildViewContext(name);
+    if (name === 'compare') prepareComparison(viewCtx);
     root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
     resizeContractCharts();
     restoreChartSelections();
@@ -1193,6 +1346,56 @@ function wireView() {
   wireRankCard();
   wireExploreView();
   syncTallTables(appRoot);
+
+  const compareForm = appRoot.querySelector('#compare-form');
+  compareForm?.querySelector('[data-compare-field="preset"]')?.addEventListener('change', (event) => {
+    state.compareFrom = compareForm.querySelector('[data-compare-field="fromA"]').value || null;
+    state.compareTo = compareForm.querySelector('[data-compare-field="toA"]').value || null;
+    state.compareRefFrom = compareForm.querySelector('[data-compare-field="fromB"]').value || null;
+    state.compareRefTo = compareForm.querySelector('[data-compare-field="toB"]').value || null;
+    state.comparePreset = event.target.value;
+    pushCompareHash();
+    render();
+    appRoot.querySelector('[data-compare-field="preset"]')?.focus();
+  });
+  compareForm?.querySelector('[data-compare-field="granularity"]')?.addEventListener('change', (event) => {
+    state.compareFrom = compareForm.querySelector('[data-compare-field="fromA"]').value || null;
+    state.compareTo = compareForm.querySelector('[data-compare-field="toA"]').value || null;
+    state.compareRefFrom = compareForm.querySelector('[data-compare-field="fromB"]').value || null;
+    state.compareRefTo = compareForm.querySelector('[data-compare-field="toB"]').value || null;
+    state.compareGranularity = event.target.value;
+    pushCompareHash();
+    render();
+    appRoot.querySelector('[data-compare-field="granularity"]')?.focus();
+  });
+  compareForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const fromA = compareForm.querySelector('[data-compare-field="fromA"]')?.value;
+    const toA = compareForm.querySelector('[data-compare-field="toA"]')?.value;
+    const fromB = compareForm.querySelector('[data-compare-field="fromB"]')?.value;
+    const toB = compareForm.querySelector('[data-compare-field="toB"]')?.value;
+    const preset = compareForm.querySelector('[data-compare-field="preset"]')?.value;
+    const rangeA = compareDateRange(fromA, toA);
+    const rangeB = compareDateRange(fromB, toB);
+    const message = compareForm.querySelector('[data-compare-status]');
+    if (!rangeA || (preset === 'manual' && !rangeB)) {
+      if (message) message.textContent = !rangeA ? 'Revisá las fechas del período A.' : 'Revisá las fechas manuales del período B.';
+      return;
+    }
+    state.comparePreset = preset;
+    state.compareGranularity = compareForm.querySelector('[data-compare-field="granularity"]')?.value;
+    state.compareFrom = fromA;
+    state.compareTo = toA;
+    state.compareRefFrom = fromB || null;
+    state.compareRefTo = toB || null;
+    compareResultKey = null;
+    compareStatus = 'idle';
+    compareLoadError = null;
+    if (message) message.textContent = '';
+    pushCompareHash();
+    render();
+    appRoot.querySelector('#compare-form [type="submit"]')?.focus();
+  });
 
   appRoot.querySelectorAll('[data-detail-page]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1759,6 +1962,24 @@ appRoot.addEventListener('click', (e) => {
   if (compPresetBtn && appRoot.contains(compPresetBtn)) {
     state.comparePreset = compPresetBtn.dataset.comparePreset;
     render();
+    return;
+  }
+
+  const compareSeriesPage = e.target.closest?.('[data-compare-series-page]');
+  if (compareSeriesPage && appRoot.contains(compareSeriesPage)) {
+    const controls = compareSeriesPage.closest('[data-compare-series-controls]');
+    const table = controls?.previousElementSibling?.matches('table') ? controls.previousElementSibling : controls?.parentElement?.querySelector('table');
+    const rows = [...(table?.querySelectorAll('[data-compare-series-row]') ?? [])];
+    const pageSize = Number(controls?.dataset.pageSize);
+    if (!controls || !Number.isInteger(pageSize) || pageSize < 1) return;
+    const pageCount = Math.ceil(rows.length / pageSize);
+    const page = Math.max(0, Math.min(pageCount - 1, Number(controls.dataset.page) + Number(compareSeriesPage.dataset.compareSeriesPage)));
+    const start = page * pageSize;
+    rows.forEach((row, index) => { row.hidden = index < start || index >= start + pageSize; });
+    controls.dataset.page = String(page);
+    controls.querySelector('[aria-live="polite"]').textContent = `Mostrando ${start + 1}–${Math.min(start + pageSize, rows.length)} de ${rows.length}`;
+    controls.querySelector('[data-compare-series-page="-1"]').disabled = page === 0;
+    controls.querySelector('[data-compare-series-page="1"]').disabled = page >= pageCount - 1;
     return;
   }
 

@@ -675,6 +675,16 @@ main.container {
   font-weight: 500;
 }
 
+.status--warning {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-left: 4px solid #f59e0b;
+  border-radius: var(--radius-sm);
+  color: #fcd34d;
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -2686,136 +2696,96 @@ details.calendar-year summary:hover {
   background: transparent;
 }
 
-/* Etapa 5: Vista de Comparación A/B y métricas de variación */
-
-.compare-presets {
-  margin-bottom: var(--sp-6);
-}
-
-.compare-presets__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
+.compare-form {
+  display: grid;
+  gap: var(--sp-4);
   margin-bottom: var(--sp-4);
 }
 
-.compare-presets__head h2 {
+.compare-form__intro h2,
+.compare-series h2,
+.compare-rankings h2 {
   font-size: var(--fs-md);
+  margin: 0 0 var(--sp-2);
+}
+
+.compare-form__intro p {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
   margin: 0;
 }
 
-.compare-dates-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-2);
-}
-
-.compare-date-pill {
-  flex: 1 1 240px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--sp-2) var(--sp-3);
-  font-size: var(--fs-sm);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.pill-label {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-}
-
-.pill-dates {
-  font-weight: 500;
-  color: var(--text);
-}
-
-.compare-warning {
-  margin-top: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-xs);
-  color: #fcd34d;
-}
-
-.badge-warning {
-  background: #f59e0b;
-  color: #000;
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-}
-
-.kpi-compare-grid {
+.compare-form__fields,
+.compare-form__ranges {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--sp-3);
 }
 
-.kpi-compare-item {
-  background: var(--surface-2);
+.compare-form__fields select,
+.compare-range input[type="date"] {
+  width: 100%;
+  min-height: 44px;
+}
+
+.compare-range {
+  min-inline-size: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
 }
 
-.kpi-values {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--fs-md);
-  font-weight: 600;
-}
-
-.val-a {
-  color: var(--text);
-}
-
-.val-b {
-  color: var(--text-muted);
-}
-
-.kpi-delta {
+.compare-range legend {
+  padding-inline: var(--sp-1);
   font-size: var(--fs-sm);
   font-weight: 600;
 }
 
-.delta-pos {
-  color: var(--accent);
+.compare-range input:disabled {
+  opacity: 0.7;
 }
 
-.delta-neg {
-  color: var(--danger);
+.compare-form__status:empty {
+  display: none;
 }
 
-.kpi-avgs {
+.compare-series {
+  margin-top: var(--sp-4);
+}
+
+.compare-series-controls {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-top: 1px solid var(--border);
-  padding-top: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.compare-series-controls [aria-live="polite"] {
   color: var(--text-muted);
   font-size: var(--fs-xs);
+  text-align: center;
 }
 
-.status-entrada {
-  color: var(--accent);
-  font-weight: 600;
+.compare-series-table,
+.compare-results-table,
+.compare-ranking-table {
+  width: 100%;
 }
 
-.status-salida {
-  color: var(--text-faint);
+.compare-series-table {
+  min-width: 540px;
+}
+
+.compare-ranking-table {
+  min-width: 760px;
+}
+
+.compare-rankings {
+  margin-top: var(--sp-4);
 }
 
 .export-dialog {

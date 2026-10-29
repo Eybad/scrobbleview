@@ -15,6 +15,7 @@ import { save, load } from './storage.js';
 import { assertDistinctFiles } from './input.js';
 import { isFilterActive, previousRange } from './filter-ui.js';
 import { demoSource } from './demo.js';
+import { calculateCompareRange } from '../src/compare.js';
 
 function timeZoneForDataset(ds, id) {
   let first = Infinity, last = -Infinity;
@@ -25,8 +26,51 @@ function timeZoneForDataset(ds, id) {
   });
 }
 
+function compareEntityMap(entities, kind) {
+  return new Map([...entities].map(([key, entity]) => {
+    const name = kind === 'track' ? `${entity.name} — ${entity.artist}`
+      : kind === 'album' ? `${entity.name} — ${entity.artist}`
+        : entity.name;
+    return [key, {
+      name,
+      title: entity.name,
+      artist: entity.artist ?? null,
+      plays: entity.plays,
+      ms: entity.ms,
+      durationKnown: entity.durationKnown ?? null
+    }];
+  }));
+}
+
+function compareProjection(model) {
+  const entities = {
+    artists: compareEntityMap(model.artists.byId, 'artist'),
+    tracks: compareEntityMap(model.tracks.byId, 'track'),
+    albums: compareEntityMap(model.albums.byId, 'album')
+  };
+  const entityTotals = Object.fromEntries(Object.entries(entities).map(([kind, entries]) => [kind, {
+    plays: [...entries.values()].reduce((sum, entity) => sum + entity.plays, 0),
+    ms: [...entries.values()].reduce((sum, entity) => sum + entity.ms, 0)
+  }]));
+  return {
+    totals: {
+      plays: model.totals.records,
+      ms: model.totals.ms,
+      durationKnown: model.totals.durationKnown,
+      durationUnknown: model.totals.durationUnknown,
+      artists: entities.artists.size,
+      tracks: entities.tracks.size,
+      albums: entities.albums.size,
+      activeDays: model.daily.size
+    },
+    entityTotals,
+    entities,
+    daily: new Map([...model.daily].map(([day, totals]) => [day, { plays: totals.plays, ms: totals.ms }]))
+  };
+}
+
 export function createAnalysisEngine() {
-  let ds = null, derived = null, tz = null, history = null, generatedAt = null, originalSessions = null;
+  let ds = null, derived = null, tz = null, history = null, generatedAt = null, originalSessions = null, dataRange = null;
 
   async function aggregateSelection(state, extra = {}) {
     const indices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : undefined;
@@ -41,6 +85,7 @@ export function createAnalysisEngine() {
     const now = Math.floor(Date.now() / 1000);
     const model = await analyze(dataset, { tz: nextTz, derived: nextDerived, originalSessions: nextOriginalSessions, now, compact: true, albumDetails: null, onProgress: report });
     ds = dataset; tz = nextTz; derived = nextDerived; generatedAt = now; originalSessions = nextOriginalSessions;
+    dataRange = model.meta.firstTs == null ? null : { minSec: model.meta.firstTs, maxSec: model.meta.lastTs };
     const firstAppearances = (entities) => new Map([...entities].map(([key, entity]) => [key, { firstUtc: entity.firstUtc }]));
     history = { tracks: firstAppearances(model.tracks.byId), artists: firstAppearances(model.artists.byId) };
     delete model.cols;
@@ -87,6 +132,39 @@ export function createAnalysisEngine() {
         const prev = state.range ? countFiltered(ds, { ...state, range: previousRange(state.range) }, tz, derived) : null;
         if (model) delete model.cols;
         return { model, prev };
+      }
+      if (type === 'compare') {
+        const state = payload.state ?? emptyFilterState();
+        const rangeA = payload.rangeA;
+        const calculated = calculateCompareRange(payload.preset, rangeA, dataRange, payload.rangeB);
+        const rangeB = calculated.rangeB;
+        const sharedFilters = { ...state, range: null, years: null, months: null, dows: null, hours: null };
+        const periodReport = (start, end) => (fraction, label) => report(start + (end - start) * fraction, label);
+        let temporaryModel = await aggregateSelection({ ...sharedFilters, range: rangeA }, {
+          albumDetails: null,
+          onProgress: periodReport(0, 0.5)
+        });
+        const periodA = compareProjection(temporaryModel);
+        temporaryModel = null;
+        report(0.5, 'Período A listo');
+        temporaryModel = await aggregateSelection({ ...sharedFilters, range: rangeB }, {
+          albumDetails: null,
+          onProgress: periodReport(0.5, 1)
+        });
+        const periodB = compareProjection(temporaryModel);
+        temporaryModel = null;
+        report(1, 'Comparación lista');
+        return {
+          preset: calculated.preset,
+          rangeA: calculated.rangeA,
+          rangeB,
+          isOutOfRange: calculated.isOutOfRange,
+          warning: calculated.warning,
+          dataRange,
+          timeZone: tz.id,
+          periodA,
+          periodB
+        };
       }
       if (type === 'album') {
         const id = Number(payload.id);

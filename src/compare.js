@@ -1,7 +1,21 @@
 import { civilFromDays } from './aggregate/impl/derive.js';
 import { fmtNum, fmtMs } from './charts.js';
 
-export function calculateCompareRange(preset, rangeA, dataRange = null) {
+function validRange(range) {
+  return range && Number.isSafeInteger(range.from) && Number.isSafeInteger(range.to) && range.from <= range.to;
+}
+
+function previousYearDay(day) {
+  const civil = civilFromDays(day);
+  const year = civil.y - 1;
+  if (year < 100) return null;
+  const daysInMonth = new Date(Date.UTC(year, civil.m, 0)).getUTCDate();
+  const clampedDay = Math.min(civil.d, daysInMonth);
+  return Math.floor(Date.UTC(year, civil.m - 1, clampedDay) / 86400000);
+}
+
+export function calculateCompareRange(preset, rangeA, dataRange = null, manualRangeB = null) {
+  if (!validRange(rangeA)) throw new RangeError('El período A no es válido.');
   const fromA = rangeA.from;
   const toA = rangeA.to;
   const durationSec = Math.max(1, toA - fromA + 1);
@@ -15,17 +29,17 @@ export function calculateCompareRange(preset, rangeA, dataRange = null) {
   } else if (preset === 'same_period_last_year') {
     const dayFromA = Math.floor(fromA / 86400);
     const dayToA = Math.floor(toA / 86400);
-    const cFrom = civilFromDays(dayFromA);
-    const cTo = civilFromDays(dayToA);
-
-    const fromDate = new Date(Date.UTC(cFrom.y - 1, cFrom.m - 1, cFrom.d, 0, 0, 0));
-    const toDate = new Date(Date.UTC(cTo.y - 1, cTo.m - 1, cTo.d, 23, 59, 59));
-
-    fromB = Math.floor(fromDate.getTime() / 1000);
-    toB = Math.floor(toDate.getTime() / 1000);
+    const fromDayB = previousYearDay(dayFromA);
+    const toDayB = previousYearDay(dayToA);
+    if (fromDayB == null || toDayB == null) throw new RangeError('No hay un año anterior válido para comparar.');
+    fromB = fromDayB * 86400;
+    toB = toDayB * 86400 + 86399;
+  } else if (preset === 'manual') {
+    if (!validRange(manualRangeB)) throw new RangeError('El período B manual no es válido.');
+    fromB = manualRangeB.from;
+    toB = manualRangeB.to;
   } else {
-    toB = fromA - 1;
-    fromB = toB - durationSec + 1;
+    throw new TypeError(`Preset de comparación desconocido: ${preset}`);
   }
 
   const rangeB = { from: fromB, to: toB };
@@ -34,11 +48,12 @@ export function calculateCompareRange(preset, rangeA, dataRange = null) {
   let warning = '';
 
   if (dataRange != null && dataRange.minSec != null && dataRange.maxSec != null) {
-    if (fromB < dataRange.minSec || toB > dataRange.maxSec) {
+    const hasOutOfRangeWindow = [rangeA, rangeB].some((range) => range.from < dataRange.minSec || range.to > dataRange.maxSec);
+    if (hasOutOfRangeWindow) {
       isOutOfRange = true;
       const minIso = new Date(dataRange.minSec * 1000).toISOString().slice(0, 10);
       const maxIso = new Date(dataRange.maxSec * 1000).toISOString().slice(0, 10);
-      warning = `La ventana de comparación excede el intervalo registrado en los archivos (${minIso} a ${maxIso}).`;
+      warning = `Una o ambas ventanas exceden el intervalo observado en los archivos (${minIso} a ${maxIso}); la presencia de eventos no garantiza cobertura completa.`;
     }
   }
 
@@ -97,11 +112,11 @@ export function compareAverages(totals, range, activeDays) {
 export function compareEntityRankings(mapA, mapB, totalA, totalB, topN = 50) {
   const sortedA = [...mapA.entries()]
     .map(([key, data]) => ({ key, name: data.name ?? key, value: data.value ?? data.ms ?? data.plays ?? 0 }))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => b.value - a.value || String(a.name).localeCompare(String(b.name), 'es') || String(a.key).localeCompare(String(b.key)));
 
   const sortedB = [...mapB.entries()]
     .map(([key, data]) => ({ key, name: data.name ?? key, value: data.value ?? data.ms ?? data.plays ?? 0 }))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => b.value - a.value || String(a.name).localeCompare(String(b.name), 'es') || String(a.key).localeCompare(String(b.key)));
 
   const rankMapA = new Map();
   sortedA.forEach((item, idx) => rankMapA.set(item.key, { rank: idx + 1, item }));
@@ -134,9 +149,9 @@ export function compareEntityRankings(mapA, mapB, totalA, totalB, topN = 50) {
       status = rankDelta > 0 ? `▲ ${rankDelta}` : (rankDelta < 0 ? `▼ ${Math.abs(rankDelta)}` : '=');
     }
 
-    const shareA = totalA > 0 ? (valA / totalA) * 100 : 0;
-    const shareB = totalB > 0 ? (valB / totalB) * 100 : 0;
-    const shareDiff = shareA - shareB;
+    const shareA = totalA > 0 ? (valA / totalA) * 100 : null;
+    const shareB = totalB > 0 ? (valB / totalB) * 100 : null;
+    const shareDiff = shareA != null && shareB != null ? shareA - shareB : null;
 
     rows.push({
       key,
@@ -151,7 +166,7 @@ export function compareEntityRankings(mapA, mapB, totalA, totalB, topN = 50) {
       shareA,
       shareB,
       shareDiff,
-      shareDiffLabel: `${shareDiff >= 0 ? '+' : ''}${shareDiff.toFixed(1).replace('.', ',')} pp`
+      shareDiffLabel: shareDiff == null ? 'sin base' : `${shareDiff >= 0 ? '+' : ''}${shareDiff.toFixed(1).replace('.', ',')} pp`
     });
   }
 
