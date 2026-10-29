@@ -10,8 +10,10 @@
   <h1>Aceptación de navegador</h1>
   <p>Serví el checkout por HTTP y abrí <code>browser-tests/navigation.html</code>.
     La prueba carga ocho eventos sintéticos; recorre filtros, historial, fichas, comparación,
-    exportación y preferencias, mide cinco anchos y ejecuta veinte ciclos reales de navegación.
-    La comprobación con TalkBack sigue siendo manual.</p>
+    exportación, preferencias y cancelación sin descarga tardía. Comprueba el guardado, la carga
+    y el borrado en IndexedDB real, la recuperación ante una versión incompatible, una pestaña
+    nueva con datos guardados, el scroll de página/tabla, cinco anchos y veinte ciclos reales.
+    TalkBack y el tacto físico siguen requiriendo una comprobación manual.</p>
   <button type="button" id="run">Ejecutar prueba</button>
   <pre id="results" role="status" aria-live="polite">Pendiente.</pre>
   <iframe id="app" title="Scrobbleview con datos sintéticos" width="640" height="700"></iframe>

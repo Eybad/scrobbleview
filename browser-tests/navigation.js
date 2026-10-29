@@ -1,6 +1,7 @@
 const frame = document.getElementById('app');
 const runButton = document.getElementById('run');
 const results = document.getElementById('results');
+let auxiliaryTab = null;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -37,15 +38,104 @@ function waitFor(predicate, label) {
   });
 }
 
-function kpiValue(name) {
-  const label = [...frame.contentDocument.querySelectorAll('#view-root .kpis dt')]
+function waitInWindow(targetWindow, predicate, label) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 10000;
+    const check = () => {
+      if (targetWindow.closed) {
+        reject(new Error(`Se cerró la ventana durante: ${label}`));
+        return;
+      }
+      try {
+        if (predicate(targetWindow.document, targetWindow)) {
+          resolve();
+          return;
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== 'SecurityError') {
+          reject(error);
+          return;
+        }
+      }
+      if (Date.now() >= deadline) {
+        const status = targetWindow.document.getElementById('status')?.textContent;
+        const deleteButton = targetWindow.document.getElementById('btn-cached-clear');
+        const details = [status && `estado=${status}`, deleteButton && `botón=${deleteButton.getAttribute('aria-label')}`]
+          .filter(Boolean)
+          .join('; ');
+        reject(new Error(`Tiempo agotado: ${label}${details ? ` (${details})` : ''}`));
+        return;
+      }
+      setTimeout(check, 50);
+    };
+    check();
+  });
+}
+
+function readIndexedDbCache(targetWindow) {
+  return new Promise((resolve, reject) => {
+    const request = targetWindow.indexedDB.open('scrobbleview');
+    request.onerror = () => reject(request.error);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('columns')) request.result.createObjectStore('columns');
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction('columns', 'readonly');
+      const store = transaction.objectStore('columns');
+      const keysRequest = store.getAllKeys();
+      const metaRequest = store.get('meta');
+      const schemaRequest = store.get('schemaVersion');
+      const timeRequest = store.get('col:t');
+      transaction.oncomplete = () => {
+        db.close();
+        resolve({
+          keyCount: keysRequest.result.length,
+          eventCount: metaRequest.result ? JSON.parse(metaRequest.result).count : null,
+          schemaVersion: schemaRequest.result,
+          timestampCount: timeRequest.result ? new Int32Array(timeRequest.result).length : 0
+        });
+      };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
+      transaction.onabort = () => { db.close(); reject(transaction.error); };
+    };
+  });
+}
+
+function upgradeIndexedDb(targetWindow, version) {
+  return new Promise((resolve, reject) => {
+    const request = targetWindow.indexedDB.open('scrobbleview', version);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('columns')) request.result.createObjectStore('columns');
+    };
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error('La actualización de IndexedDB quedó bloqueada'));
+    request.onsuccess = () => {
+      const db = request.result;
+      resolve(db.version);
+      db.close();
+    };
+  });
+}
+
+function deleteIndexedDb(targetWindow) {
+  return new Promise((resolve, reject) => {
+    const request = targetWindow.indexedDB.deleteDatabase('scrobbleview');
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error('El borrado de IndexedDB quedó bloqueado'));
+  });
+}
+
+function kpiValue(name, appDocument = frame.contentDocument) {
+  const label = [...appDocument.querySelectorAll('#view-root .kpis dt')]
     .find(node => node.textContent === name);
   assert(label, `Falta el KPI ${name}`);
   return label.nextElementSibling.firstChild.textContent.trim();
 }
 
-function viewHeading() {
-  return [...element('#view-root h1').childNodes]
+function viewHeading(appDocument = frame.contentDocument) {
+  return [...appDocument.querySelector('#view-root h1').childNodes]
     .filter(node => node.nodeType === Node.TEXT_NODE)
     .map(node => node.textContent.trim())
     .join('');
@@ -66,7 +156,17 @@ function trackLinkFor(artist, title) {
 }
 
 function nextFrame() {
-  return new Promise(resolve => frame.contentWindow.requestAnimationFrame(() => resolve()));
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(finish, 250);
+    function finish() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    }
+    frame.contentWindow.requestAnimationFrame(finish);
+  });
 }
 
 function accessibleName(node) {
@@ -80,6 +180,9 @@ function accessibleName(node) {
 
 async function run() {
   results.textContent = 'Ejecutando…';
+  auxiliaryTab = window.open('about:blank', '_blank');
+  assert(auxiliaryTab, 'El navegador debe permitir la pestaña de prueba');
+  window.focus();
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('No cargó la aplicación')), 10000);
     frame.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
@@ -109,6 +212,32 @@ async function run() {
   input.dispatchEvent(new appWindow.Event('change', { bubbles: true }));
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
   assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
+  const cachePrompt = element('#cache-toast [data-cache="save"]');
+  assert(cachePrompt, 'La carga debe pedir consentimiento antes de escribir IndexedDB');
+  cachePrompt.click();
+  await waitFor(() => element('#cache-toast').textContent.includes('Datos guardados en este dispositivo.'), 'guardar el dataset con consentimiento');
+  const savedCache = await readIndexedDbCache(appWindow);
+  assert(savedCache.eventCount === 8 && savedCache.schemaVersion === 2 && savedCache.timestampCount === 8, 'IndexedDB real debe guardar el esquema y las ocho reproducciones');
+
+  auxiliaryTab.location.href = new URL('../index.html#/v1/track/Artist%20A/Echo?s=unknown&m=plays', window.location.href).href;
+  await waitInWindow(auxiliaryTab, (doc) => doc.readyState === 'complete' && doc.getElementById('cache-card') && !doc.getElementById('cache-card').hidden, 'mostrar la caché en una pestaña nueva');
+  assert(auxiliaryTab.location.hash.includes('s=unknown') && auxiliaryTab.location.hash.includes('m=plays'), 'La pestaña nueva debe conservar el filtro y la métrica del enlace');
+  assert(auxiliaryTab.document.getElementById('cache-meta').textContent.includes('8 reproducciones'), 'La pestaña nueva debe resumir las ocho reproducciones guardadas');
+  auxiliaryTab.document.getElementById('btn-cached').click();
+  await waitInWindow(auxiliaryTab, (doc) => !doc.getElementById('view-app').hidden && viewHeading(doc) === 'Echo', 'abrir el detalle con la caché en la pestaña nueva');
+  assert(kpiValue('Reproducciones', auxiliaryTab.document) === '1', 'La nueva pestaña debe reconstruir la canción y sus filtros desde la caché');
+  assert(auxiliaryTab.location.hash.includes('s=unknown') && auxiliaryTab.location.hash.includes('m=plays'), 'La carga de caché debe mantener el filtro y la métrica de la ruta');
+
+  auxiliaryTab.location.href = new URL(`../index.html?cache-clear=${Date.now()}`, window.location.href).href;
+  await waitInWindow(auxiliaryTab, (doc) => doc.readyState === 'complete' && !doc.getElementById('view-home').hidden && doc.getElementById('cache-card') && !doc.getElementById('cache-card').hidden, 'volver al inicio para borrar la caché real');
+  const clearCacheButton = auxiliaryTab.document.getElementById('btn-cached-clear');
+  assert(!clearCacheButton.disabled, 'El botón de borrado debe estar habilitado en el inicio');
+  clearCacheButton.click();
+  assert(clearCacheButton.getAttribute('aria-label') === 'Confirmar borrado de datos guardados', 'El primer toque debe pedir confirmación de borrado');
+  clearCacheButton.click();
+  await waitInWindow(auxiliaryTab, (doc) => /Datos guardados borrados|No se pudieron borrar/.test(doc.getElementById('status').textContent), 'terminar el borrado de IndexedDB');
+  assert(auxiliaryTab.document.getElementById('status').textContent.includes('Datos guardados borrados.'), 'La UI debe confirmar el borrado real: ' + auxiliaryTab.document.getElementById('status').textContent);
+  assert((await readIndexedDbCache(auxiliaryTab)).keyCount === 0, 'Borrar desde la UI debe vaciar IndexedDB real');
   const hourlyChart = appDocument.querySelector('.chart-card[data-chart-id="dashboard-day-hour"]');
   const hourlyPoints = JSON.parse(hourlyChart.dataset.chartPoints);
   assert(hourlyPoints.length === 168, 'El mapa horario debe exponer todos sus puntos');
@@ -241,12 +370,30 @@ async function run() {
   const homonymHrefs = homonymLinks.map(link => decodeURIComponent(link.getAttribute('href')));
   assert(homonymHrefs.some(href => href.includes('/Artist A/Echo')) && homonymHrefs.some(href => href.includes('/Artist B/Echo')), 'Las rutas deben separar canciones por artista');
   const returnHref = homonymLinks[0].getAttribute('href');
+  const scrollStyle = appDocument.createElement('style');
+  scrollStyle.textContent = '.table-scroll[aria-label="Tabla de catálogo"] table { min-width: 1200px !important; }';
+  appDocument.head.append(scrollStyle);
+  const scrollSpacer = appDocument.createElement('div');
+  scrollSpacer.style.height = '1200px';
+  appDocument.body.append(scrollSpacer);
   homonymLinks[0].focus();
+  const sourceTableScroll = element('.table-scroll[aria-label="Tabla de catálogo"]');
+  sourceTableScroll.scrollLeft = 180;
+  const expectedTableScroll = sourceTableScroll.scrollLeft;
+  assert(expectedTableScroll > 0, 'La tabla real debe desplazarse horizontalmente antes de navegar');
+  appWindow.scrollTo(0, 250);
+  const expectedPageScroll = appWindow.scrollY;
+  assert(expectedPageScroll === 250, 'La página del navegador debe tener una posición de scroll restaurable');
   homonymLinks[0].click();
   await waitFor(() => viewHeading() === 'Echo', 'abrir canción homónima');
   appWindow.history.back();
   await waitFor(() => viewHeading() === 'Explorar catálogo completo' && element('[data-explore-search]').value === 'Echo', 'volver a la consulta de homónimos');
   assert(frame.contentDocument.activeElement.getAttribute('href') === returnHref, 'Atrás debe restaurar el foco en el enlace de origen');
+  assert(appWindow.scrollY === expectedPageScroll, 'Atrás debe restaurar el scroll real de página');
+  const restoredTableScroll = element('.table-scroll[aria-label="Tabla de catálogo"]').scrollLeft;
+  assert(restoredTableScroll === expectedTableScroll, `Atrás debe restaurar el scroll real de la tabla: ${restoredTableScroll}/${expectedTableScroll}; ${JSON.stringify(appWindow.history.state?.returnState?.tableScrolls)}`);
+  scrollStyle.remove();
+  scrollSpacer.remove();
 
   const sharedSearch = element('[data-explore-search]');
   sharedSearch.value = 'Shared';
@@ -341,6 +488,27 @@ async function run() {
   assert(element('#export-table-desc').textContent.includes('2 canciones') && element('#export-table-desc').textContent.includes('búsqueda “Echo”'), 'El diálogo debe mostrar los criterios y total de la consulta confirmada');
   element('[data-action="close-export"]').click();
   assert(!element('#dialog-export').open, 'Cancelar debe cerrar el diálogo sin exportar');
+
+  element('[data-action="export"]').click();
+  await waitFor(() => element('#dialog-export').open, 'abrir opciones para cancelar la exportación activa');
+  element('[name="export-scope"][value="table"]').click();
+  let lateDownloadAttempts = 0;
+  const originalAnchorClick = appWindow.HTMLAnchorElement.prototype.click;
+  appWindow.HTMLAnchorElement.prototype.click = function () {
+    if (this.download) lateDownloadAttempts++;
+    return originalAnchorClick.call(this);
+  };
+  try {
+    element('#btn-confirm-export').click();
+    assert(!element('#processing').hidden, 'La exportación debe estar activa antes de cancelarla');
+    element('#cancel-processing').click();
+    await waitFor(() => element('#processing').hidden, 'cancelar una exportación activa');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    assert(lateDownloadAttempts === 0, 'Una exportación cancelada no debe iniciar una descarga tardía');
+  } finally {
+    appWindow.HTMLAnchorElement.prototype.click = originalAnchorClick;
+  }
+
   element('[data-action="export"]').click();
   await waitFor(() => element('#dialog-export').open, 'reabrir opciones de exportación');
   element('[name="export-scope"][value="table"]').click();
@@ -445,7 +613,42 @@ async function run() {
   assert(appWindow.location.hash.includes('cm=2025-01'), 'El mes y el año deben quedar en la URL');
   appWindow.history.back();
   await waitFor(() => frame.contentDocument.querySelector('.calendar-month__title')?.textContent === 'Diciembre 2024', 'volver a diciembre');
-  results.textContent = 'APROBADO: carga, filtros, historial, búsqueda, cinco fichas, comparación, exportación, preferencias, responsive y 20 ciclos reales de navegación, detalles y filtros.';
+
+  assert(await upgradeIndexedDb(auxiliaryTab, 2) === 2, 'El navegador debe permitir preparar un fallo real de versión en IndexedDB');
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('No volvió a cargar la app para probar el fallo de IndexedDB')), 10000);
+    frame.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+    frame.src = `../index.html?r10-cache-failure=${Date.now()}`;
+  });
+  const failureWindow = frame.contentWindow;
+  const failureTransfer = new failureWindow.DataTransfer();
+  failureTransfer.items.add(new failureWindow.File([json], 'Streaming_History_Audio_synthetic.json', { type: 'application/json' }));
+  const failureInput = frame.contentDocument.querySelector('#file-input');
+  failureInput.files = failureTransfer.files;
+  failureInput.dispatchEvent(new failureWindow.Event('change', { bubbles: true }));
+  await waitFor(() => !element('#view-app').hidden && kpiValue('Reproducciones') === '8', 'analizar datos aunque IndexedDB tenga una versión incompatible');
+  await waitFor(() => Boolean(element('#cache-toast [data-cache="save"]')), 'ofrecer el guardado tras el fallo de versión');
+  element('#cache-toast [data-cache="save"]').click();
+  await waitFor(() => element('#cache-toast').textContent.includes('No se pudo guardar en este dispositivo'), 'mostrar el error real de IndexedDB');
+  assert(kpiValue('Reproducciones') === '8', 'El fallo real de IndexedDB no debe quitar el análisis de memoria');
+  const failedCache = await readIndexedDbCache(auxiliaryTab);
+  assert(failedCache.keyCount === 0, 'El fallo de versión no debe dejar una caché parcial en IndexedDB');
+  await deleteIndexedDb(auxiliaryTab);
+  auxiliaryTab.close();
+  auxiliaryTab = null;
+  Object.assign(window.__r10Report, {
+    browserIntegration: {
+      savedEvents: savedCache.eventCount,
+      loadedInNewTab: true,
+      clearedKeys: 0,
+      incompatibleVersionHandled: true,
+      failedCacheKeys: failedCache.keyCount,
+      restoredPageScroll: expectedPageScroll,
+      restoredTableScroll: expectedTableScroll,
+      canceledExportLateDownloads: lateDownloadAttempts
+    }
+  });
+  results.textContent = 'APROBADO: navegación, exportación y cancelación, scroll real, responsive, caché IndexedDB real, carga desde una pestaña nueva y recuperación ante error.';
 }
 
 runButton.addEventListener('click', async () => {
@@ -455,6 +658,8 @@ runButton.addEventListener('click', async () => {
   } catch (error) {
     results.textContent = `FALLÓ: ${error.message}`;
   } finally {
+    if (auxiliaryTab && !auxiliaryTab.closed) auxiliaryTab.close();
+    auxiliaryTab = null;
     runButton.disabled = false;
   }
 });
