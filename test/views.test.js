@@ -14,6 +14,7 @@ import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { offsetTable } from '../src/aggregate/adapters/offset-table.js';
 import { syntheticJSON } from '../src/synthetic.js';
 import { lineChart, sparkline, fmtMs } from '../src/charts.js';
+import { formatSemanticRoute, parseRoute, resolveRoute } from '../app/routes.js';
 
 const UTC = fixedTz('utc', 0);
 
@@ -34,6 +35,31 @@ async function demoModel() {
   return analyze(memoryBytes('demo.json', syntheticJSON(800, 9)), { tz: UTC, now: 1704067200 });
 }
 
+test('entity links in views retain semantic identity and filter context', async () => {
+  const model = await demoModel();
+  const ctx = { query: '?r=1700000000-1705000000&m=plays' };
+  const artist = model.artists.top.byPlays[0];
+  const track = model.tracks.top.byPlays[0];
+  const album = model.albums.top.byPlays[0];
+  const views = [
+    ['dashboard'], ['hours'], ['habits'], ['discovery'], ['yearly'], ['wrapped'],
+    ['artist', artist.id], ['track', track.tk], ['album', album.id]
+  ];
+  let checked = 0;
+  for (const [view, id] of views) {
+    const html = renderView(view, model, id, ctx);
+    for (const match of html.matchAll(/href="(#\/(?:v1\/)?(?:artist|track|album)\/[^\"]*)"/g)) {
+      const route = parseRoute(match[1].replaceAll('&amp;', '&'));
+      assert.equal(route.isLegacy, false, match[1]);
+      assert.equal(new URLSearchParams(route.query).get('r'), '1700000000-1705000000');
+      assert.equal(new URLSearchParams(route.query).get('m'), 'plays');
+      assert.equal(resolveRoute(route, model).notFound, false);
+      checked++;
+    }
+  }
+  assert.ok(checked > 0);
+});
+
 function json2y() {
   return JSON.stringify([
     { ts: '2023-06-01T02:00:00Z', ms_played: 60000, master_metadata_track_name: 'A', master_metadata_album_artist_name: 'X', spotify_track_uri: 'spotify:track:1' },
@@ -46,11 +72,11 @@ async function model2y() {
   return analyze(memoryBytes('2y.json', json2y()), { tz: UTC, now: 1704067200 });
 }
 
-test('wrapped: la canción del año enlaza por tk (no por tr)', async () => {
+test('wrapped links the top track by title and artist', async () => {
   const model = await demoModel();
   const top = model.tracks.top.byMs[0];
   const html = renderView('wrapped', model);
-  assert.ok(html.includes(`#/track/${top.tk}`), 'el enlace usa la clave compuesta tk');
+  assert.ok(html.includes(formatSemanticRoute('track', top)));
 });
 
 test('wrapped: título según año filtrado', async () => {
@@ -155,7 +181,7 @@ test('track: racha máxima, enlace al álbum y botón de filtro', async () => {
   const html = renderView('track', model, tk);
   assert.ok(html.includes('Racha máxima'), 'maxRun visible');
   assert.ok(html.includes(`data-filter-entity="track:${tk}"`), 'botón de filtro por entidad');
-  assert.ok(html.includes('#/artist/'), 'enlace al artista');
+  assert.ok(html.includes(formatSemanticRoute('artist', model.artists.byId.get(tk % 4294967296))));
 });
 
 test('album views and sparklines isolate shared tracks by album for both metrics', async () => {
@@ -188,12 +214,12 @@ test('album views and sparklines isolate shared tracks by album for both metrics
       })), `${album.name}: monthly evolution, ${metric}`);
       const ranking = rankCardHTML(model, { tab: 'albums', metric });
       const albumRow = (ranking.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/g) ?? [])
-        .find(value => value.includes(`href="#/album/${album.id}"`));
+        .find(value => value.includes(`href="${formatSemanticRoute('album', album)}"`));
       assert.ok(albumRow?.includes(sparkline({ points: values, width: 80, height: 24 })), `${album.name}: ranking sparkline, ${metric}`);
     }
   }
   const trackHtml = renderView('track', model, [...model.tracks.byId.keys()][0]);
-  for (const album of albums) assert.ok(trackHtml.includes(`href="#/album/${album.id}"`));
+  for (const album of albums) assert.ok(trackHtml.includes(`href="${formatSemanticRoute('album', album)}"`));
 });
 
 test('album: canciones, fechas y botón de filtro', async () => {
@@ -214,7 +240,7 @@ test('album: el enlace al artista usa la parte alta de ak', async () => {
   const model = await analyze(memoryBytes('ak.json', json), { tz: UTC, now: 1704067200 });
   const ak2 = 4294967296 + 2; // artista 1 (X), álbum 2 (Á2)
   const html = renderView('album', model, ak2);
-  assert.ok(html.includes('href="#/artist/1"'), 'enlace al artista X (ar=1)');
+  assert.ok(html.includes('href="#/v1/artist/X"'));
 });
 
 test('calendar: último año desplegado, anteriores en details', async () => {

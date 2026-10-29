@@ -191,14 +191,14 @@ export function catalogTableHTML(queryResult, {
 
     const nameCellContent = isTrack || isAlbum
       ? `<span class="cell-entity">
-          <a class="cell-link" href="${linkHref}" title="${esc(fullTitle)}">
+          <a class="cell-link" href="${esc(linkHref)}" title="${esc(fullTitle)}">
             <span class="cell-name">${esc(it.name)}</span>
             <span class="cell-sub">${esc(it.artist)}</span>
           </a>
           <button type="button" class="btn-name-expand" data-expand-name aria-label="Expandir nombre" title="Expandir nombre">▶</button>
         </span>`
       : `<span class="cell-entity">
-          <a class="cell-link" href="${linkHref}" title="${esc(it.name)}">
+          <a class="cell-link" href="${esc(linkHref)}" title="${esc(it.name)}">
             <span class="cell-name">${esc(it.name)}</span>
           </a>
           <button type="button" class="btn-name-expand" data-expand-name aria-label="Expandir nombre" title="Expandir nombre">▶</button>

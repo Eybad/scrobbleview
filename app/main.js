@@ -702,7 +702,7 @@ function updateRankCard(focusSel = null) {
   if (!card || !current) return;
   // Mismo caso que el nav: conservar el scroll de las filas de tabs.
   const tabsX = [...card.querySelectorAll('.tabs')].map((t) => t.scrollLeft);
-  card.innerHTML = rankCardHTML(current, rankUI);
+  card.innerHTML = rankCardHTML(current, { ...rankUI, contextQuery: buildViewContext('dashboard').query });
   card.querySelectorAll('.tabs').forEach((t, i) => { t.scrollLeft = tabsX[i] ?? 0; });
   wireRankCard();
   syncTallTables(card);

@@ -163,7 +163,7 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
       ? `<span class="cell-name">${esc(r.name)}</span> <span class="cell-sub">${esc(r.sub)}</span>`
       : `<span class="cell-name">${esc(r.name)}</span>`;
     return link
-      ? `<a class="cell-link" href="${link(r)}" title="${esc(full)}">${inner}</a>`
+      ? `<a class="cell-link" href="${esc(link(r))}" title="${esc(full)}">${inner}</a>`
       : `<span class="cell-link" title="${esc(full)}">${inner}</span>`;
   };
   // Barra proporcional al máximo visible (rows[0] tras el orden desc): el
@@ -197,14 +197,25 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
 
 // El title revela el nombre truncado por ellipsis (en táctil no hay tooltip:
 // el enlace navega a la ficha, donde están los detalles).
-function entityLink(type, id, name) {
-  return `<a class="cell-name" href="#/${type}/${id}" title="${esc(name)}">${esc(name)}</a>`;
-}
-
-function trackSubLink(tk, name, artist) {
-  if (!artist) return entityLink('track', tk, name);
-  const full = `${name} — ${artist}`;
-  return `<a class="cell-link" href="#/track/${tk}" title="${esc(full)}"><span class="cell-name">${esc(name)}</span> <span class="cell-sub">${esc(artist)}</span></a>`;
+function entityLinks(model, query = '') {
+  function entity(type, id) {
+    const group = type === 'artist' ? model.artists : type === 'track' ? model.tracks : model.albums;
+    return group.byId.get(id);
+  }
+  function entityLink(type, id, name) {
+    const item = entity(type, id);
+    if (!item) return esc(name);
+    const href = formatSemanticRoute(type, item, query);
+    return `<a class="cell-name" href="${esc(href)}" title="${esc(name)}">${esc(name)}</a>`;
+  }
+  function trackSubLink(tk, name, artist) {
+    const item = entity('track', tk);
+    if (!item) return esc(name);
+    const full = artist ? `${name} — ${artist}` : name;
+    const href = formatSemanticRoute('track', item, query);
+    return `<a class="cell-link" href="${esc(href)}" title="${esc(full)}"><span class="cell-name">${esc(name)}</span>${artist ? ` <span class="cell-sub">${esc(artist)}</span>` : ''}</a>`;
+  }
+  return { entityLink, trackSubLink };
 }
 
 function topEntityInMap(map, ignoreZero = false) {
@@ -308,7 +319,8 @@ function maxEntry(map, getVal) {
   return best;
 }
 
-function recordsGridHTML(model) {
+function recordsGridHTML(model, ctx = {}) {
+  const { trackSubLink } = entityLinks(model, ctx.query);
   const tiles = [];
   const day = maxEntry(model.daily, (v) => v.ms);
   if (day) {
@@ -388,10 +400,10 @@ export function rankCardHTML(model, opts = {}) {
     : model.albums.top[byMs ? 'byMs' : 'byPlays'];
 
   const rowOf = tab === 'artists'
-    ? (a) => ({ name: a.name, value: byMs ? a.ms : a.plays, id: a.id, link: `#/artist/${a.id}` })
+    ? (a) => ({ name: a.name, value: byMs ? a.ms : a.plays, id: a.id, link: formatSemanticRoute('artist', a, opts.contextQuery) })
     : tab === 'tracks'
-      ? (tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk, hay: `${tr.name} ${tr.artist}`.toLowerCase(), link: `#/track/${tr.tk}` })
-      : (al) => ({ name: al.name, sub: al.artist, value: byMs ? al.ms : al.plays, id: al.id, hay: `${al.name} ${al.artist}`.toLowerCase(), link: `#/album/${al.id}` });
+      ? (tr) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, id: tr.tk, hay: `${tr.name} ${tr.artist}`.toLowerCase(), link: formatSemanticRoute('track', tr, opts.contextQuery) })
+      : (al) => ({ name: al.name, sub: al.artist, value: byMs ? al.ms : al.plays, id: al.id, hay: `${al.name} ${al.artist}`.toLowerCase(), link: formatSemanticRoute('album', al, opts.contextQuery) });
 
   let rows;
   if (query) {
@@ -416,6 +428,9 @@ export function rankCardHTML(model, opts = {}) {
   const rankCaption = query
     ? `Resultados de búsqueda en ${tabName}`
     : `Ranking de ${tabName} por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`;
+  const exploreParams = new URLSearchParams((opts.contextQuery ?? '').replace(/^\?/, ''));
+  exploreParams.set('tab', tab);
+  exploreParams.set('m', metric);
 
   return `
     <div class="rank-controls">
@@ -440,7 +455,7 @@ export function rankCardHTML(model, opts = {}) {
         caption: rankCaption,
         spark: (r) => rowSeries(model, tab, metric, r.id),
         tall: topN >= 25
-      }) + `<div class="explore-header-links"><a class="table-hint-link" href="#/v1/explore?tab=${tab}&m=${metric}">Ver catálogo completo de ${tabName} en Explorar →</a></div>`
+      }) + `<div class="explore-header-links"><a class="table-hint-link" href="#/v1/explore?${esc(exploreParams.toString())}">Ver catálogo completo de ${tabName} en Explorar →</a></div>`
       : '<p class="empty">Sin resultados.</p>'}</div>`;
 }
 
@@ -486,6 +501,7 @@ export function emptyFiltersHTML() {
 }
 
 export function dashboard(model, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const t = model.totals;
   const prev = ctx.prev ?? null;
   const byMs = (ctx.metric ?? 'ms') === 'ms';
@@ -532,7 +548,7 @@ export function dashboard(model, ctx = {}) {
     format: fmtNum
   });
 
-  const rankings = `<div id="rank-card">${rankCardHTML(model, ctx.rankUI)}</div>`;
+  const rankings = `<div id="rank-card">${rankCardHTML(model, { ...ctx.rankUI, contextQuery: ctx.query })}</div>`;
 
   const skipRate = t.skippedKnown > 0
     ? `${fmtPct(t.skipped / t.skippedKnown)} (${fmtNum(t.skippedKnown)} conocidas · ${fmtNum(t.records - t.skippedKnown)} desconocidas)`
@@ -591,7 +607,7 @@ export function dashboard(model, ctx = {}) {
       { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate }
     ])}
     ${qualityPanel}
-    ${card('Récords', recordsGridHTML(model))}
+    ${card('Récords', recordsGridHTML(model, ctx))}
     ${card('Rankings', rankings)}
     <div class="grid-2">
       ${card('Evolución mensual', scrollChart(evolution, 'Evolución mensual'))}
@@ -665,6 +681,7 @@ export function dashboard(model, ctx = {}) {
 }
 
 export function artistView(model, ar, ctx = {}) {
+  const { entityLink } = entityLinks(model, ctx.query);
   const a = model.artists.byId.get(ar);
   if (!a) return `<p class="empty">Artista no encontrado.</p>`;
   const byMs = ctx?.metric === 'ms';
@@ -734,7 +751,7 @@ export function artistView(model, ar, ctx = {}) {
         valueFmt: valFmt,
         subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
         valueLabel: valLabel,
-        link: (r) => `#/track/${r.id}`,
+        link: (r) => formatSemanticRoute('track', model.tracks.byId.get(r.id), ctx.query),
         caption: `Canciones del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
         spark: (r) => rowSeries(model, 'tracks', byMs ? 'ms' : 'plays', r.id)
       }))}
@@ -750,7 +767,7 @@ export function artistView(model, ar, ctx = {}) {
           valueFmt: valFmt,
           subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
           valueLabel: valLabel,
-          link: (r) => `#/album/${r.id}`,
+          link: (r) => formatSemanticRoute('album', model.albums.byId.get(r.id), ctx.query),
           caption: `Álbumes del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
           spark: (r) => rowSeries(model, 'albums', byMs ? 'ms' : 'plays', r.id)
         })
@@ -767,6 +784,7 @@ export function artistView(model, ar, ctx = {}) {
 }
 
 export function trackView(model, tk, ctx = {}) {
+  const { entityLink } = entityLinks(model, ctx.query);
   const tr = model.tracks.byId.get(tk);
   if (!tr) return `<p class="empty">Canción no encontrada.</p>`;
   const byMs = (ctx?.metric ?? 'ms') === 'ms';
@@ -865,6 +883,7 @@ export function trackView(model, tk, ctx = {}) {
 }
 
 export function albumView(model, ak, ctx = {}) {
+  const { entityLink } = entityLinks(model, ctx.query);
   const al = model.albums.byId.get(ak);
   if (!al) return `<p class="empty">Álbum no encontrado.</p>`;
   const byMs = ctx?.metric === 'ms';
@@ -906,7 +925,7 @@ export function albumView(model, ak, ctx = {}) {
           valueFmt: valFmt,
           subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
           valueLabel: valLabel,
-          link: (r) => esc(formatTrackFromAlbum(model.tracks.byId.get(r.id), al, ctx.query ?? '')),
+          link: (r) => formatTrackFromAlbum(model.tracks.byId.get(r.id), al, ctx.query ?? ''),
           caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
           spark: (r) => albumSeries(model, al.trackStats.get(r.id).monthly, byMs ? 'ms' : 'plays').map((point) => point.y)
         })
@@ -975,6 +994,7 @@ export function sessionsView(model, ctx = {}) {
 }
 
 function eventDetailView(model, id, ctx, type) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const detail = ctx.detail;
   const isSession = type === 'session';
   const title = isSession ? `Sesión #${Number(id) + 1}` : `Día: ${id}`;
@@ -1024,6 +1044,7 @@ function eventDetailView(model, id, ctx, type) {
 }
 
 export function sessionView(model, id, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   if (ctx.detail) return eventDetailView(model, id, ctx, 'session');
   if (ctx.detailRequested) return '<p class="empty">Sesión no encontrada en la selección actual.</p>';
   const idx = Number(id);
@@ -1078,6 +1099,7 @@ export function sessionView(model, id, ctx = {}) {
 }
 
 export function dayView(model, id, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   if (ctx.detail) return eventDetailView(model, id, ctx, 'day');
   if (ctx.detailRequested) return '<p class="empty">No se pudo consultar el día.</p>';
   let dayNum = null;
@@ -1185,6 +1207,7 @@ export function dayView(model, id, ctx = {}) {
 }
 
 export function discoveryView(model, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const disc = [...model.monthlyDiscovery.entries()].sort((a, b) => a[0] - b[0]);
   const line = lineChart({
     points: fillMonths(sortedMonths(model.monthlyDiscovery)).map((mi) => ({
@@ -1279,6 +1302,7 @@ export function discoveryView(model, ctx = {}) {
 }
 
 export function yearlyView(model, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const byMs = ctx?.metric === 'ms';
   const years = [...model.yearly.keys()].sort((a, b) => a - b);
   const rows = years.map((y) => {
@@ -1448,6 +1472,7 @@ function calendarYearSummaryHTML(y, yd) {
 }
 
 export function hoursView(model, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const byMs = ctx?.metric === 'ms';
   const valFmt = byMs ? fmtMs : fmtNum;
   const valLabel = byMs ? 'Tiempo' : 'Reproducciones';
@@ -1552,6 +1577,7 @@ export function hoursView(model, ctx = {}) {
 }
 
 export function habitsView(model, ctx = {}) {
+  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
   const byMs = ctx?.metric === 'ms';
   const t = model.totals;
   const totalVal = byMs ? t.ms : t.records;
@@ -1695,6 +1721,7 @@ export function habitsView(model, ctx = {}) {
 }
 
 export function wrappedView(model, id, ctx) {
+  const { entityLink } = entityLinks(model, ctx?.query);
   const t = model.totals;
   const byMs = ctx?.metric === 'ms';
   const evoByMs = (ctx?.metric ?? 'ms') === 'ms';
