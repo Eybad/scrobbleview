@@ -2,7 +2,6 @@
 //
 // El Dataset es columnar (typed arrays) pero la interfaz es por nombre de campo:
 // ds.get(i, 't') — un typo en el campo lanza, no da undefined silencioso.
-// peek/describeDataset/assertDataset permiten inspeccionar sin debugger.
 
 export const FIELDS = ['t', 'm', 'tr', 'ar', 'al', 'rs', 're', 'flags'];
 
