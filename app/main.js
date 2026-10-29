@@ -9,7 +9,7 @@ import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText
 import { exportExploreTableCSV, exportFilename } from '../src/export.js';
 import { queryCatalog } from '../src/query.js';
 import { esc, fmtNum } from '../src/charts.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
 import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } from './routes.js';
@@ -109,8 +109,9 @@ const processing = document.getElementById('processing');
 const processingStatus = document.getElementById('processing-status');
 const processingProgress = document.getElementById('processing-progress');
 const cancelProcessing = document.getElementById('cancel-processing');
+const retryProcessing = document.getElementById('retry-processing');
 const jobs = new Map();
-let nextJob = 0, processingError = null;
+let nextJob = 0, processingError = null, processingErrorType = null;
 
 function updateProcessing() {
   const job = [...jobs.values()].at(-1);
@@ -120,11 +121,13 @@ function updateProcessing() {
   processingProgress.hidden = !job;
   if (job) processingProgress.value = job.fraction;
   cancelProcessing.hidden = !job;
+  retryProcessing.hidden = Boolean(job) || processingErrorType !== 'filter' || !analysisState.getFailed() || !analysisState.getConfirmed().context;
 }
 
 function beginProcessing(label, type = 'general') {
   const id = ++nextJob;
   processingError = null;
+  processingErrorType = null;
   jobs.set(id, { label, fraction: 0, type });
   updateProcessing();
   return {
@@ -135,6 +138,7 @@ function beginProcessing(label, type = 'general') {
 
 function reportProcessingError(error, type = 'general') {
   if (error.code === 'E_ABORT') return;
+  processingErrorType = type;
   if (type === 'filter') {
     processingError = `${error.message} Reintentá o restablecé los filtros.`;
   } else if (type === 'export') {
@@ -195,6 +199,14 @@ async function clearCached() {
   return true;
 }
 
+function setFilterBusy(busy) {
+  appRoot.setAttribute('aria-busy', String(busy));
+  appRoot.classList.toggle('app--updating', busy);
+  for (const selector of ['#filter-bar', '#view-root']) {
+    appRoot.querySelector(selector)?.toggleAttribute('inert', busy);
+  }
+}
+
 async function refreshModel() {
   if (!model) return false;
   const [view, id, originQuery] = parseHash();
@@ -206,10 +218,9 @@ async function refreshModel() {
   }
   const requestedHash = location.hash;
   const job = beginProcessing('Actualizando estadísticas', 'filter');
-  appRoot.setAttribute('aria-busy', 'true');
-  appRoot.classList.add('app--updating');
+  setFilterBusy(true);
   try {
-    const result = await analysisState.update(state, { view, id, originQuery, page: detailPage, pageSize: detailPageSize, onProgress: job.progress });
+    const result = await analysisState.update(state, { view, id, originQuery, page: detailPage, pageSize: detailPageSize, context: { hash: requestedHash || '#/dashboard', metric: activeMetric }, onProgress: job.progress });
     if (!result || requestedHash !== location.hash) return false;
     current = result.model;
     currentPrev = result.prev;
@@ -217,15 +228,33 @@ async function refreshModel() {
     return true;
   } catch (error) {
     if (error.code !== 'E_ABORT') {
+      if (!initializing) restoreConfirmedContext();
       reportProcessingError(error, 'filter');
     }
     if (initializing) throw error;
     return false;
   } finally {
-    appRoot.setAttribute('aria-busy', 'false');
-    appRoot.classList.remove('app--updating');
     job.finish();
+    setFilterBusy([...jobs.values()].some(item => item.type === 'filter'));
   }
+}
+
+function restoreConfirmedContext(confirmed = analysisState.getConfirmed()) {
+  if (!confirmed?.context) return false;
+  state = confirmed.context.state;
+  activeMetric = confirmed.context.metric;
+  rankUI.metric = activeMetric;
+  current = confirmed.model;
+  currentPrev = confirmed.prev;
+  currentDetail = confirmed.detail;
+  detailPage = confirmed.context.page;
+  detailPageSize = confirmed.context.pageSize;
+  detailContext = (confirmed.context.view === 'day' || confirmed.context.view === 'session' || confirmed.context.view === 'track')
+    ? JSON.stringify([confirmed.context.view, confirmed.context.id, filterParams(state)]) : null;
+  if (location.hash !== confirmed.context.hash) history.replaceState(history.state, '', confirmed.context.hash);
+  unresolvedFilter = false;
+  render();
+  return true;
 }
 
 function parseHash() {
@@ -1232,27 +1261,22 @@ const inputApi = setupInput({
 });
 
 cancelProcessing.addEventListener('click', () => {
-  const activeJob = [...jobs.values()].at(-1);
-  if (activeJob?.type === 'filter') {
+  const [activeJobId, activeJob] = [...jobs.entries()].at(-1) ?? [];
+  if (activeJob?.type === 'filter' && !initializing) {
     const confirmed = analysisState.cancelUpdate();
-    if (confirmed?.model) {
-      current = confirmed.model;
-      currentPrev = confirmed.prev;
-      state = paramsToFilterState(confirmed.key) ?? emptyFilterState();
-      syncHash();
-      render();
-    }
-    jobs.clear();
-    processingError = null;
-    appRoot.setAttribute('aria-busy', 'false');
-    appRoot.classList.remove('app--updating');
+    restoreConfirmedContext(confirmed);
+    jobs.delete(activeJobId);
+    processingError = 'Actualización cancelada. Podés reintentarla.';
+    processingErrorType = 'filter';
+    setFilterBusy([...jobs.values()].some(item => item.type === 'filter'));
     updateProcessing();
     return;
   }
   if (activeJob?.type === 'export') {
     analysisClient.cancelExport();
-    jobs.clear();
+    jobs.delete(activeJobId);
     processingError = null;
+    processingErrorType = null;
     updateProcessing();
     return;
   }
@@ -1260,7 +1284,7 @@ cancelProcessing.addEventListener('click', () => {
   analysisClient.cancel();
   model = null; current = null; currentPrev = null; currentDetail = null; detailContext = null; cacheOffer = null;
   appRoot.replaceChildren();
-  jobs.clear(); processingError = null;
+  jobs.clear(); processingError = null; processingErrorType = null;
   appRoot.setAttribute('aria-busy', 'false');
   appRoot.classList.remove('app--updating');
   updateProcessing(); updateCacheToast();
@@ -1269,6 +1293,20 @@ cancelProcessing.addEventListener('click', () => {
   siteHeader?.classList.add('site-header--home');
   tagline?.removeAttribute('hidden');
   inputApi.reset('Procesamiento cancelado. Volvé a seleccionar los archivos para continuar.');
+});
+
+retryProcessing.addEventListener('click', async () => {
+  const failed = analysisState.getFailed();
+  if (!failed) return;
+  state = failed.state;
+  activeMetric = failed.metric;
+  rankUI.metric = activeMetric;
+  detailPage = failed.page;
+  detailPageSize = failed.pageSize;
+  detailContext = (failed.view === 'day' || failed.view === 'session' || failed.view === 'track')
+    ? JSON.stringify([failed.view, failed.id, filterParams(state)]) : null;
+  history.replaceState(history.state, '', failed.hash);
+  if (await refreshModel()) render();
 });
 window.addEventListener('pagehide', (event) => { if (!event.persisted) analysisClient.cancel(); });
 
@@ -1347,6 +1385,7 @@ appRoot.addEventListener('click', (e) => {
     rankUI.metric = activeMetric;
     try { localStorage.setItem(METRIC_STORAGE_KEY, activeMetric); } catch (_) {}
     syncHash();
+    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric });
     render();
     const newBtn = appRoot.querySelector(`.context-bar [data-metric="${activeMetric}"]`);
     if (newBtn) newBtn.focus();
