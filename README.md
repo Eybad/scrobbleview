@@ -10,7 +10,7 @@ Tus estadísticas de Spotify, en tu dispositivo: web estática con procesamiento
 - Importación de JSON del historial extendido o del ZIP de Spotify, con lectura incremental y validación estricta.
 - Filtros por período, día, hora, entidad y banderas «sí», «no» o «desconocido», sin volver a leer los archivos.
 - Lectura, cálculos y exportación en un Worker local, con progreso y cancelación. Los detalles de álbum se calculan al abrir su ficha.
-- Exportación del historial procesado completo como ZIP de tablas CSV, independientemente de los filtros visibles.
+- Exportación de todo el historial, la selección analítica o todas las filas coincidentes de la tabla actual, en ZIP de CSV con metadata.
 - SVG con alternativas tabulares, navegación por teclado y consideración de movimiento reducido.
 - Caché opcional en IndexedDB con consentimiento explícito y botón para borrar.
 
@@ -44,7 +44,7 @@ Abrí `http://127.0.0.1:8000` y elegí los archivos, arrastralos a la zona de ca
 
 Las fuentes se concatenan. Se detectan selecciones con el mismo nombre, tamaño y fecha de modificación; los períodos solapados generan un aviso. No se eliminan reproducciones automáticamente por título y timestamp.
 
-**Cancelar procesamiento** termina el Worker, descarta los datos cargados en memoria y vuelve al inicio; para continuar hay que cargarlos otra vez. No borra una caché previamente guardada. Las cachés antiguas sin información de campos desconocidos requieren reimportar los archivos.
+Al cancelar un filtro se conserva la última selección confirmada; al cancelar una exportación se descarta esa exportación. Cancelar la carga vuelve al inicio y requiere seleccionar los archivos otra vez. Ninguna de estas acciones borra una caché previamente guardada. Las cachés antiguas sin información de campos desconocidos requieren reimportar los archivos.
 
 Las definiciones y sus límites están en [Estadísticas y rendimiento](docs/analysis.md) y el [glosario](CONTEXT.md). Los resultados no reproducen automáticamente Spotify Wrapped, charts ni Spotify for Artists.
 
@@ -74,7 +74,7 @@ node --expose-gc bench/aggregate.js 100000 --compact
 
 Las pruebas usan datos sintéticos e incluyen parsing por distintos tamaños de chunk, agregación, DST, filtros, exportación, Unicode, fallos de almacenamiento y comunicación real con un Worker de Node. El conteo vigente lo informa el runner.
 
-Serví el checkout y abrí `browser-tests/navigation.html` para ejecutar la regresión de carga, filtros, Atrás/Adelante, comparación, anclas y cancelación sobre el DOM real. La validación de teclado, TalkBack y comportamiento en tu navegador requiere esa ejecución; las pruebas de Node no la sustituyen.
+Serví el checkout y abrí `browser-tests/navigation.html` para ejecutar el harness de ocho eventos sintéticos: carga, filtros, Atrás/Adelante, búsqueda, fichas, comparación, exportaciones, preferencias, gráficos, cinco anchos, etiquetas y valores de KPIs y récords sin desborde calculado, y veinte ciclos de navegación. El harness verifica teclado y foco en Chromium; TalkBack y el tacto en un dispositivo físico siguen requiriendo validación manual. Las pruebas de Node no sustituyen esa comprobación.
 
 ## Estructura del proyecto
 

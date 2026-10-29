@@ -289,3 +289,89 @@ Las referencias a Node indican pruebas de funciones, markup o mocks, no validaci
 | A26 | HTML y caracteres especiales; CSV con prefijos de fórmula | Sin XSS y con neutralización de fórmulas | **Verificado en Node para escape y CSV; DOM real pendiente** (`test/acceptance-etapa8.test.js`, `test/worker.test.js`) |
 | A27 | Guardado, carga y borrado con fallos | Persistencia consentida y errores recuperables | **Verificado con IndexedDB simulado; IndexedDB real/UI pendiente** (`test/storage.test.js`) |
 | A28 | Veinte ciclos de navegación/detalle/filtros | Sin fugas de memoria; heap acotado en ejecución continua | **Manual pendiente; el smoke de render en Node no satisface este caso** |
+
+## 15. R10 — Evidencia y trazabilidad actualizadas (29 de octubre de 2026)
+
+La matriz A01–A28 de arriba conserva los significados y resultados históricos. Esta sección agrega el estado actual sin reemplazar las observaciones anteriores ni convertir pruebas de strings/mocks en aceptación de navegador.
+
+### Regresiones B01–B25
+
+| ID | Estado y evidencia actual |
+|---|---|
+| B01 | **Verificado en Node**: eventos día 0/5/100, regreso de 95 días en agregación y motor; `test/acceptance-etapa7.test.js`. |
+| B02 | **Verificado en Node**: orden inverso de eventos conserva retornos/retención por identidad; misma prueba de motor en `test/acceptance-etapa7.test.js`. |
+| B03 | **Verificado en Node**: timestamps iguales no cuentan como regreso; horizonte y filtros conservan observaciones posteriores; `test/acceptance-etapa7.test.js`. |
+| B04 | **Verificado en Node**: cuota 75 %/25 % estable entre páginas, búsqueda, HTML y CSV; `test/acceptance-r10.test.js`. |
+| B05 | **Verificado en Node**: tres eventos con pausas 2 h/1 h forman una sesión, dos pares originales y racha 3; `test/acceptance-etapa6.test.js`; detalle paginado en `test/analysis-detail.test.js`. |
+| B06 | **Verificado en Node**: A→B→A filtrado diferencia selección, pares originales y sesión original; `test/acceptance-etapa6.test.js`. |
+| B07 | **Verificado en Node**: detalle de día/sesión pagina nombres y cifras exactas mientras la proyección global omite `cols`; `test/analysis-detail.test.js`, `test/worker.test.js`. |
+| B08 | **Verificado en Worker, navegador y ZIP**: dos Echo conservan artista, Shared conserva dos álbumes; `test/worker.test.js`, harness y exportación real. |
+| B09 | **Verificado en Node y parcialmente en navegador**: rutas semánticas resuelven identidad al invertir archivos; el harness abre y vuelve de fichas por href semántico; `test/acceptance-etapa2.test.js`, `test/routes.test.js`. |
+| B10 | **Parcial**: hrefs reales conservan búsqueda y métrica al copiarlos; no se verificó apertura en pestaña nueva con dataset cargado; `test/acceptance-etapa2.test.js`, `browser-tests/navigation.js`. |
+| B11 | **Parcial en navegador**: consulta y foco del enlace vuelven tras abrir detalle; el scroll solo está cubierto por el adaptador/mocks Node, no por scroll real del navegador. |
+| B12 | **Parcial en navegador**: caret, foco y `aria-sort` comprobados en la búsqueda/orden; paginación está cubierta por consulta Node, no por interacción real en el harness. |
+| B13 | **Parcial**: botón real cancela el filtro y conserva el análisis; error, snapshot confirmado y reintento están en `test/analysis-state.test.js`, no se inyectó el fallo en navegador. |
+| B14 | **Verificado en Worker**: coalescencia conserva una exportación/guardado concurrente; `test/analysis-coalescence.test.js`. |
+| B15 | **Parcial en navegador**: diciembre→enero→Atrás conserva mes/año; no se probó recarga con datos rehidratados; `browser-tests/navigation.js`, `test/acceptance-etapa4.test.js`. |
+| B16 | **Verificado en Node**: consulta completa de más de 100 candidatos y ranking previo a paginación; `test/acceptance-etapa3.test.js`, `test/catalog-query.test.js`. Falta la interacción DOM con ese cardinal. |
+| B17 | **Verificado en Worker y navegador**: período con base cero muestra `nuevo`, sin porcentaje inventado; `test/acceptance-etapa5.test.js`, harness. |
+| B18 | **Verificado en Worker/Node**: serie diaria, semanal y mensual cruza DST, reconcilia eventos y marca períodos parciales/semanas lunes; `test/worker.test.js`. |
+| B19 | **Verificado en motor y vista renderizada**: HHI 0,625, número efectivo `exp(H)`, tiempo conocido y bases de banderas; `test/acceptance-r10.test.js`. |
+| B20 | **Verificado en consulta, HTML y CSV**: mismo artista elegible, denominador 20 y cuota 50 %; `test/catalog-query.test.js`. Falta repetir con interacción DOM. |
+| B21 | **Verificado en ZIP Worker y descargas de navegador**: filtros de selección y metadata; los tres alcances reales pasan CRC; `test/worker.test.js` y harness. |
+| B22 | **Parcial en navegador y Node**: serie de 60 puntos, cero y desconocido en tabla; el reloj de 168 puntos responde a teclado y clic sintético. Tacto físico/TalkBack siguen pendientes; `test/chart-contract.test.js`, harness. |
+| B23 | **Verificado en Node**: parser estricto, Unicode, XSS de markup, rutas y neutralización CSV; el recorrido adversarial del DOM real no se ejecutó. |
+| B24 | **Parcial**: reset de preferencias comprobado en navegador; IndexedDB y fallos son simulados en Node; no se canceló una exportación activa desde el navegador para buscar una descarga tardía. |
+| B25 | **Parcial con evidencia repetida**: 20 ciclos en navegador completados en 5 corridas, 120 efectos/60 rutas por corrida; heap después de GC +100.270/+95.242/+95.422/+91.070/+100.717 bytes. Las muestras intermedias son variables; no equivalen a RSS total ni a ausencia universal de fugas. Benchmark Node de cinco repeticiones en `docs/analysis.md`. |
+
+### Estado actualizado de A01–A28
+
+| IDs | Evidencia al 29 de octubre |
+|---|---|
+| A01 | **Parcial en navegador**: sin scroll horizontal a 320/360/393/412/640 px; KPIs y récords sin desborde horizontal/vertical con texto raíz de 20 px. Falta comprobar todas las etiquetas/controles y el scroll acotado real de tablas y mapas. |
+| A02 | **Verificado en navegador (harness)**: KPIs en dos columnas a 320/360/393/412/640 px y sin texto KPI desbordado horizontal o vertical; fuente raíz al 125 %. `browser-tests/navigation.js`, además de la regresión de cascada CSS en `test/acceptance-etapa1.test.js`. |
+| A03–A06 | **Verificado en Node**: límites de duración, desconocidos, artistas identificados y ambos denominadores de continuidad; `test/acceptance-etapa1.test.js`. |
+| A07–A08 | **Verificado en Node**: cardinalidad, orden global, paginación y cuota estable; `test/acceptance-etapa3.test.js`, `test/acceptance-r10.test.js`. |
+| A09 | **Worker y navegador**: homónimos enlazan por artista y abren fichas distintas; `test/worker.test.js`, harness. |
+| A10–A11 | **Parcial**: historial del navegador devuelve consulta/foco; href transporta query/métrica. El scroll real y la nueva pestaña no están comprobados. |
+| A12–A14 | **Node/Worker**: orden de archivos, coalescencia y cancelación lógica; falta probar una exportación activa cancelada en navegador. |
+| A15–A17 | **Node y navegador parcial**: 24 horas, calendario, escalas y contrato de 168 puntos; clic sintético y teclado probados, TalkBack/tacto físico pendientes. |
+| A18–A19 | **Worker/Node y navegador parcial**: base cero, rangos y series DST; el navegador muestra base cero, el resto tiene prueba Worker. |
+| A20–A22 | **Worker, Node y navegador parcial**: álbumes, sesiones y secuencias reconciliados; la aceptación del scroll y tacto permanece pendiente. |
+| A23–A24 | **Verificado en Node**: primeras apariciones, regresos y seguimiento insuficiente; `test/acceptance-etapa7.test.js`. |
+| A25 | **Verificado en Worker y navegador**: los tres alcances reales, tabla completa de consulta y metadata ZIP; CRC inspeccionado. |
+| A26 | **Verificado en Node**: escaping y fórmulas; falta fixture hostil ejecutado en DOM real. |
+| A27 | **Parcial**: IndexedDB simulado cubre éxito/fallo; reset de preferencias está en navegador; IndexedDB real sigue pendiente. |
+| A28 | **Parcial en navegador**: 20 ciclos en cinco corridas, sin excepción JS ni conteos duplicados en el harness; deltas de heap acotados a este flujo, sin una medición independiente de RAM del navegador. |
+
+### Trazabilidad del plan original (etapas 0–8)
+
+| Requisito | Ruta o acción de UI | Seam, función o mensaje | Evidencia |
+|---|---|---|---|
+| E0.1–E0.7: base, rama, seguimiento, suite, navegador, benchmark e inventario | Inicio del proyecto y protocolo local | `docs/implementation-progress.md`, `browser-tests/navigation.html`, `bench/r10.js` | Historial de commits, suite final, harness Chromium y comparación en `docs/analysis.md` |
+| E1.1–E1.6: responsive, KPIs, redondeo, buckets, desconocidos y constancia | Resumen, Horarios, Años, Hábitos | `app/views.js`, `src/charts.js`, `src/aggregate/aggregate.js` | `test/acceptance-etapa1.test.js`, `test/views.test.js`; cinco anchos y límites de texto de KPIs y récords medidos en harness |
+| E1.7–E1.12: motivos, denominadores, hora final, calidad/demo, arquetipo y comparación honesta | Resumen, Horarios, Hábitos, Comparar | vistas y métricas de `src/aggregate/`; `src/compare.js` | `test/aggregate.test.js`, `test/views.test.js`, `test/acceptance-etapa5.test.js`, harness |
+| E2.1–E2.6: estado, rutas semánticas, historial, enlaces, franja contextual y métrica | Navegación, filtros, fichas | `app/routes.js`, `app/history-state.js`, `app/state-metric.js`, `app/main.js` | `test/routes.test.js`, `test/navigation-history.test.js`, `test/portable-filters.test.js`, `test/acceptance-etapa2.test.js`, navegador parcial |
+| E2.7–E2.10: coalescencia, espera confirmada, error/reintento y cancelación | Filtros, importar, exportar | `app/analysis-client.js`, `app/analysis-state.js`, `cancelProcessing` | `test/analysis-coalescence.test.js`, `test/analysis-state.test.js`, cancelación de filtro en navegador |
+| E3.1–E3.5: consulta pura, catálogo, cuotas, búsqueda/orden y posición | Explorar → Artistas/Canciones/Álbumes | `app/catalog-query.js`, `src/query.js`, `app/catalog-table.js` | `test/acceptance-etapa3.test.js`, `test/catalog-query.test.js`, `test/catalog-table.test.js`, harness |
+| E3.6–E3.9: rankings auxiliares, identidad/nombres, preferencias y accesos con umbral | Tarjetas → Explorar; controles de columnas/densidad | consulta de catálogo y generadores de href de `app/views.js` | `test/catalog-query.test.js`, `test/explore-view.test.js`, `test/worker.test.js` |
+| E4.1–E4.4: contrato, inspector, tabla y adaptación de líneas/barras | Gráficos en Resumen, Horarios y Hábitos | `src/chart-contract.js`, `src/charts.js`, `selectChartPoint()` | `test/chart-contract.test.js`, `test/charts.test.js`, harness de 168 puntos; tacto pendiente |
+| E4.5–E4.9: mapas/leyendas, calendario, rango, escalas y 24 horas | Calendario anual/mensual y reloj 24 h | `app/calendar-ui.js`, `app/filter-ui.js`, `buildCompareSeries()` | `test/calendar-ui.test.js`, `test/acceptance-etapa4.test.js`, Worker DST y navegación mensual |
+| E5.1–E5.5: rangos/presets, extremos, fechas y deltas | Comparar → dos rangos y filtros compartidos | `app/analysis-engine.js`, `src/compare.js`, `compareView()` | `test/acceptance-etapa5.test.js`, `test/worker.test.js`, harness base cero |
+| E5.6–E5.9: ranking A/B, denominadores diarios, series, entidades y memoria | Comparar → tablas y series por métrica | `compareEntityRankings()`, `buildCompareSeries()`, proyección Worker | `test/compare.test.js`, B18, `test/worker.test.js` |
+| E6.1–E6.4: ficha de día/sesión, paginación, pertenencia y recursos | Calendario/record → Día; Sesiones → ficha | `dayDetail`, `sessionDetail`, `trackDetail` del motor | `test/analysis-detail.test.js`, `test/worker.test.js`, harness de cinco fichas |
+| E6.5–E6.9: origen de álbum, historia, secuencias, transiciones y límites de sesión | Álbum → canción; fichas y tablas de sesión | atribución por `trackStats`, índice de sesión original, vistas de detalle | `test/acceptance-etapa6.test.js`, `test/worker.test.js`, ZIP real |
+| E7.1–E7.4: primeras apariciones, regresos, cronología y tiempo desde fin/hoy | Descubrimiento y Hábitos | `computeComebacks()`, `computeRetention()`, consulta longitudinal | `test/acceptance-etapa7.test.js`, `test/worker.test.js` |
+| E7.5–E7.8: concentración mensual, tasas con base, retorno y cálculo a pedido | Hábitos y Descubrimiento | `computeMonthlyLongitudinal()`, caché longitudinal del motor | `test/acceptance-r10.test.js`, `test/acceptance-etapa7.test.js` |
+| E8.1–E8.3: tres alcances, metadata/unidades, resumen contextual | Cabecera → Exportar; Copiar resumen | `openExportDialog()`, exportación Worker, `receiptTextFromConfirmed()` | `test/worker.test.js`, ZIP reales all/selection/table, `test/acceptance-etapa8.test.js` |
+| E8.4–E8.8: consentimiento, preferencias, diferimiento, aceptación y cierre | Inicio/caché, favoritos, preferencias, calendarios | `app/storage.js`, `presentation-preferences.js`, calendarios diferidos | `test/storage.test.js`, `test/presentation-preferences.test.js`, `test/acceptance-etapa8.test.js`, reset en navegador |
+
+### Conservación y límites del cierre
+
+Se conservaron las ocho secciones, Explorar, Comparar, las fichas de artista/canción/álbum/día/sesión, filtros, rankings, calendarios, sesiones, detalles, privacidad local, caché opcional consentida y exportaciones. Las pruebas de vistas/motor/Worker cubren los contratos; el harness tocó los cinco tipos de ficha y los tres alcances. No se agregó dependencia, build, telemetría, Service Worker ni publicación.
+
+El harness de tabla inicialmente podía aceptar por coincidencia un conteo de dos con una búsqueda aún no confirmada mientras seguía activo el filtro de 4 semanas. Se corrigió para limpiar ese filtro y esperar query en hash, filas Echo y enlaces de ambos artistas; el ZIP descargado confirma `catalog.search=Echo` y dos filas. No era un fallo de filtrado del producto.
+
+El código, el harness automatizable y la documentación R10 están implementados. La aceptación global queda **parcial**, no total: permanecen las verificaciones manuales enumeradas en B10–B12, B15–B16, B22–B24 y en `docs/analysis.md`, además de la prueba de 500.000 eventos no ejecutada. Los conteos de tests históricos no se reciclan como estado actual.
+
+Verificación final de código: `node --test` en Termux/Android aarch64 con Node v26.12.1, 354 aprobadas, 0 fallidas (13,38 s). Las pruebas sintéticas no contienen historial personal. `git diff --check` también aprobó antes del commit documental.

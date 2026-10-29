@@ -63,11 +63,39 @@ Datos sintéticos: 500 artistas, `min(50.000, eventos/10)` canciones, reproducci
 
 Estas muestras muestran un menor pico RSS en la corrida compacta. El conteo directo evita calcular modelos enteros para comparar totales. Las muestras no prueban una mejora uniforme de tiempos de filtrado. No son promedios, una ley de escalado ni predicciones para otro teléfono. El consumo sigue siendo alto en historiales grandes; conviene cargar períodos más pequeños si el navegador no dispone de recursos suficientes.
 
-## Verificación pendiente en navegador
+### Comparación R10 del 29 de octubre de 2026
+
+Comando: `node --expose-gc bench/r10.js 100000 5`. Se comparó la base `55f9d9289f09b07808147de0b03e0b413b5e0852` con el checkout de R10 en Termux/Android aarch64, Node v26.12.1. Como el harness R10 no existía en la base, se copió temporalmente el mismo archivo al worktree separado de esa revisión. Ambas corridas usaron el mismo fixture sintético: 100.000 eventos, 10.000 canciones, 500 artistas, 500 álbumes, 23.133.801 bytes JSON y rango `2020-01-01T00:00:00.000Z..2021-04-16T21:18:00.000Z`. Cinco muestras por operación; se informa mediana y peor muestra. No se ejecutó la prueba de 500.000 eventos porque el proceso de 100.000 ya alcanzó 407,8 MiB de RSS en Android.
+
+| Operación | Base mediana / peor (ms) | R10 mediana / peor (ms) |
+| --- | ---: | ---: |
+| Parseo | 2.262,58 / 2.340,47 | 2.262,18 / 2.399,09 |
+| Derivación + agregación compacta | 1.998,25 / 2.186,22 | 2.134,86 / 2.387,23 |
+| Clonado de proyección (`structuredClone`) | 1.345,46 / 1.361,22 | 2.384,17 / 2.386,37 |
+| Consulta de catálogo | 11,80 / 44,84 | 12,92 / 37,53 |
+| Render de catálogo a HTML | 18,41 / 46,88 | 19,84 / 50,49 |
+| CSV + ZIP de tabla | 133,56 / 465,60 | 153,40 / 475,38 |
+| RSS pico del proceso | 359,3 MiB | 407,8 MiB |
+
+En esta comparación, parseo y consulta quedaron cerca de la base; derivación/agregación, render y exportación fueron algo más lentos. El clonado de la proyección y el RSS aumentaron de forma clara. Consulta y render quedaron debajo de 200 ms en estas muestras Node, pero eso no mide latencia del DOM ni respuesta visual en navegador. `structuredClone` representa el costo de copiar la proyección, no el mensaje real de un Worker; el render solo produce un string y no construye el DOM; la exportación mide la tabla sintética y su ZIP. La medición no demuestra el objetivo de feedback de 100 ms ni la RAM disponible para un historial personal. Las corridas son sensibles a la carga y temperatura del dispositivo.
+
+## Verificación de navegador y pendientes manuales
 
 `node --test` incluye comunicación real entre hilos, cancelación, errores, recuperación, respuestas fuera de orden y vistas renderizadas con la proyección del Worker. No equivale a probar el DOM, CSP, gestos o tecnologías de asistencia de un navegador.
 
-Abrí `browser-tests/navigation.html` por HTTP para verificar carga, filtros, Atrás/Adelante, cambios manuales del hash, salto al contenido y cancelación. Probá además carga ZIP, detalle de álbum, selección de año, guardado/borrado y exportación. Esta implementación no se ha ejecutado en un motor de navegador durante esta sesión; tampoco se utilizó un historial personal.
+El 29 de octubre se completaron cinco ejecuciones de `browser-tests/navigation.html` por HTTP local en Chromium 156.0.8078.47, Android/Termux aarch64, con ocho eventos sintéticos; no se usaron historiales personales. Cada ejecución cubrió carga, filtros, Atrás/Adelante y cambios de hash, búsqueda/caret, accesibilidad de nombres/tablas, cinco fichas, comparación con base cero, los tres alcances de exportación, reset de preferencias, series de gráfico y veinte ciclos de navegación/detalle/filtros. No se observaron excepciones JavaScript. El harness registró 120 efectos de acción y 60 cambios de ruta por corrida.
+
+| Ancho del iframe | 320 px | 360 px | 393 px | 412 px | 640 px |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `scrollWidth` | 320 | 345 | 378 | 397 | 625 |
+
+Todos los anchos quedaron dentro del viewport. En el resumen, KPIs y récords conservaron dos columnas en cada ancho; `scrollWidth` y `scrollHeight` no detectaron texto desbordado en etiquetas ni valores. Con la raíz al 125 %, el tamaño calculado fue 20 px, sin desborde de página o de esos textos. Esto comprueba las cajas listadas por el harness, no cada control visual ni el scroll acotado de tablas y mapas. La navegación por Tab dejó foco en «Explorar» con `:focus-visible`, contorno sólido de 2 px y sin otro elemento encima.
+
+Después de GC forzado, las cinco ejecuciones midieron deltas de heap `performance.memory` de +100.270, +95.242, +95.422, +91.070 y +100.717 bytes tras los veinte ciclos. Las muestras intermedias fueron variables y no monotónicas. Esto limita la conclusión a este flujo: no demuestra ausencia general de fugas ni mide toda la RAM del navegador.
+
+El harness descargó y se inspeccionaron tres ZIP reales del navegador. Los tres pasan CRC: `all` contiene 8 eventos y las siete tablas; `selection` contiene 4 eventos y las siete tablas; `table` contiene 8 eventos, `catalog.search=Echo`, dos coincidencias y las filas Echo/Artist A y Echo/Artist B. La comprobación también confirmó `metadata.csv` y no encontró `undefined` como valor de metadata.
+
+Siguen pendientes comprobaciones con TalkBack y tacto físico, IndexedDB real y sus fallos, descarga cancelada durante un trabajo activo sin llegada tardía, navegación en una pestaña nueva con datos, desplazamiento real de página/tabla/mapa, revisión visual del resto de controles, consola/CSP en otros navegadores y carga de 500.000 eventos. El harness usa teclado/CDP y clic sintético; no sustituye esas pruebas.
 
 ## Cobertura de la auditoría
 
