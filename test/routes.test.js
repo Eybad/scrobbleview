@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRoute, resolveRoute, formatSemanticRoute, formatTrackFromAlbum, resolveAlbumOrigin } from '../app/routes.js';
+import { parseRoute, resolveRoute, formatSemanticRoute, formatTrackFromAlbum, resolveAlbumOrigin, mergeExploreParams } from '../app/routes.js';
 
 test('parseRoute: recognizes versioned semantic routes and legacy routes', () => {
   const r1 = parseRoute('#/v1/artist/Radiohead?m=ms');
@@ -142,4 +142,12 @@ test('track links carry a reversible album origin by identity', () => {
   assert.equal(route.params.artist, track.artist);
   assert.equal(resolveAlbumOrigin(route.query, model).id, 42);
   assert.equal(new URLSearchParams(route.query).get('m'), 'plays');
+});
+
+test('explore query keeps presentation controls without restoring removed filters', () => {
+  const merged = new URLSearchParams(mergeExploreParams('?m=ms', '?m=plays&filterArtist=Old&q=hello&page=2'));
+  assert.equal(merged.get('m'), 'ms');
+  assert.equal(merged.has('filterArtist'), false);
+  assert.equal(merged.get('q'), 'hello');
+  assert.equal(merged.get('page'), '2');
 });

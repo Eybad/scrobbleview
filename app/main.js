@@ -12,7 +12,7 @@ import { esc, fmtNum } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
-import { parseRoute, resolveRoute, formatSemanticRoute } from './routes.js';
+import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } from './routes.js';
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { contextBarHTML } from './context-bar.js';
 
@@ -230,7 +230,7 @@ async function refreshModel() {
 
 function parseHash() {
   const parsed = parseRoute(location.hash);
-  const resolved = resolveRoute(parsed, current || model);
+  const resolved = resolveRoute(parsed, model || current);
   return [resolved.view, resolved.id, parsed.query, resolved];
 }
 
@@ -245,13 +245,8 @@ function syncHash() {
   const [, , rawQuery] = parseHash();
   let hash;
   if (name === 'explore') {
-    const [, , rawQ] = parseHash();
-    const existing = new URLSearchParams(rawQ ? rawQ.replace(/^\?/, '') : '');
-    const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
-    for (const [k, v] of existing.entries()) {
-      if (!merged.has(k)) merged.set(k, v);
-    }
-    hash = `#/v1/explore${merged.toString() ? `?${merged.toString()}` : ''}`;
+    const merged = mergeExploreParams(queryStr, rawQuery);
+    hash = `#/v1/explore${merged ? `?${merged}` : ''}`;
   } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
     const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
     if (name === 'track') {
@@ -262,7 +257,7 @@ function syncHash() {
   } else {
     hash = `#/${name}${id != null ? `/${id}` : ''}${queryStr}`;
   }
-  if (location.hash !== hash) history.replaceState(null, '', hash);
+  if (location.hash !== hash) history.replaceState(history.state, '', hash);
 }
 
 // The URL is authoritative on load, Back/Forward and manual hash changes.
@@ -1281,7 +1276,7 @@ if (cacheAvailable()) {
   cacheSummary().then((summary) => inputApi.showCachedButtons(summary));
 }
 
-let lastView = parseHash()[0] || 'dashboard';
+let lastRoute = location.hash.split('?')[0];
 function focusMainContent() {
   const main = document.getElementById('main-content');
   main.focus({ preventScroll: true });
@@ -1301,14 +1296,14 @@ window.addEventListener('hashchange', async () => {
   if (location.hash === '#main-content') { focusMainContent(); return; }
   if (initializing || !model) return;
   const [name] = parseHash();
+  const route = location.hash.split('?')[0];
   if (!await applyHashParams()) return;
   render();
   if (popReturnState) {
     restoreHistoryState(popReturnState);
     popReturnState = null;
-  } else if (name !== lastView) {
-    lastView = name;
-    if (name === 'artist' || name === 'track' || name === 'album') {
+  } else if (route !== lastRoute) {
+    if (name === 'artist' || name === 'track' || name === 'album' || name === 'day' || name === 'session') {
       const h = appRoot.querySelector('.view-header h1, .view-header');
       if (h) {
         h.setAttribute('tabindex', '-1');
@@ -1319,6 +1314,7 @@ window.addEventListener('hashchange', async () => {
       window.scrollTo(0, 0);
     }
   }
+  lastRoute = route;
 });
 
 // Chips para quitar filtros activos + "Borrar todo". Delegado una sola vez:

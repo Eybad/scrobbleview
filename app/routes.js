@@ -248,3 +248,12 @@ export function resolveAlbumOrigin(query, model) {
   }
   return null;
 }
+
+export function mergeExploreParams(filterQuery, currentQuery) {
+  const merged = new URLSearchParams((filterQuery ?? '').replace(/^\?/, ''));
+  const existing = new URLSearchParams((currentQuery ?? '').replace(/^\?/, ''));
+  for (const key of ['tab', 'q', 'sort', 'dir', 'page', 'pageSize', 'minPlays', 'minMonths']) {
+    if (existing.has(key)) merged.set(key, existing.get(key));
+  }
+  return merged.toString();
+}
