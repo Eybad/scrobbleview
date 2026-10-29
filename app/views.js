@@ -281,6 +281,23 @@ function contractedLineChart({ id, title, points, format, unit, base }) {
   return renderChartWithContract(contract, scrollChart(lineChart({ points, format }), title));
 }
 
+function contractedBarChart({ id, title, data, format = fmtNum, unit, base, orientation = 'vertical', showValue = true }) {
+  const contract = createChartContract({
+    id,
+    title,
+    unit,
+    base,
+    data,
+    format,
+    chartType: orientation === 'horizontal' ? 'list' : 'bar',
+    showShare: orientation === 'horizontal'
+  });
+  const chart = orientation === 'horizontal'
+    ? hbarChart({ rows: data, format })
+    : scrollChart(barChart({ data, format, showValue }), title);
+  return renderChartWithContract(contract, chart);
+}
+
 // Rellena los meses huecos entre el primero y el último (índices YYYYMM):
 // sin esto, lineChart espaciaba los puntos por posición del dato y la línea
 // mentía (dos puntos consecutivos en el eje aunque distaran un año).
@@ -575,9 +592,10 @@ export function dashboard(model, ctx = {}) {
     base: byMs ? 'duración conocida' : 'eventos registrados'
   });
 
-  const dist = hbarChart({
-    rows: t.msDist.map((b) => ({ label: b.label, value: b.count })),
-    format: fmtNum
+  const dist = contractedBarChart({
+    id: 'dashboard-duration-distribution', title: 'Duración de reproducciones',
+    data: t.msDist.map((b) => ({ label: b.label, value: b.count })),
+    format: fmtNum, unit: 'reproducciones', base: 'reproducciones con duración conocida', orientation: 'horizontal'
   });
 
   const rankings = `<div id="rank-card">${rankCardHTML(model, { ...ctx.rankUI, contextQuery: ctx.query })}</div>`;
@@ -643,7 +661,7 @@ export function dashboard(model, ctx = {}) {
     ${card('Rankings', rankings)}
     <div class="grid-2">
       ${evolution}
-      ${card('Duración de reproducciones', dist)}
+      ${dist}
     </div>
     ${card('Cuándo escuchás (día × hora)', `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>` + heatLegend() + heatTable)}
     <div class="grid-2">
@@ -1021,16 +1039,16 @@ export function sessionsView(model, ctx = {}) {
       ${cardWithLimit('Sesiones con más reproducciones', 'sessions-plays', playsLimit, table(['#', 'Inicio estimado', 'Duración estimada', 'Reproducciones', 'Tiempo escuchado'], sessRows(topPlays), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}
     </div>
     <div class="grid-2">
-      ${card('Sesiones por franja', scrollChart(barChart({ data: blocks, showValue: true }), 'Sesiones por franja'))}
-      ${card('Hora de inicio', scrollChart(barChart({ data: startHour.map(([h, n]) => ({ label: `${h}`, value: n })), showValue: false }), 'Hora de inicio'))}
+      ${contractedBarChart({ id: 'sessions-by-block', title: 'Sesiones por franja', data: blocks, unit: 'sesiones', base: 'sesiones registradas' })}
+      ${contractedBarChart({ id: 'sessions-by-start-hour', title: 'Hora de inicio', data: startHour.map(([h, n]) => ({ label: `${h}`, value: n })), unit: 'sesiones', base: 'sesiones registradas', showValue: false })}
     </div>
     <div class="grid-2">
       ${contractedLineChart({ id: 'sessions-monthly', title: 'Sesiones por mes', points: monthPoints, format: fmtNum, unit: 'sesiones', base: 'sesiones registradas' })}
-      ${card('Sesiones por día de la semana', scrollChart(barChart({ data: dowData, showValue: true }), 'Sesiones por día de la semana'))}
+      ${contractedBarChart({ id: 'sessions-by-weekday', title: 'Sesiones por día de la semana', data: dowData, unit: 'sesiones', base: 'sesiones registradas' })}
     </div>
     <div class="grid-2">
-      ${card('Razones de inicio', hbarChart({ rows: [...model.starts.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), format: fmtNum }))}
-      ${card('Razones de fin', hbarChart({ rows: [...model.ends.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), format: fmtNum }))}
+      ${contractedBarChart({ id: 'sessions-by-start-reason', title: 'Razones de inicio', data: [...model.starts.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), unit: 'sesiones', base: 'sesiones con razón de inicio registrada', orientation: 'horizontal' })}
+      ${contractedBarChart({ id: 'sessions-by-end-reason', title: 'Razones de fin', data: [...model.ends.entries()].map(([k, v]) => ({ label: reasonLabel(k), value: v })), unit: 'sesiones', base: 'sesiones con razón de fin registrada', orientation: 'horizontal' })}
     </div>`;
 }
 
@@ -1547,21 +1565,28 @@ export function hoursView(model, ctx = {}) {
   const weekendVal = (byMs ? model.weekday[5].ms + model.weekday[6].ms : model.weekday[5].plays + model.weekday[6].plays);
   const weekdayVal = totalVal - weekendVal;
 
-  const hourChart = barChart({
+  const hourChart = contractedBarChart({
+    id: 'hours-by-hour', title: `Actividad por hora del día (${valLabel.toLowerCase()})`,
     data: model.hour.map((h, i) => ({
       label: String(i).padStart(2, '0'),
       value: byMs ? h.ms : h.plays
     })),
     format: valFmt,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'duración conocida' : 'eventos registrados',
     showValue: false
   });
 
-  const dowChart = hbarChart({
-    rows: DOW_LONG.map((label, d) => ({
+  const dowChart = contractedBarChart({
+    id: 'hours-by-weekday', title: `Actividad por día de la semana (${valLabel.toLowerCase()})`,
+    data: DOW_LONG.map((label, d) => ({
       label,
       value: byMs ? model.weekday[d].ms : model.weekday[d].plays
     })),
-    format: valFmt
+    format: valFmt,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'duración conocida' : 'eventos registrados',
+    orientation: 'horizontal'
   });
 
   const blockRows = model.blocks.map((b, i) => {
@@ -1610,8 +1635,8 @@ export function hoursView(model, ctx = {}) {
       { label: 'Lunes a viernes', value: pctOf(weekdayVal, totalVal), sub: `${fmtNum(model.totals.records - (model.weekday[5].plays + model.weekday[6].plays))} rep. · ${fmtMs(model.totals.ms - (model.weekday[5].ms + model.weekday[6].ms))}` }
     ])}
     <div class="grid-2">
-      ${card(`Actividad por hora del día (${valLabel.toLowerCase()})`, scrollChart(hourChart, 'Actividad por hora del día'))}
-      ${card(`Actividad por día de la semana (${valLabel.toLowerCase()})`, dowChart)}
+      ${hourChart}
+      ${dowChart}
     </div>
     ${card('Las 4 franjas del día', table(['Franja', 'Reproducciones', 'Tiempo', '%', 'Artista #1', 'Canción #1'], blockRows, '', ['', 'n', 'n', 'n', '', ''], null, 'Comparación de las 4 franjas del día'))}
     ${card('Detalle por hora (00:00–23:00)', table(['Hora', 'Total de la hora', 'Canción #1'], hourTrackRows, '', ['c', 'n', ''], null, 'Actividad total y canción más escuchada en cada una de las 24 horas del día'))}`;

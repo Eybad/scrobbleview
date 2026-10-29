@@ -130,7 +130,7 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
     const value = showValue
       ? `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" class="chart-value" font-size="12">${format(d.value)}</text>`
       : '';
-    return `<g><title>${esc(title)}</title>
+    return `<g data-chart-index="${i}" class="chart-point"><title>${esc(title)}</title>
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${accent}" rx="2"/>
       ${value}
       <text x="${(x + barW / 2).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-label" font-size="12">${label}</text>
@@ -316,10 +316,10 @@ export function hbarChart({ rows, format = fmtNum, accent = ACCENT }) {
   if (rows.length === 0) return '';
   const max = Math.max(...rows.map((r) => r.value), 1);
   const total = rows.reduce((a, r) => a + r.value, 0);
-  const items = rows.map((r) => {
+  const items = rows.map((r, i) => {
     const w = (r.value / max) * 100;
     const pct = total > 0 ? (r.value / total) * 100 : 0;
-    return `<li class="hbar-row">
+    return `<li class="hbar-row chart-point" data-chart-index="${i}">
       <span class="hbar-label">${esc(String(r.label))}</span>
       <span class="hbar-track"><span class="hbar-fill" style="width:${w.toFixed(1)}%;background:${accent}"></span></span>
       <span class="hbar-value">${format(r.value)} · ${fmtPct(pct / 100)}</span>

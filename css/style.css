@@ -1216,6 +1216,7 @@ td a:hover {
   grid-template-columns: minmax(72px, auto) 1fr auto;
   gap: var(--sp-2);
   align-items: center;
+  min-height: 44px;
   padding: var(--sp-1) 0;
   font-size: var(--fs-sm);
 }
@@ -2443,6 +2444,11 @@ details.calendar-year summary:hover {
 .chart-point.is-selected {
   stroke: var(--text);
   stroke-width: 3px;
+}
+
+.hbar-row.chart-point.is-selected {
+  outline: 2px solid var(--border-strong);
+  outline-offset: -2px;
 }
 
 .chart-nav {

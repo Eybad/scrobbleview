@@ -1625,6 +1625,13 @@ appRoot.addEventListener('click', (e) => {
     return;
   }
 
+  const chartListPoint = e.target.closest?.('.chart-card[data-chart-type="list"] [data-chart-index]');
+  if (chartListPoint) {
+    const chart = chartListPoint.closest('.chart-card');
+    selectChartPoint(chart, Number(chartListPoint.dataset.chartIndex));
+    return;
+  }
+
   const chartWrap = e.target.closest?.('.chart-card .chart-interactive-wrap');
   const clickedChart = e.target.closest?.('svg.chart');
   if (chartWrap && clickedChart) {
