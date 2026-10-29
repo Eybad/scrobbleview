@@ -63,8 +63,11 @@ test('analysis engine preserves historical results when input order is reversed'
     const result = await engine.handle('load', {
       timeZone: 'UTC', files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(input)]) }]
     });
-    assert.equal(result.model.comebacks.tracks[0].gapDays, 95);
     assert.equal(result.model.retention.r30.rate, 1);
+    const longitudinal = await engine.handle('longitudinal', {
+      state: emptyFilterState(), thresholdDays: 30, pageSize: 25
+    });
+    assert.equal(longitudinal.comebacks.tracks.rows[0].gapDays, 95);
     const ds = buildDataset(input.map(event => ({
       t: Date.parse(event.ts) / 1000, m: event.ms_played, track: 'Track', artist: 'Artist', album: 'Album'
     })));
@@ -103,13 +106,6 @@ test('A23: historical first appearances and comebacks computed on original timel
   const D0 = 1704067200; // 2024-01-01 00:00:00 UTC
   const DAY = 86400;
 
-  // History for Song 1:
-  // - Event 0: D0 (Day 0) - First appearance
-  // - Event 1: D0 + 10*DAY (Day 10) - gap = 10d (< 30d threshold, not a comeback)
-  // - Event 2: D0 + 100*DAY (Day 100) - gap = 90d (>= 30d threshold, comeback from Day 10)
-  // Song 2:
-  // - Event 3: D0 + 20*DAY (Day 20) - First appearance
-  // - Event 4: D0 + 120*DAY (Day 120) - gap = 100d (comeback from Day 20)
   const events = [
     { t: D0, m: 60000, track: 'Song 1', artist: 'Artist A' },
     { t: D0 + 10 * DAY, m: 60000, track: 'Song 1', artist: 'Artist A' },
@@ -119,7 +115,6 @@ test('A23: historical first appearances and comebacks computed on original timel
   ];
   const ds = buildDataset(events);
 
-  // Unfiltered comebacks (threshold 30 days)
   const fullComebacks = computeComebacks(ds, { thresholdDays: 30 });
   assert.equal(fullComebacks.tracks.length, 2);
   assert.equal(fullComebacks.tracks[0].name, 'Song 2');
@@ -129,10 +124,6 @@ test('A23: historical first appearances and comebacks computed on original timel
   assert.equal(fullComebacks.tracks[1].returnUtc, D0 + 100 * DAY);
   assert.equal(fullComebacks.tracks[1].lastSeenUtc, D0 + 10 * DAY);
 
-  // Filter range: [Day 5, Day 110] (D0 + 5*DAY to D0 + 110*DAY)
-  // - Song 1 played at Day 10 is NOT a comeback (gap was 10 days in original sequence, not invented pause)
-  // - Song 1 played at Day 100 IS a comeback (gap 90 days from Day 10)
-  // - Song 2 played at Day 120 is outside the range
   const filteredComebacks = computeComebacks(ds, {
     thresholdDays: 30,
     range: { startUtc: D0 + 5 * DAY, endUtc: D0 + 110 * DAY }
@@ -148,14 +139,6 @@ test('A24: 30/90 day retention accounts for insufficient follow-up without divis
   const D0 = 1704067200;
   const DAY = 86400;
 
-  // Total dataset duration: 100 days (D0 to D0 + 100*DAY)
-  // Track 1: First at Day 0. Dataset has 100 days follow-up (>= 30d, >= 90d: eligible for both).
-  //          Played again at Day 15 (returned in 30d and 90d).
-  // Track 2: First at Day 0. Played again at Day 45 (returned in 90d, NOT in 30d).
-  // Track 3: First at Day 80. Dataset ends at Day 100, so only 20 days follow-up (< 30d, < 90d).
-  //          Must be classified as insufficient follow-up in both 30d and 90d.
-  // Track 4: First at Day 50. Follow-up is 50 days (>= 30d: eligible; < 90d: insufficient for 90d).
-  //          No second play.
   const events = [
     { t: D0, m: 60000, track: 'Track 1', artist: 'Artist 1' },
     { t: D0 + 1, m: 60000, track: 'Track 2', artist: 'Artist 2' },
@@ -167,10 +150,6 @@ test('A24: 30/90 day retention accounts for insufficient follow-up without divis
   ];
   const ds = buildDataset(events);
 
-  // 30 days retention:
-  // Eligible: Track 1 (100d >= 30d), Track 2 (100d >= 30d), Track 4 (50d >= 30d). Total eligible = 3.
-  // Insufficient: Track 3 (20d < 30d). Total insufficient = 1.
-  // Returned: Track 1 (returned at Day 15). Track 2 returned at Day 45 (> 30d, no). Track 4: no. Total returned = 1.
   const ret30 = computeRetention(ds, { days: 30 });
   assert.equal(ret30.total, 4);
   assert.equal(ret30.eligible, 3);
@@ -178,10 +157,6 @@ test('A24: 30/90 day retention accounts for insufficient follow-up without divis
   assert.equal(ret30.returned, 1);
   assert.equal(ret30.rate, 1 / 3);
 
-  // 90 days retention:
-  // Eligible: Track 1 (100d >= 90d), Track 2 (100d >= 90d). Total eligible = 2.
-  // Insufficient: Track 4 (50d < 90d), Track 3 (20d < 90d). Total insufficient = 2.
-  // Returned: Track 1 (returned at 15d), Track 2 (returned at 45d). Total returned = 2.
   const ret90 = computeRetention(ds, { days: 90 });
   assert.equal(ret90.total, 4);
   assert.equal(ret90.eligible, 2);
@@ -189,7 +164,6 @@ test('A24: 30/90 day retention accounts for insufficient follow-up without divis
   assert.equal(ret90.returned, 2);
   assert.equal(ret90.rate, 1);
 
-  // Edge case: Dataset with only 5 days span (no track eligible for 30d retention)
   const shortEvents = [
     { t: D0, m: 60000, track: 'Solo', artist: 'Artist Solo' },
     { t: D0 + 5 * DAY, m: 60000, track: 'Solo', artist: 'Artist Solo' }
@@ -224,13 +198,101 @@ test('Monthly longitudinal metrics track concentration and known denominators wi
   assert.equal(jan.skipKnown, 2);
   assert.equal(jan.skips, 1);
   assert.equal(jan.skipRate, 0.5);
-  assert.equal(jan.hhi, 1); // Only 1 artist (X)
+  assert.equal(jan.hhi, 1);
 
   const feb = monthly.get(202402);
   assert.equal(feb.plays, 2);
-  assert.equal(feb.skipKnown, 1); // Second event has bit 32 (skip unknown)
+  assert.equal(feb.skipKnown, 1);
   assert.equal(feb.skips, 0);
   assert.equal(feb.skipRate, 0);
+});
+
+test('Worker longitudinal query keeps historical returns and pages filtered discoveries', async () => {
+  const start = 1704067200;
+  const day = 86400;
+  const event = (offset, track, artist, extra = {}) => ({
+    ts: new Date((start + offset * day) * 1000).toISOString(),
+    master_metadata_track_name: track,
+    master_metadata_album_artist_name: artist,
+    ms_played: 60000,
+    skipped: false,
+    shuffle: false,
+    offline: false,
+    ...extra
+  });
+  const entries = [
+    event(0, 'A', 'Artist A', { skipped: true }),
+    event(0, 'B', 'Artist B'),
+    event(10, 'A', 'Artist A', { ms_played: undefined, skipped: null, shuffle: null, offline: null }),
+    event(10, 'Unknown', 'Unknown artist', { ms_played: undefined, skipped: null, shuffle: null, offline: null }),
+    event(20, 'A', 'Artist A', { shuffle: true }),
+    event(40, 'A', 'Artist A', { offline: true }),
+    event(40, 'B', 'Artist B'),
+    ...Array.from({ length: 30 }, (_, index) => event(40, `New ${index}`, 'Artist C'))
+  ];
+  const engine = createAnalysisEngine();
+  const { model } = await engine.handle('load', {
+    timeZone: 'UTC',
+    files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(entries)]) }]
+  });
+
+  const complete = await engine.handle('longitudinal', {
+    state: emptyFilterState(),
+    thresholdDays: 30,
+    pages: { comebackTracks: 1, comebackArtists: 1, firstTracks: 1, firstArtists: 1 },
+    pageSize: 25
+  });
+  const jan = complete.monthly.get(202401);
+  assert.equal(jan.plays, 5);
+  assert.equal(jan.skipKnown, 3);
+  assert.equal(jan.skipUnknown, 2);
+  assert.equal(jan.skips, 1);
+  assert.equal(jan.skipRate, 1 / 3);
+  assert.equal(jan.concentration.artists.knownEntities, 2);
+  assert.equal(jan.concentration.artists.unknownEntities, 1);
+  assert.equal(jan.concentration.artists.knownMs, 180000);
+  assert.equal(jan.concentration.artists.hhi, 5 / 9);
+  assert.equal(complete.comebacks.tracks.total, 1);
+  assert.equal(complete.comebacks.tracks.rows[0].name, 'B');
+  assert.equal(complete.comebacks.tracks.rows[0].gapDays, 40);
+  assert.equal(complete.firstAppearances.tracks.total, 33);
+  assert.equal(complete.firstAppearances.tracks.rows.length, 25);
+  const { renderView } = await import('../app/views.js');
+  const discoveryHtml = renderView('discovery', model, null, {
+    longitudinal: complete,
+    comebackThresholdDays: 30,
+    longitudinalPageSize: 25,
+    longitudinalPages: { comebackTracks: 1, comebackArtists: 1, firstTracks: 1, firstArtists: 1 }
+  });
+  const habitsHtml = renderView('habits', model, null, { longitudinal: complete });
+  assert.ok(discoveryHtml.includes('data-comeback-threshold'));
+  assert.ok(discoveryHtml.includes('data-longitudinal-page="firstTracks"'));
+  assert.ok(discoveryHtml.includes('Con tiempo conocido'));
+  assert.ok(habitsHtml.includes('Tasas mensuales con base conocida'));
+  assert.ok(habitsHtml.includes('Bandera desconocida'));
+
+  const selected = await engine.handle('longitudinal', {
+    state: { ...emptyFilterState(), range: { from: start + 40 * day, to: start + 40 * day + 86399 } },
+    thresholdDays: 30,
+    pages: { comebackTracks: 1, comebackArtists: 1, firstTracks: 2, firstArtists: 1 },
+    pageSize: 25
+  });
+  assert.deepEqual(selected.comebacks.tracks.rows.map((row) => row.name), ['B']);
+  assert.equal(selected.comebacks.artists.rows[0].name, 'Artist B');
+  assert.equal(selected.firstAppearances.tracks.total, 30);
+  assert.equal(selected.firstAppearances.tracks.page, 2);
+  assert.equal(selected.firstAppearances.tracks.rows.length, 5);
+  assert.ok(selected.firstAppearances.tracks.rows.every((row) => row.name.startsWith('New ')));
+  assert.deepEqual(selected.firstAppearances.artists.rows.map((row) => row.name), ['Artist C']);
+
+  const longerThreshold = await engine.handle('longitudinal', {
+    state: { ...emptyFilterState(), range: { from: start + 40 * day, to: start + 40 * day + 86399 } },
+    thresholdDays: 90,
+    pages: { comebackTracks: 1, comebackArtists: 1 },
+    pageSize: 25
+  });
+  assert.equal(longerThreshold.comebacks.tracks.total, 0);
+  assert.equal(longerThreshold.comebacks.artists.total, 0);
 });
 
 test('discoveryView renders comebacks, retention and first appearances', async () => {
@@ -250,8 +312,8 @@ test('discoveryView renders comebacks, retention and first appearances', async (
   const { renderView } = await import('../app/views.js');
   const html = renderView('discovery', model);
 
-  assert.ok(html.includes('Regresos tras pausa'));
+  assert.ok(html.includes('Regresos de canciones tras pausas de 30 días o más'));
   assert.ok(html.includes('Retorno a 30 días'));
   assert.ok(html.includes('Retorno a 90 días'));
-  assert.ok(html.includes('Primeras apariciones en el período'));
+  assert.ok(html.includes('Primera aparición histórica'));
 });

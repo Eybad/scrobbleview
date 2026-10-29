@@ -98,10 +98,19 @@ export function createTemporalAcc(minMs = 0, history = null, { compact = false }
       }
 
       let mb = monthlyBehavior.get(month);
-      if (!mb) { mb = { skips: 0, shuffle: 0, offline: 0 }; monthlyBehavior.set(month, mb); }
-      if (ev.isSkipped) mb.skips++;
-      if (ev.flags & 1) mb.shuffle++;
-      if (ev.flags & 4) mb.offline++;
+      if (!mb) { mb = { skips: 0, skipKnown: 0, shuffle: 0, shuffleKnown: 0, offline: 0, offlineKnown: 0 }; monthlyBehavior.set(month, mb); }
+      if (!(ev.flags & 32)) {
+        mb.skipKnown++;
+        if (ev.isSkipped) mb.skips++;
+      }
+      if (!(ev.flags & 16)) {
+        mb.shuffleKnown++;
+        if (ev.flags & 1) mb.shuffle++;
+      }
+      if (!(ev.flags & 64)) {
+        mb.offlineKnown++;
+        if (ev.flags & 4) mb.offline++;
+      }
 
       let mtm = monthlyTrackMs.get(month);
       if (!mtm) { mtm = new Map(); monthlyTrackMs.set(month, mtm); }

@@ -513,8 +513,10 @@ test('bar/line/stacked dentro de scroll con piso (labels legibles en móvil)', a
   // Misma regla que heat/clock/cal: región focable con nombre (el scroll
   // horizontal es inalcanzable por teclado sin tabindex).
   assert.ok(dash.includes('class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label='), 'región focable con nombre');
-  const evo = dash.slice(dash.indexOf('Evolución mensual'));
-  assert.ok(evo.slice(0, 300).includes('chart-scroll--bar'), 'evolución mensual envuelta');
+  const monthlyChartStart = dash.indexOf('data-chart-id="dashboard-monthly"');
+  const nextChartStart = dash.indexOf('data-chart-id=', monthlyChartStart + 1);
+  const monthlyChart = dash.slice(monthlyChartStart, nextChartStart < 0 ? undefined : nextChartStart);
+  assert.ok(monthlyChart.includes('chart-scroll--bar'), 'evolución mensual envuelta');
   const artist = renderView('artist', model, model.artists.top.byPlays[0].id);
   assert.ok(artist.includes('chart-scroll--bar'), 'evolución del artista envuelta');
   const track = renderView('track', model, model.tracks.top.byPlays[0].tk);
@@ -1012,7 +1014,7 @@ test('all Top 10/25/50/100 tables include # column and tall scroll fits at least
       totalTopTables++;
     }
   }
-  assert.equal(totalTopTables, 27, 'all 27 Top 10/25/50/100 tables checked');
+  assert.equal(totalTopTables, 25, 'all Top 10/25/50/100 tables checked');
 
   const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
   const tallIdx = css.indexOf('.table-scroll--tall {');

@@ -99,7 +99,9 @@ export function aggregate(ds, opts = {}) {
   const model = buildStats({
     ds, tz, now, minMs, skipThresholdMs,
     cols, localOrder: derived.localOrder, totals, groups: g, temporal: t, sessions: s, behavior: b,
-    transitions: tr, concentration, history: opts.history, baseDerived, selected: opts.indices ? new Set(order) : null
+    transitions: tr, concentration, history: opts.history, baseDerived, selected: opts.indices ? new Set(order) : null,
+    includeComebacks: opts.computeComebacks !== false,
+    includeFirstAppearances: opts.includeFirstAppearances !== false
   });
   opts.onProgress?.(1, 'Estadísticas listas');
   return model;
@@ -201,7 +203,7 @@ function longestStreak(days) {
   return { len: bestLen, start: bestStart, end: bestEnd };
 }
 
-function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration, history = null, baseDerived, selected }) {
+function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, totals, groups, temporal, sessions, behavior, transitions, concentration, history = null, baseDerived, selected, includeComebacks = true, includeFirstAppearances = true }) {
   const { artists, tracks, albums } = groups;
   const n = cols.t.length;
 
@@ -244,7 +246,7 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
   const transitionTop = mapTransitionTop(transitions.selection || transitions);
 
   const lastLoadedUtc = baseDerived.t.length ? baseDerived.t[baseDerived.t.length - 1] : null;
-  const comebacks = computeComebacks(ds, { thresholdDays: 30, order: baseDerived.order, selected });
+  const comebacks = includeComebacks ? computeComebacks(ds, { thresholdDays: 30, order: baseDerived.order, selected }) : { tracks: [], artists: [] };
   const retention = {
     r30: computeRetention(ds, { days: 30, order: baseDerived.order, selected }),
     r90: computeRetention(ds, { days: 90, order: baseDerived.order, selected })
@@ -257,7 +259,8 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
     history,
     lastLoadedUtc,
     now,
-    comebacks
+    comebacks,
+    includeFirstAppearances
   });
 
   return {
@@ -337,7 +340,7 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
   };
 }
 
-function buildTables({ groups, temporal, sessions, behavior, transitions, streak, firstTs = null, lastTs = null, history = null, lastLoadedUtc = null, now = null, comebacks = null }) {
+function buildTables({ groups, temporal, sessions, behavior, transitions, streak, firstTs = null, lastTs = null, history = null, lastLoadedUtc = null, now = null, comebacks = null, includeFirstAppearances = true }) {
   const { artists, tracks, albums } = groups;
   const artistList = [...artists.values()];
   const trackList = [...tracks.values()];
@@ -427,23 +430,16 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.years.size - a.years.size || b.months.size - a.months.size || b.days.size - a.days.size || b.plays - a.plays)
     .slice(0, TOP_N);
 
-  const newTracks = trackList
-    .filter((tr) => (!history || history.tracks.get(tr.tk)?.firstUtc === tr.firstUtc))
-    .map((tr) => ({
-      ...tr,
-      subsequentPlays: Math.max(0, tr.plays - 1),
-      daysCount: tr.days.size
-    }))
-    .sort((a, b) => a.firstUtc - b.firstUtc || b.plays - a.plays);
-
-  const newArtists = artistList
-    .filter((a) => a.id > 0 && (!history || history.artists.get(a.id)?.firstUtc === a.firstUtc))
-    .map((a) => ({
-      ...a,
-      subsequentPlays: Math.max(0, a.plays - 1),
-      daysCount: a.days.size
-    }))
-    .sort((a, b) => a.firstUtc - b.firstUtc || b.plays - a.plays);
+  const firstAppearances = includeFirstAppearances ? {
+    tracks: trackList
+      .filter((tr) => (!history || history.tracks.get(tr.tk)?.firstUtc === tr.firstUtc))
+      .map((tr) => ({ ...tr, subsequentPlays: Math.max(0, tr.plays - 1), daysCount: tr.days.size }))
+      .sort((a, b) => a.firstUtc - b.firstUtc || b.plays - a.plays),
+    artists: artistList
+      .filter((artist) => artist.id > 0 && (!history || history.artists.get(artist.id)?.firstUtc === artist.firstUtc))
+      .map((artist) => ({ ...artist, subsequentPlays: Math.max(0, artist.plays - 1), daysCount: artist.days.size }))
+      .sort((a, b) => a.firstUtc - b.firstUtc || b.plays - a.plays)
+  } : { tracks: [], artists: [] };
 
   return {
     artists: artistsTop,
@@ -464,6 +460,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     longevity,
     comebacks: comebacks?.tracks ?? [],
     comebackArtists: comebacks?.artists ?? [],
-    firstAppearances: { tracks: newTracks, artists: newArtists }
+    firstAppearances
   };
 }

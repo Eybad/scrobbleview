@@ -16,6 +16,8 @@ import { assertDistinctFiles } from './input.js';
 import { isFilterActive, previousRange } from './filter-ui.js';
 import { demoSource } from './demo.js';
 import { calculateCompareRange } from '../src/compare.js';
+import { computeComebacks, computeMonthlyLongitudinal } from '../src/longitudinal.js';
+import { trackKey } from '../src/aggregate/impl/groups.js';
 
 function timeZoneForDataset(ds, id) {
   let first = Infinity, last = -Infinity;
@@ -71,10 +73,27 @@ function compareProjection(model) {
 
 export function createAnalysisEngine() {
   let ds = null, derived = null, tz = null, history = null, generatedAt = null, originalSessions = null, dataRange = null;
+  const longitudinalCache = new Map();
+
+  function pageRows(rows, page, pageSize) {
+    const validSize = [25, 50, 100].includes(pageSize) ? pageSize : 25;
+    const pageCount = Math.max(1, Math.ceil(rows.length / validSize));
+    const validPage = Number.isSafeInteger(page) ? Math.max(1, Math.min(pageCount, page)) : 1;
+    const start = (validPage - 1) * validSize;
+    return {
+      rows: rows.slice(start, start + validSize),
+      total: rows.length,
+      page: validPage,
+      pageSize: validSize,
+      pageCount,
+      start: rows.length ? start + 1 : 0,
+      end: Math.min(start + validSize, rows.length)
+    };
+  }
 
   async function aggregateSelection(state, extra = {}) {
     const indices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : undefined;
-    return analyze(ds, { tz, derived, indices, history, originalSessions, now: generatedAt, compact: true, albumDetails: null, ...extra });
+    return analyze(ds, { tz, derived, indices, history, originalSessions, now: generatedAt, compact: true, albumDetails: null, computeComebacks: false, includeFirstAppearances: false, ...extra });
   }
 
   async function initialize(dataset, timeZone, report) {
@@ -83,11 +102,35 @@ export function createAnalysisEngine() {
     const nextDerived = derive(dataset, nextTz);
     const nextOriginalSessions = originalSessionMembership(dataset, nextDerived, nextTz);
     const now = Math.floor(Date.now() / 1000);
-    const model = await analyze(dataset, { tz: nextTz, derived: nextDerived, originalSessions: nextOriginalSessions, now, compact: true, albumDetails: null, onProgress: report });
+    const model = await analyze(dataset, { tz: nextTz, derived: nextDerived, originalSessions: nextOriginalSessions, now, compact: true, albumDetails: null, computeComebacks: false, onProgress: report });
     ds = dataset; tz = nextTz; derived = nextDerived; generatedAt = now; originalSessions = nextOriginalSessions;
+    longitudinalCache.clear();
     dataRange = model.meta.firstTs == null ? null : { minSec: model.meta.firstTs, maxSec: model.meta.lastTs };
-    const firstAppearances = (entities) => new Map([...entities].map(([key, entity]) => [key, { firstUtc: entity.firstUtc }]));
-    history = { tracks: firstAppearances(model.tracks.byId), artists: firstAppearances(model.artists.byId) };
+    const firstTracks = model.tables.firstAppearances.tracks.map((track) => ({
+      id: track.tk,
+      name: track.name,
+      artist: track.artist,
+      firstTs: track.firstTs,
+      firstUtc: track.firstUtc,
+      subsequentPlays: track.subsequentPlays,
+      ms: track.ms,
+      daysCount: track.daysCount
+    }));
+    const firstArtists = model.tables.firstAppearances.artists.map((artist) => ({
+      id: artist.id,
+      name: artist.name,
+      firstTs: artist.firstTs,
+      firstUtc: artist.firstUtc,
+      subsequentPlays: artist.subsequentPlays,
+      ms: artist.ms,
+      daysCount: artist.daysCount
+    }));
+    history = {
+      tracks: new Map(firstTracks.map((track) => [track.id, { firstUtc: track.firstUtc }])),
+      artists: new Map(firstArtists.map((artist) => [artist.id, { firstUtc: artist.firstUtc }])),
+      firstAppearances: { tracks: firstTracks, artists: firstArtists }
+    };
+    delete model.tables.firstAppearances;
     delete model.cols;
     return { model };
   }
@@ -132,6 +175,77 @@ export function createAnalysisEngine() {
         const prev = state.range ? countFiltered(ds, { ...state, range: previousRange(state.range) }, tz, derived) : null;
         if (model) delete model.cols;
         return { model, prev };
+      }
+      if (type === 'longitudinal') {
+        const state = payload.state ?? emptyFilterState();
+        const thresholdDays = [30, 90, 180].includes(payload.thresholdDays) ? payload.thresholdDays : 30;
+        const cacheKey = JSON.stringify([state, thresholdDays]);
+        let result = longitudinalCache.get(cacheKey);
+        if (!result) {
+          const selectedIndices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : null;
+          const selected = selectedIndices ? new Set(selectedIndices) : null;
+          const selectedFirstTracks = new Set();
+          const selectedFirstArtists = new Set();
+          if (!selectedIndices) {
+            for (const track of history.firstAppearances.tracks) selectedFirstTracks.add(track.id);
+            for (const artist of history.firstAppearances.artists) selectedFirstArtists.add(artist.id);
+          } else {
+            for (let position = 0; position < selectedIndices.length; position++) {
+              if (position % 8192 === 0) report(0.2 * (selectedIndices.length ? position / selectedIndices.length : 1), 'Buscando primeras apariciones seleccionadas');
+              const i = selectedIndices[position];
+              const t = ds.meta.tsMin + ds.t[i];
+              const trackId = trackKey(ds.tr[i], ds.ar[i]);
+              const artistId = ds.ar[i];
+              if (history.tracks.get(trackId)?.firstUtc === t) selectedFirstTracks.add(trackId);
+              if (artistId > 0 && history.artists.get(artistId)?.firstUtc === t) selectedFirstArtists.add(artistId);
+            }
+          }
+          const monthly = computeMonthlyLongitudinal(ds, tz, {
+            indices: selectedIndices,
+            onProgress: (fraction) => report(0.2 + fraction * 0.4, 'Calculando métricas mensuales')
+          });
+          const comeBacks = computeComebacks(ds, {
+            thresholdDays,
+            order: derived.order,
+            selected,
+            onProgress: (fraction) => report(0.6 + fraction * 0.4, 'Buscando regresos históricos')
+          });
+          result = {
+            thresholdDays,
+            monthly,
+            comebacks: comeBacks,
+            firstAppearances: {
+              tracks: history.firstAppearances.tracks.filter((track) => selectedFirstTracks.has(track.id)),
+              artists: history.firstAppearances.artists.filter((artist) => selectedFirstArtists.has(artist.id))
+            }
+          };
+          longitudinalCache.set(cacheKey, result);
+          while (longitudinalCache.size > 3) longitudinalCache.delete(longitudinalCache.keys().next().value);
+        }
+        const pages = payload.pages ?? {};
+        const comebackPage = (rows, page) => {
+          const result = pageRows(rows, page, payload.pageSize);
+          return {
+            ...result,
+            rows: result.rows.map((entry) => ({
+              ...entry,
+              lastSeenLocal: entry.lastSeenUtc + tz.offsetMinutes(entry.lastSeenUtc) * 60,
+              returnLocal: entry.returnUtc + tz.offsetMinutes(entry.returnUtc) * 60
+            }))
+          };
+        };
+        return {
+          thresholdDays,
+          monthly: result.monthly,
+          comebacks: {
+            tracks: comebackPage(result.comebacks.tracks, pages.comebackTracks),
+            artists: comebackPage(result.comebacks.artists, pages.comebackArtists)
+          },
+          firstAppearances: {
+            tracks: pageRows(result.firstAppearances.tracks, pages.firstTracks, payload.pageSize),
+            artists: pageRows(result.firstAppearances.artists, pages.firstArtists, payload.pageSize)
+          }
+        };
       }
       if (type === 'compare') {
         const state = payload.state ?? emptyFilterState();

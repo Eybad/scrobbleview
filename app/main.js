@@ -29,6 +29,41 @@ const tagline = document.querySelector('.tagline');
 
 const LIMITS_STORAGE_KEY = 'scrobbleview:tableLimits';
 const VALID_LIMITS = new Set([10, 25, 50, 100]);
+const LONGITUDINAL_THRESHOLDS = new Set([30, 90, 180]);
+const LONGITUDINAL_PAGE_SIZES = new Set([25, 50, 100]);
+
+function parseDiscoveryState(query) {
+  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
+  const threshold = Number(params.get('cb'));
+  const pageSize = Number(params.get('lps'));
+  const page = (key) => {
+    const value = Number(params.get(key));
+    return Number.isSafeInteger(value) && value > 0 ? value : 1;
+  };
+  return {
+    comebackThresholdDays: LONGITUDINAL_THRESHOLDS.has(threshold) ? threshold : 30,
+    longitudinalPageSize: LONGITUDINAL_PAGE_SIZES.has(pageSize) ? pageSize : 25,
+    longitudinalPages: {
+      comebackTracks: page('ctp'),
+      comebackArtists: page('cap'),
+      firstTracks: page('ftp'),
+      firstArtists: page('fap')
+    }
+  };
+}
+
+function discoveryQuery(query, state) {
+  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
+  const pages = state.longitudinalPages ?? {};
+  params.set('cb', String(LONGITUDINAL_THRESHOLDS.has(state.comebackThresholdDays) ? state.comebackThresholdDays : 30));
+  params.set('lps', String(LONGITUDINAL_PAGE_SIZES.has(state.longitudinalPageSize) ? state.longitudinalPageSize : 25));
+  for (const [key, field] of [['ctp', 'comebackTracks'], ['cap', 'comebackArtists'], ['ftp', 'firstTracks'], ['fap', 'firstArtists']]) {
+    const value = Number(pages[field]);
+    if (Number.isSafeInteger(value) && value > 1) params.set(key, String(value));
+    else params.delete(key);
+  }
+  return params.toString();
+}
 
 function loadStoredLimits() {
   const map = new Map();
@@ -76,6 +111,10 @@ let compareLoadError = null;
 let compareInFlight = false;
 let compareActiveKey = null;
 let comparePending = null;
+let longitudinalResult = null;
+let longitudinalResultKey = null;
+let longitudinalLoadError = null;
+let longitudinalRevision = 0;
 let state = emptyFilterState();
 let activeMetric = resolveMetric(null, typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null);
 let rankUI = { tab: 'artists', metric: activeMetric, topN: initialLimits.rankTopN, query: '' };
@@ -313,6 +352,10 @@ async function initializeAnalysis(result) {
   compareStatus = 'idle';
   compareLoadError = null;
   comparePending = null;
+  longitudinalResult = null;
+  longitudinalResultKey = null;
+  longitudinalLoadError = null;
+  longitudinalRevision++;
   model = result.model;
   current = model;
   currentPrev = null;
@@ -380,11 +423,33 @@ async function refreshModel() {
     detailPageSize = 25;
   }
   const requestedHash = location.hash;
+  const requestLongitudinal = view === 'habits' || view === 'discovery';
+  const currentLongitudinalKey = JSON.stringify([filterParams(state), state.comebackThresholdDays ?? 30, state.longitudinalPages, state.longitudinalPageSize]);
+  const requestedLongitudinalRevision = requestLongitudinal ? ++longitudinalRevision : longitudinalRevision;
   const job = beginProcessing('Actualizando estadísticas', 'filter');
   setFilterBusy(true);
   try {
     const result = await analysisState.update(state, { view, id, originQuery, page: detailPage, pageSize: detailPageSize, context: { hash: requestedHash || '#/dashboard', metric: activeMetric }, onProgress: job.progress });
     if (!result || requestedHash !== location.hash) return false;
+    if (requestLongitudinal && longitudinalResultKey !== currentLongitudinalKey) {
+      let nextLongitudinal;
+      try {
+        nextLongitudinal = await analysisClient.request('longitudinal', {
+          state,
+          filterKey: filterParams(state),
+          thresholdDays: state.comebackThresholdDays ?? 30,
+          pages: state.longitudinalPages,
+          pageSize: state.longitudinalPageSize
+        }, { onProgress: job.progress });
+      } catch (error) {
+        longitudinalLoadError = error.message;
+        throw error;
+      }
+      if (requestedHash !== location.hash || requestedLongitudinalRevision !== longitudinalRevision) return false;
+      longitudinalResult = nextLongitudinal;
+      longitudinalResultKey = currentLongitudinalKey;
+      longitudinalLoadError = null;
+    }
     current = result.model;
     currentPrev = result.prev;
     currentDetail = result.detail;
@@ -448,6 +513,8 @@ function syncHash() {
     hash = formatSemanticRoute('calendar', id, merged);
   } else if (name === 'compare') {
     hash = formatSemanticRoute('compare', null, compareQuery(queryStr, state));
+  } else if (name === 'discovery') {
+    hash = formatSemanticRoute('discovery', null, discoveryQuery(queryStr, state));
   } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
     const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
     if (name === 'track') {
@@ -468,6 +535,20 @@ function pushCompareHash() {
   if (location.hash !== hash) history.pushState(history.state, '', hash);
 }
 
+function pushDiscoveryHash() {
+  const fParams = portableFilterParams(state, model);
+  const query = fParams ? `${fParams}&${serializeMetricParam(activeMetric)}` : `?${serializeMetricParam(activeMetric)}`;
+  const hash = formatSemanticRoute('discovery', null, discoveryQuery(query, state));
+  if (location.hash !== hash) history.pushState(history.state, '', hash);
+}
+
+async function updateDiscoveryView(focusSelector) {
+  pushDiscoveryHash();
+  if (!await refreshModel()) return;
+  render();
+  appRoot.querySelector(focusSelector)?.focus({ preventScroll: true });
+}
+
 // The URL is authoritative on load, Back/Forward and manual hash changes.
 // Restore state and its model together before any view reads either one.
 async function applyHashParams() {
@@ -479,6 +560,7 @@ async function applyHashParams() {
   const restored = resolvePortableFilters(query, model);
   state = restored.state;
   Object.assign(state, parseCompareState(query));
+  Object.assign(state, parseDiscoveryState(query));
   const calendarState = parseCalendarState(query);
   if (view === 'calendar' && id != null && Number(id) >= 100 && Number(id) <= 9999) {
     calendarState.calMonth = {
@@ -549,7 +631,9 @@ function navHTML(active) {
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   const link = (hash, label, view) => {
-    const query = view === 'compare' && active === 'compare' ? `?${compareQuery(queryStr, state)}` : queryStr;
+    const query = view === 'compare' && active === 'compare' ? `?${compareQuery(queryStr, state)}`
+      : view === 'discovery' && active === 'discovery' ? `?${discoveryQuery(queryStr, state)}`
+        : queryStr;
     return `<a href="#/${hash}${esc(query)}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
   };
 
@@ -677,6 +761,8 @@ function buildViewContext(viewName) {
       rangeTo: state.calRangeTo
     })}`
     : queryStr;
+  const query = viewName === 'discovery' ? `?${discoveryQuery(contextQuery, state)}` : contextQuery;
+  const longitudinalKey = JSON.stringify([filterParams(state), state.comebackThresholdDays ?? 30, state.longitudinalPages, state.longitudinalPageSize]);
 
   const observedRange = model?.meta?.firstTs == null ? null : {
     from: Math.floor(model.meta.firstTs / 86400) * 86400,
@@ -717,7 +803,7 @@ function buildViewContext(viewName) {
     limits: tableLimits,
     metric: activeMetric,
     rankUI,
-    query: contextQuery,
+    query,
     exploreState,
     detail: currentDetail,
     rawQuery,
@@ -730,6 +816,11 @@ function buildViewContext(viewName) {
     compareGranularity: state.compareGranularity,
     compareEntities: state.compareEntities,
     compareEntityMode: state.compareEntityMode,
+    comebackThresholdDays: state.comebackThresholdDays ?? 30,
+    longitudinalPages: state.longitudinalPages,
+    longitudinalPageSize: state.longitudinalPageSize,
+    longitudinal: longitudinalResultKey === longitudinalKey ? longitudinalResult : null,
+    longitudinalError: longitudinalLoadError,
     compareFrom,
     compareTo,
     compareRefFrom: state.compareRefFrom,
@@ -1376,6 +1467,40 @@ function wireView() {
     render();
     appRoot.querySelector('[data-compare-entity-mode]')?.focus();
   });
+  appRoot.querySelector('[data-comeback-threshold]')?.addEventListener('change', (event) => {
+    const threshold = Number(event.target.value);
+    if (!LONGITUDINAL_THRESHOLDS.has(threshold)) return;
+    state.comebackThresholdDays = threshold;
+    state.longitudinalPages = { ...state.longitudinalPages, comebackTracks: 1, comebackArtists: 1 };
+    updateDiscoveryView('[data-comeback-threshold]');
+  });
+  appRoot.querySelectorAll('[data-longitudinal-page]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const field = button.dataset.longitudinalPage;
+      if (!['comebackTracks', 'comebackArtists', 'firstTracks', 'firstArtists'].includes(field)) return;
+      const direction = Number(button.dataset.dir);
+      if (![-1, 1].includes(direction)) return;
+      const nextPage = Math.max(1, Number(state.longitudinalPages?.[field] ?? 1) + direction);
+      state.longitudinalPages = { ...state.longitudinalPages, [field]: nextPage };
+      updateDiscoveryView(`[data-longitudinal-page="${field}"][data-dir="${direction}"]`);
+    });
+  });
+  appRoot.querySelector('[data-longitudinal-page-size]')?.addEventListener('change', (event) => {
+    const pageSize = Number(event.target.value);
+    if (!LONGITUDINAL_PAGE_SIZES.has(pageSize)) return;
+    state.longitudinalPageSize = pageSize;
+    state.longitudinalPages = { comebackTracks: 1, comebackArtists: 1, firstTracks: 1, firstArtists: 1 };
+    updateDiscoveryView('[data-longitudinal-page-size]');
+  });
+  appRoot.querySelectorAll('[data-discovery-focus]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = document.getElementById(button.dataset.discoveryFocus);
+      const heading = target?.querySelector('h2');
+      if (!heading) return;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: 'start' });
+    });
+  });
   compareForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     const fromA = compareForm.querySelector('[data-compare-field="fromA"]')?.value;
@@ -1651,6 +1776,7 @@ const inputApi = setupInput({
 cancelProcessing.addEventListener('click', () => {
   const [activeJobId, activeJob] = [...jobs.entries()].at(-1) ?? [];
   if (activeJob?.type === 'filter' && !initializing) {
+    longitudinalRevision++;
     const confirmed = analysisState.cancelUpdate();
     restoreConfirmedContext(confirmed);
     jobs.delete(activeJobId);
@@ -1685,7 +1811,13 @@ cancelProcessing.addEventListener('click', () => {
 
 retryProcessing.addEventListener('click', async () => {
   const failed = analysisState.getFailed();
-  if (!failed) return;
+  if (!failed) {
+    const [view] = parseHash();
+    if (!longitudinalLoadError || (view !== 'habits' && view !== 'discovery')) return;
+    longitudinalLoadError = null;
+    if (await refreshModel()) render();
+    return;
+  }
   state = failed.state;
   activeMetric = failed.metric;
   rankUI.metric = activeMetric;
@@ -1790,7 +1922,12 @@ appRoot.addEventListener('click', (e) => {
 appRoot.addEventListener('click', (e) => {
   const clearBtn = e.target.closest?.('[data-action="clear"]');
   if (clearBtn && appRoot.contains(clearBtn)) {
-    state = emptyFilterState();
+    state = {
+      ...emptyFilterState(),
+      comebackThresholdDays: state.comebackThresholdDays ?? 30,
+      longitudinalPageSize: state.longitudinalPageSize ?? 25,
+      longitudinalPages: { comebackTracks: 1, comebackArtists: 1, firstTracks: 1, firstArtists: 1 }
+    };
     applyAndRenderView();
     document.getElementById('filter-chips')?.focus();
     return;
@@ -2019,6 +2156,24 @@ appRoot.addEventListener('click', (e) => {
     controls.querySelector('[aria-live="polite"]').textContent = `Mostrando ${start + 1}–${Math.min(start + pageSize, rows.length)} de ${rows.length}`;
     controls.querySelector('[data-compare-series-page="-1"]').disabled = page === 0;
     controls.querySelector('[data-compare-series-page="1"]').disabled = page >= pageCount - 1;
+    return;
+  }
+
+  const longitudinalStaticPage = e.target.closest?.('[data-longitudinal-static-page]');
+  if (longitudinalStaticPage && appRoot.contains(longitudinalStaticPage)) {
+    const controls = longitudinalStaticPage.closest('[data-longitudinal-static-controls]');
+    const table = controls?.previousElementSibling?.querySelector('table');
+    const rows = [...(table?.querySelectorAll('[data-longitudinal-static-row]') ?? [])];
+    const pageSize = Number(controls?.dataset.pageSize);
+    if (!controls || !Number.isInteger(pageSize) || pageSize < 1) return;
+    const pageCount = Math.ceil(rows.length / pageSize);
+    const page = Math.max(0, Math.min(pageCount - 1, Number(controls.dataset.page) + Number(longitudinalStaticPage.dataset.dir)));
+    const start = page * pageSize;
+    rows.forEach((row, index) => { row.hidden = index < start || index >= start + pageSize; });
+    controls.dataset.page = String(page);
+    controls.querySelector('[aria-live="polite"]').textContent = `Mostrando ${start + 1}–${Math.min(start + pageSize, rows.length)} de ${rows.length}`;
+    controls.querySelector('[data-dir="-1"]').disabled = page === 0;
+    controls.querySelector('[data-dir="1"]').disabled = page >= pageCount - 1;
     return;
   }
 

@@ -1309,8 +1309,84 @@ export function dayView(model, id, ctx = {}) {
     </div>`;
 }
 
+function localPage(rows, page, pageSize) {
+  const count = Math.max(1, Math.ceil(rows.length / pageSize));
+  const current = Math.max(1, Math.min(count, page));
+  const start = (current - 1) * pageSize;
+  return { rows: rows.slice(start, start + pageSize), total: rows.length, page: current, pageSize, pageCount: count, start: rows.length ? start + 1 : 0, end: Math.min(rows.length, start + pageSize) };
+}
+
+function longitudinalPagination(key, page, label) {
+  if (!page || page.pageCount <= 1) return '';
+  return `<nav class="pagination" aria-label="Paginación: ${esc(label)}">
+    <div class="pagination-info" aria-live="polite">Mostrando ${fmtNum(page.start)}–${fmtNum(page.end)} de ${fmtNum(page.total)}</div>
+    <div class="pagination-actions">
+      <button type="button" class="btn btn-secondary" data-longitudinal-page="${key}" data-dir="-1"${page.page <= 1 ? ' disabled' : ''} aria-label="Página anterior de ${esc(label)}">← Anterior</button>
+      <span class="pagination-current">Página ${fmtNum(page.page)} de ${fmtNum(page.pageCount)}</span>
+      <button type="button" class="btn btn-secondary" data-longitudinal-page="${key}" data-dir="1"${page.page >= page.pageCount ? ' disabled' : ''} aria-label="Página siguiente de ${esc(label)}">Siguiente →</button>
+    </div>
+  </nav>`;
+}
+
+function shareOrBase(value) {
+  return Number.isFinite(value) ? fmtPct(value) : 'sin base';
+}
+
+function formatEffectiveCount(value) {
+  return Number.isFinite(value) ? value.toLocaleString('es-ES', { maximumFractionDigits: 1 }) : 'sin base';
+}
+
+function monthlyConcentrationRows(monthly) {
+  const kinds = [['artists', 'Artistas'], ['tracks', 'Canciones'], ['albums', 'Álbumes']];
+  const months = fillMonths(sortedMonths(monthly));
+  return months.flatMap((month) => kinds.map(([kind, label]) => {
+    const data = monthly.get(month)?.concentration?.[kind];
+    const hasBase = data?.knownMs > 0;
+    return [
+      monthLabel(month), label,
+      data ? fmtNum(data.knownEntities) : '—',
+      data ? fmtNum(data.unknownEntities) : '—',
+      hasBase ? fmtMs(data.knownMs) : 'sin base',
+      formatEffectiveCount(data?.effective),
+      shareOrBase(data?.hhi), shareOrBase(data?.gini), shareOrBase(data?.entropy),
+      shareOrBase(data?.top1Share), shareOrBase(data?.top5Share), shareOrBase(data?.top10Share)
+    ];
+  }));
+}
+
+function monthlyBehaviorRows(monthly) {
+  const months = fillMonths(sortedMonths(monthly));
+  return months.map((month) => {
+    const data = monthly.get(month);
+    const metric = (name, knownName, unknownName, rateName) => {
+      const count = data?.[name] ?? 0;
+      const known = data?.[knownName] ?? 0;
+      return [fmtNum(count), fmtNum(known), fmtNum(data?.[unknownName] ?? 0), known > 0 ? fmtPct(data[rateName]) : 'sin base'];
+    };
+    return [monthLabel(month), ...metric('skips', 'skipKnown', 'skipUnknown', 'skipRate'),
+      ...metric('shuffle', 'shuffleKnown', 'shuffleUnknown', 'shuffleRate'),
+      ...metric('offline', 'offlineKnown', 'offlineUnknown', 'offlineRate')];
+  });
+}
+
+function staticPagedTable(key, headers, rows, colClasses, caption) {
+  const pageSize = 25;
+  const isPaged = rows.length > pageSize;
+  const tableHtml = table(headers, rows, 'monthly-longitudinal-table', colClasses, (_, index) =>
+    ` data-longitudinal-static-row="${key}" data-longitudinal-index="${index}"${isPaged && index >= pageSize ? ' hidden' : ''}`,
+  caption);
+  if (!isPaged) return tableHtml;
+  return `${tableHtml}<div class="compare-series-controls" data-longitudinal-static-controls="${key}" data-page="0" data-page-size="${pageSize}" data-row-count="${rows.length}">
+    <button type="button" class="btn btn-secondary" data-longitudinal-static-page="${key}" data-dir="-1" disabled>Anterior</button>
+    <span aria-live="polite">Mostrando 1–${pageSize} de ${fmtNum(rows.length)}</span>
+    <button type="button" class="btn btn-secondary" data-longitudinal-static-page="${key}" data-dir="1">Siguiente</button>
+  </div>`;
+}
+
 export function discoveryView(model, ctx = {}) {
   const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
+  const longitudinal = ctx.longitudinal;
+  const monthly = longitudinal?.monthly ?? new Map();
   const disc = [...model.monthlyDiscovery.entries()].sort((a, b) => a[0] - b[0]);
   const line = contractedLineChart({
     id: 'discovery-monthly', title: 'Canciones nuevas por mes',
@@ -1335,46 +1411,92 @@ export function discoveryView(model, ctx = {}) {
   const r30 = model.retention?.r30;
   const r90 = model.retention?.r90;
 
-  const comebacksLimit = resolveLimit(ctx, 'disc-comebacks', 10);
-  const comebacksList = (model.tables?.comebacks ?? []).slice(0, comebacksLimit);
-  const comebacksRows = comebacksList.map((x, i) => [
-    String(i + 1),
+  const pageSize = ctx.longitudinalPageSize ?? 25;
+  const pageState = ctx.longitudinalPages ?? {};
+  const comebackTracksPage = longitudinal?.comebacks?.tracks ?? localPage(model.tables?.comebacks ?? [], pageState.comebackTracks ?? 1, pageSize);
+  const comebackArtistsPage = longitudinal?.comebacks?.artists ?? localPage(model.tables?.comebackArtists ?? [], pageState.comebackArtists ?? 1, pageSize);
+  const comebackTracks = comebackTracksPage.rows;
+  const comebackArtists = comebackArtistsPage.rows;
+  const comebacksRows = comebackTracks.map((x, i) => [
+    fmtNum(comebackTracksPage.start + i),
     trackSubLink(x.id, x.name, x.artist),
     `${fmtNum(x.gapDays)} días`,
-    fmtLocal(x.lastSeenUtc),
-    fmtLocal(x.returnUtc)
+    fmtLocal(x.lastSeenLocal ?? x.lastSeenUtc),
+    fmtLocal(x.returnLocal ?? x.returnUtc)
+  ]);
+  const comebackArtistRows = comebackArtists.map((x, i) => [
+    fmtNum(comebackArtistsPage.start + i),
+    entityLink('artist', x.id, x.name),
+    `${fmtNum(x.gapDays)} días`,
+    fmtLocal(x.lastSeenLocal ?? x.lastSeenUtc),
+    fmtLocal(x.returnLocal ?? x.returnUtc)
   ]);
 
-  const newTracksLimit = resolveLimit(ctx, 'disc-new-tracks', 10);
-  const newTracksList = (model.tables?.firstAppearances?.tracks ?? []).slice(0, newTracksLimit);
+  const firstTracksPage = longitudinal?.firstAppearances?.tracks ?? localPage(model.tables?.firstAppearances?.tracks ?? [], pageState.firstTracks ?? 1, pageSize);
+  const firstArtistsPage = longitudinal?.firstAppearances?.artists ?? localPage(model.tables?.firstAppearances?.artists ?? [], pageState.firstArtists ?? 1, pageSize);
+  const newTracksList = firstTracksPage.rows;
+  const newArtistsList = firstArtistsPage.rows;
   const newTracksRows = newTracksList.map((tr, i) => [
-    String(i + 1),
-    trackSubLink(tr.tk, tr.name, tr.artist),
+    fmtNum(firstTracksPage.start + i),
+    trackSubLink(tr.id ?? tr.tk, tr.name, tr.artist),
     fmtLocal(tr.firstTs),
     fmtNum(tr.subsequentPlays),
     fmtMs(tr.ms),
     fmtNum(tr.daysCount)
   ]);
+  const newArtistsRows = newArtistsList.map((artist, i) => [
+    fmtNum(firstArtistsPage.start + i),
+    entityLink('artist', artist.id, artist.name),
+    fmtLocal(artist.firstTs),
+    fmtNum(artist.subsequentPlays),
+    fmtMs(artist.ms),
+    fmtNum(artist.daysCount)
+  ]);
+
+  const monthlyRows = monthlyConcentrationRows(monthly);
+  const thresholdDays = [30, 90, 180].includes(ctx.comebackThresholdDays) ? ctx.comebackThresholdDays : 30;
+  const thresholdSelector = `<label class="field"><span>Umbral de regreso</span><select data-comeback-threshold>${[30, 90, 180].map((days) => `<option value="${days}"${thresholdDays === days ? ' selected' : ''}>${days} días o más</option>`).join('')}</select></label>`;
+  const pageSizeSelector = `<label class="field"><span>Filas por página</span><select data-longitudinal-page-size>${[25, 50, 100].map((size) => `<option value="${size}"${pageSize === size ? ' selected' : ''}>${size}</option>`).join('')}</select></label>`;
+  const newTracksTotal = longitudinal?.firstAppearances?.tracks.total ?? model.tables?.firstAppearances?.tracks.length ?? 0;
+  const newArtistsTotal = longitudinal?.firstAppearances?.artists.total ?? model.tables?.firstAppearances?.artists.length ?? 0;
+  const comebackTrackTable = comebacksRows.length
+    ? table(['#', 'Canción', 'Pausa observada', 'Última escucha anterior', 'Regreso'], comebacksRows, '', ['n', '', 'n', '', ''], null, `Regresos de canciones tras pausas de ${thresholdDays} días o más`)
+    : '<p class="empty">No se encontraron regresos de canciones para este umbral y filtro.</p>';
+  const comebackArtistTable = comebackArtistRows.length
+    ? table(['#', 'Artista', 'Pausa observada', 'Última escucha anterior', 'Regreso'], comebackArtistRows, '', ['n', '', 'n', '', ''], null, `Regresos de artistas tras pausas de ${thresholdDays} días o más`)
+    : '<p class="empty">No se encontraron regresos de artistas para este umbral y filtro.</p>';
+  const firstTracksTable = newTracksRows.length
+    ? table(['#', 'Canción', 'Primera aparición histórica', 'Escuchas posteriores', 'Tiempo escuchado', 'Días activos'], newTracksRows, '', ['n', '', '', 'n', 'n', 'n'], null, 'Primeras apariciones históricas de canciones; métricas posteriores sobre todo el historial cargado')
+    : '<p class="empty">No hay primeras apariciones de canciones en esta selección.</p>';
+  const firstArtistsTable = newArtistsRows.length
+    ? table(['#', 'Artista', 'Primera aparición histórica', 'Escuchas posteriores', 'Tiempo escuchado', 'Días activos'], newArtistsRows, '', ['n', '', '', 'n', 'n', 'n'], null, 'Primeras apariciones históricas de artistas; métricas posteriores sobre todo el historial cargado')
+    : '<p class="empty">No hay primeras apariciones de artistas en esta selección.</p>';
+  const monthlyConcentrationTable = monthlyRows.length
+    ? staticPagedTable('monthly-concentration', ['Mes', 'Entidad', 'Con tiempo conocido', 'Excluidas', 'Tiempo conocido', 'Efectivos exp(H)', 'HHI', 'Gini', 'Entropía normalizada', 'Top 1', 'Top 5', 'Top 10'], monthlyRows, ['', '', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n'], 'Concentración y diversidad mensuales; todas las cuotas se calculan sobre tiempo reproducido conocido')
+    : '<p class="empty">No hay meses para resumir.</p>';
 
   return `
     <header class="view-header">
       <h1>Descubrimiento</h1>
       <p class="view-meta">Primeras apariciones en todo el historial cargado; no indica cuándo conociste una canción.</p>
     </header>
+    <div class="longitudinal-controls card-subtle">${thresholdSelector}${pageSizeSelector}</div>
+    ${ctx.longitudinalError ? `<p class="status error" role="alert">${esc(ctx.longitudinalError)}</p>` : ''}
     ${kpis([
-      { label: 'Primeras apariciones', value: fmtNum(totalNewTracks) },
+      { label: 'Primeras apariciones de canciones', value: `${fmtNum(newTracksTotal)} <button type="button" class="btn btn-secondary" data-discovery-focus="discovery-first-tracks" aria-controls="discovery-first-tracks">Ver lista</button>` },
+      { label: 'Primeras apariciones de artistas', value: `${fmtNum(newArtistsTotal)} <button type="button" class="btn btn-secondary" data-discovery-focus="discovery-first-artists" aria-controls="discovery-first-artists">Ver lista</button>` },
       { label: 'Escuchas de catálogo', value: fmtNum(totalRepTracks), sub: `${pctOf(totalRepTracks, model.totals.records)} de las reproducciones` },
       { label: 'Promedio por mes activo', value: `${avgNewPerMonth} nuevas` },
       { label: 'Artistas únicos', value: fmtNum(model.artists.byId.size) },
       {
         label: 'Retorno a 30 días',
         value: r30?.rate != null ? fmtPct(r30.rate) : '—',
-        sub: r30 ? `${fmtNum(r30.returned)}/${fmtNum(r30.eligible)} elegibles${r30.insufficient ? ` (${fmtNum(r30.insufficient)} con seguimiento insuficiente)` : ''}` : ''
+        sub: r30 ? `${fmtNum(r30.returned)} regresaron de ${fmtNum(r30.eligible)} elegibles; ${fmtNum(r30.insufficient)} con seguimiento insuficiente` : ''
       },
       {
         label: 'Retorno a 90 días',
         value: r90?.rate != null ? fmtPct(r90.rate) : '—',
-        sub: r90 ? `${fmtNum(r90.returned)}/${fmtNum(r90.eligible)} elegibles${r90.insufficient ? ` (${fmtNum(r90.insufficient)} con seguimiento insuficiente)` : ''}` : ''
+        sub: r90 ? `${fmtNum(r90.returned)} regresaron de ${fmtNum(r90.eligible)} elegibles; ${fmtNum(r90.insufficient)} con seguimiento insuficiente` : ''
       }
     ])}
     ${line}
@@ -1382,9 +1504,14 @@ export function discoveryView(model, ctx = {}) {
       ${cardWithLimit('Meses con más descubrimientos', 'disc-abs', absLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones'], abs.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays)]), '', ['c', '', 'n', 'n', 'n'], null, 'Meses con más descubrimientos'))}
       ${cardWithLimit('Meses con mayor proporción de nuevas', 'disc-rel', relLimit, table(['#', 'Mes', 'Nuevas', 'Repetidas', 'Reproducciones', 'Proporción'], rel.map(([mi, d], i) => [String(i + 1), monthLabel(mi), fmtNum(d.new), fmtNum(d.rep), fmtNum(d.plays), fmtPct(d.new / d.plays)]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Meses con mayor proporción de canciones nuevas'))}
     </div>
+    ${card('Concentración y diversidad por mes', `<p class="view-meta">Base fija: tiempo reproducido con duración conocida, independiente de la métrica principal. “Excluidas” son entidades sin ninguna duración conocida en ese mes; un mes sin base muestra “sin base”.</p>${monthlyConcentrationTable}`)}
     <div class="grid-2">
-      ${cardWithLimit('Regresos tras pausa (canciones con pausa ≥30 días)', 'disc-comebacks', comebacksLimit, comebacksRows.length ? table(['#', 'Canción', 'Pausa observada', 'Última antes de la pausa', 'Fecha de regreso'], comebacksRows, '', ['c', '', 'n', '', ''], null, 'Regresos tras pausa de 30 o más días') : '<p class="empty">Sin regresos registrados en este período.</p>')}
-      ${cardWithLimit('Primeras apariciones en el período', 'disc-new-tracks', newTracksLimit, newTracksRows.length ? table(['#', 'Canción', 'Fecha de descubrimiento', 'Escuchas posteriores', 'Tiempo escuchado', 'Días activos'], newTracksRows, '', ['c', '', '', 'n', 'n', 'n'], null, 'Primeras apariciones en el período') : '<p class="empty">Sin primeras apariciones en este período.</p>')}
+      <section class="card"><h2>Regresos de canciones tras pausas de ${thresholdDays} días o más</h2>${comebackTrackTable}${longitudinalPagination('comebackTracks', comebackTracksPage, 'regresos de canciones')}</section>
+      <section class="card"><h2>Regresos de artistas tras pausas de ${thresholdDays} días o más</h2>${comebackArtistTable}${longitudinalPagination('comebackArtists', comebackArtistsPage, 'regresos de artistas')}</section>
+    </div>
+    <div class="grid-2">
+      <section class="card" id="discovery-first-tracks" aria-labelledby="discovery-first-tracks-title"><h2 id="discovery-first-tracks-title" tabindex="-1">Primeras apariciones históricas de canciones</h2><p class="view-meta">Las reproducciones, el tiempo y los días activos posteriores se calculan sobre todo el historial cargado.</p>${firstTracksTable}${longitudinalPagination('firstTracks', firstTracksPage, 'primeras apariciones de canciones')}</section>
+      <section class="card" id="discovery-first-artists" aria-labelledby="discovery-first-artists-title"><h2 id="discovery-first-artists-title" tabindex="-1">Primeras apariciones históricas de artistas</h2><p class="view-meta">Las reproducciones, el tiempo y los días activos posteriores se calculan sobre todo el historial cargado.</p>${firstArtistsTable}${longitudinalPagination('firstArtists', firstArtistsPage, 'primeras apariciones de artistas')}</section>
     </div>
     <div class="grid-2">
       ${cardWithLimit('Constancia (artistas con ≥6 meses activos)', 'disc-constancy', constLimit, table(['#', 'Artista', 'Meses activos', 'Etapa activa', 'Período observado'], model.tables.constancy.slice(0, constLimit).map((a, i) => [
@@ -1402,9 +1529,7 @@ export function discoveryView(model, ctx = {}) {
         fmtNum(a.days.size)
       ]), '', ['c', '', 'n', 'n', 'n'], null, 'Artistas con más años activos'), '', catalogHref(ctx, 'artists', 'longevity'))}
     </div>
-    <p class="view-meta" style="margin-top:1rem;font-size:0.85rem;color:var(--text-sub, #b3b3b3);">
-      El retorno acumulado incluye canciones cuya primera aparición histórica coincide con la selección. Busca escuchas posteriores en todo el historial cargado, aunque no coincidan con los filtros. Requiere que el historial alcance la ventana de 30 o 90 días; de lo contrario se reporta seguimiento insuficiente y se excluye del denominador. Los regresos usan la cronología histórica completa para no crear pausas artificiales al filtrar.
-    </p>`;
+    <p class="view-meta">El retorno acumulado toma como cohorte las canciones cuya primera aparición histórica coincide con la selección y busca reproducciones posteriores en todo el historial. La elegibilidad temporal requiere seguimiento de 30 o 90 días; los insuficientes quedan fuera del denominador. Eso no demuestra que los archivos estén completos ni permite concluir desinterés personal. Los regresos usan eventos consecutivos de la cronología histórica completa aunque el filtro oculte los intermedios.</p>`;
 }
 
 export function yearlyView(model, ctx = {}) {
@@ -1708,6 +1833,8 @@ export function habitsView(model, ctx = {}) {
   const cArt = model.concentration.artists;
   const cTrk = model.concentration.tracks;
   const cAlb = model.concentration.albums;
+  const longitudinalMonthly = ctx.longitudinal?.monthly ?? new Map();
+  const monthlyRateRows = monthlyBehaviorRows(longitudinalMonthly);
 
   const concRows = [['Artistas', cArt], ['Canciones', cTrk], ['Álbumes', cAlb]].map(([label, concentration]) => [
     label, fmtNum(concentration.knownEntities), fmtNum(concentration.unknownEntities),
@@ -1735,6 +1862,13 @@ export function habitsView(model, ctx = {}) {
     format: fmtNum,
     unit: 'reproducciones en aleatorio',
     base: 'eventos con bandera de aleatorio conocida'
+  });
+  const offlineLine = contractedLineChart({
+    id: 'habits-offline-monthly', title: 'Sin conexión por mes',
+    points: months.map((mi) => ({ label: monthLabel(mi), y: model.monthlyBehavior.get(mi)?.offline ?? 0 })),
+    format: fmtNum,
+    unit: 'reproducciones sin conexión',
+    base: 'eventos con bandera de sin conexión conocida'
   });
 
   const transLimit = resolveLimit(ctx, 'habits-transitions', 10);
@@ -1822,7 +1956,11 @@ export function habitsView(model, ctx = {}) {
     <div class="grid-2">
       ${skipsLine}
       ${shuffleLine}
+      ${offlineLine}
     </div>
+    ${card('Tasas mensuales con base conocida', monthlyRateRows.length
+      ? staticPagedTable('monthly-behavior', ['Mes', 'Saltos', 'Salto conocido', 'Salto desconocido', 'Tasa de salto', 'Aleatorio', 'Aleatorio conocido', 'Aleatorio desconocido', 'Tasa aleatoria', 'Sin conexión', 'Bandera conocida', 'Bandera desconocida', 'Tasa sin conexión'], monthlyRateRows, ['', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n'], 'Conteos y tasas mensuales con denominadores de banderas conocidas')
+      : '<p class="empty">No hay meses con actividad en esta selección.</p>')}
     <div class="grid-2">
       ${cardWithLimit('Transiciones entre artistas', 'habits-transitions', transLimit, transRows.length
         ? table(['#', 'De', 'A', 'Veces', 'Tipo'], transRows, '', ['c', '', '', 'n', ''], null, 'Transiciones consecutivas entre artistas')

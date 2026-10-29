@@ -1,11 +1,12 @@
-import { trackKey } from './aggregate/impl/groups.js';
+import { albumKey, trackKey } from './aggregate/impl/groups.js';
 import { civilFromDays } from './aggregate/impl/derive.js';
+import { computeConcentration } from './aggregate/impl/concentration.js';
 
 function chronologicalOrder(ds, order) {
   return order ?? Uint32Array.from(ds.t, (_, i) => i).sort((a, b) => ds.t[a] - ds.t[b]);
 }
 
-export function computeComebacks(ds, { thresholdDays = 30, range = null, entityType = 'both', order = null, selected = null } = {}) {
+export function computeComebacks(ds, { thresholdDays = 30, range = null, entityType = 'both', order = null, selected = null, onProgress = null } = {}) {
   const thresholdSec = thresholdDays * 86400;
   const tsMin = ds.meta?.tsMin ?? 0;
   const lastSeenTrack = new Map();
@@ -16,7 +17,10 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
   const checkTrack = entityType === 'both' || entityType === 'tracks';
   const checkArtist = entityType === 'both' || entityType === 'artists';
 
-  for (const i of chronologicalOrder(ds, order)) {
+  const events = chronologicalOrder(ds, order);
+  for (let position = 0; position < events.length; position++) {
+    if (position % 8192 === 0) onProgress?.(events.length ? position / events.length : 1);
+    const i = events[position];
     const t = tsMin + ds.t[i];
     const tr = ds.tr[i];
     const ar = ds.ar[i];
@@ -64,6 +68,7 @@ export function computeComebacks(ds, { thresholdDays = 30, range = null, entityT
 
   tracks.sort((a, b) => b.gapDays - a.gapDays || b.returnUtc - a.returnUtc);
   artists.sort((a, b) => b.gapDays - a.gapDays || b.returnUtc - a.returnUtc);
+  onProgress?.(1);
 
   return { tracks, artists };
 }
@@ -128,12 +133,41 @@ export function computeRetention(ds, { days = 30, entityType = 'tracks', order =
   return { total, eligible, insufficient, returned, rate, days };
 }
 
-export function computeMonthlyLongitudinal(ds, tz) {
-  const n = ds.t.length;
+export function computeMonthlyLongitudinal(ds, tz, { indices = null, onProgress = null } = {}) {
+  const n = indices?.length ?? ds.t.length;
   const tsMin = ds.meta?.tsMin ?? 0;
   const monthly = new Map();
 
-  for (let i = 0; i < n; i++) {
+  function createMonth(month) {
+    return {
+      month,
+      plays: 0,
+      ms: 0,
+      skips: 0,
+      skipKnown: 0,
+      shuffle: 0,
+      shuffleKnown: 0,
+      offline: 0,
+      offlineKnown: 0,
+      entities: { artists: new Map(), tracks: new Map(), albums: new Map() }
+    };
+  }
+
+  function addEntity(entities, id, isDurationKnown, ms) {
+    let entity = entities.get(id);
+    if (!entity) {
+      entity = { ms: 0, durationKnown: 0 };
+      entities.set(id, entity);
+    }
+    if (isDurationKnown) {
+      entity.ms += ms;
+      entity.durationKnown++;
+    }
+  }
+
+  for (let position = 0; position < n; position++) {
+    if (position % 8192 === 0) onProgress?.(n ? position / n : 1);
+    const i = indices ? indices[position] : position;
     const t = tsMin + ds.t[i];
     const off = tz ? tz.offsetMinutes(t) * 60 : 0;
     const loc = t + off;
@@ -142,60 +176,73 @@ export function computeMonthlyLongitudinal(ds, tz) {
     const mi = c.y * 100 + c.m;
 
     let mo = monthly.get(mi);
-    if (!mo) {
-      mo = {
-        month: mi,
-        plays: 0,
-        ms: 0,
-        skips: 0,
-        skipKnown: 0,
-        shuffle: 0,
-        shuffleKnown: 0,
-        offline: 0,
-        offlineKnown: 0,
-        artists: new Map()
-      };
-      monthly.set(mi, mo);
-    }
+    if (!mo) { mo = createMonth(mi); monthly.set(mi, mo); }
 
     const flags = ds.flags[i];
+    const isDurationKnown = !(flags & 8);
+    const ar = ds.ar[i];
+    const tr = ds.tr[i];
+    const al = ds.al[i];
     mo.plays++;
     mo.ms += ds.m[i];
 
-    if (flags & 2) mo.skips++;
-    if (!(flags & 32)) mo.skipKnown++;
-
-    if (flags & 1) mo.shuffle++;
-    if (!(flags & 16)) mo.shuffleKnown++;
-
-    if (flags & 4) mo.offline++;
-    if (!(flags & 64)) mo.offlineKnown++;
-
-    const ar = ds.ar[i];
-    if (ar > 0) {
-      mo.artists.set(ar, (mo.artists.get(ar) || 0) + 1);
+    if (!(flags & 32)) {
+      mo.skipKnown++;
+      if (flags & 2) mo.skips++;
     }
+
+    if (!(flags & 16)) {
+      mo.shuffleKnown++;
+      if (flags & 1) mo.shuffle++;
+    }
+
+    if (!(flags & 64)) {
+      mo.offlineKnown++;
+      if (flags & 4) mo.offline++;
+    }
+
+    addEntity(mo.entities.tracks, trackKey(tr, ar), isDurationKnown, ds.m[i]);
+    if (ar > 0) {
+      addEntity(mo.entities.artists, ar, isDurationKnown, ds.m[i]);
+    }
+    if (al > 0) addEntity(mo.entities.albums, albumKey(ar, al), isDurationKnown, ds.m[i]);
   }
 
   for (const mo of monthly.values()) {
-    mo.skipRate = mo.skipKnown > 0 ? mo.skips / mo.skipKnown : 0;
-    mo.shuffleRate = mo.shuffleKnown > 0 ? mo.shuffle / mo.shuffleKnown : 0;
-    mo.offlineRate = mo.offlineKnown > 0 ? mo.offline / mo.offlineKnown : 0;
+    mo.skipUnknown = mo.plays - mo.skipKnown;
+    mo.shuffleUnknown = mo.plays - mo.shuffleKnown;
+    mo.offlineUnknown = mo.plays - mo.offlineKnown;
+    mo.skipRate = mo.skipKnown > 0 ? mo.skips / mo.skipKnown : null;
+    mo.shuffleRate = mo.shuffleKnown > 0 ? mo.shuffle / mo.shuffleKnown : null;
+    mo.offlineRate = mo.offlineKnown > 0 ? mo.offline / mo.offlineKnown : null;
 
-    let sumSq = 0;
-    const totalP = mo.plays;
-    for (const p of mo.artists.values()) {
-      const s = p / totalP;
-      sumSq += s * s;
+    const concentration = computeConcentration(mo.entities);
+    for (const [kind, result] of Object.entries(concentration)) {
+      const values = [...mo.entities[kind].values()]
+        .filter((entity) => entity.durationKnown > 0)
+        .map((entity) => entity.ms)
+        .sort((a, b) => b - a);
+      const totalMs = values.reduce((sum, value) => sum + value, 0);
+      result.knownMs = totalMs;
+      if (totalMs === 0) {
+        result.hhi = null;
+        result.gini = null;
+        result.entropy = null;
+        result.effective = null;
+      }
+      result.top1Share = totalMs > 0 ? (values[0] ?? 0) / totalMs : null;
+      result.top5Share = totalMs > 0 ? values.slice(0, 5).reduce((sum, value) => sum + value, 0) / totalMs : null;
+      result.top10Share = totalMs > 0 ? values.slice(0, 10).reduce((sum, value) => sum + value, 0) / totalMs : null;
     }
-    mo.hhi = sumSq;
-    mo.effectiveArtists = sumSq > 0 ? 1 / sumSq : 0;
-
-    const sortedP = [...mo.artists.values()].sort((a, b) => b - a);
-    mo.top1Share = sortedP[0] ? sortedP[0] / totalP : 0;
-    mo.top5Share = sortedP.slice(0, 5).reduce((acc, v) => acc + v, 0) / (totalP || 1);
-    mo.top10Share = sortedP.slice(0, 10).reduce((acc, v) => acc + v, 0) / (totalP || 1);
+    mo.concentration = concentration;
+    mo.hhi = concentration.artists.hhi;
+    mo.effectiveArtists = concentration.artists.effective;
+    mo.top1Share = concentration.artists.top1Share;
+    mo.top5Share = concentration.artists.top5Share;
+    mo.top10Share = concentration.artists.top10Share;
+    delete mo.entities;
   }
+  onProgress?.(1);
 
   return monthly;
 }
