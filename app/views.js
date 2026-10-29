@@ -2219,6 +2219,24 @@ export function exploreView(model, ctx = {}) {
       <input type="search" class="explore-search" data-explore-search placeholder="Buscar en ${tabName}…" value="${esc(query)}" aria-label="Buscar en catálogo">
     </div>`;
 
+  const routeParams = new URLSearchParams((ctx.query ?? '').replace(/^\?/, ''));
+  const routeState = [
+    ['tab', tab],
+    ['q', query],
+    ['sort', sortBy],
+    ['dir', queryResult.effectiveDir || sortDir],
+    ['page', queryResult.page],
+    ['pageSize', queryResult.pageSize],
+    ['minPlays', minPlays],
+    ['minMonths', minMonths],
+    ['minKnownSkips', minKnownSkips]
+  ];
+  for (const [key, value] of routeState) {
+    if (value == null || value === '') routeParams.delete(key);
+    else routeParams.set(key, String(value));
+  }
+  const entityQuery = routeParams.toString() ? `?${routeParams}` : '';
+
   const tableHtml = catalogTableHTML(queryResult, {
     tab,
     metric,
@@ -2227,7 +2245,7 @@ export function exploreView(model, ctx = {}) {
     query,
     visibleCols,
     density,
-    queryParamStr: ctx.query,
+    queryParamStr: entityQuery,
     spark: (item) => rowSeries(model, tab, metric, item.id ?? item.tk)
   });
 

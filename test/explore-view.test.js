@@ -78,6 +78,25 @@ test('exploreView: renders tabs and catalog table for artists', () => {
   assert.ok(html.includes('Artist 01'));
 });
 
+test('exploreView: semantic entity links preserve active catalog query and filters', () => {
+  const html = exploreView(createMockModel(), {
+    metric: 'plays',
+    query: '?m=plays&years=2024',
+    exploreState: { tab: 'artists', query: 'Artist 01', sortBy: 'name', sortDir: 'asc', page: 1, pageSize: 25 }
+  });
+  const href = html.match(/href="(#\/v1\/artist\/[^\"]+)"/)?.[1]?.replaceAll('&amp;', '&');
+  assert.ok(href);
+  const [route, query = ''] = href.split('?');
+  const params = new URLSearchParams(query);
+  assert.equal(route, '#/v1/artist/Artist%2001');
+  assert.equal(params.get('m'), 'plays');
+  assert.equal(params.get('years'), '2024');
+  assert.equal(params.get('tab'), 'artists');
+  assert.equal(params.get('q'), 'Artist 01');
+  assert.equal(params.get('sort'), 'name');
+  assert.equal(params.get('dir'), 'asc');
+});
+
 test('renderView: dispatches explore view correctly', () => {
   const model = createMockModel();
   const ctx = { metric: 'plays', query: '' };
