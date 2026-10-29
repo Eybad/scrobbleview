@@ -65,7 +65,8 @@ test('auxiliary ranking links retain their criteria and analytical context', asy
   const ctx = { query: '?r=1700000000-1705000000&m=plays' };
   const dashboardHtml = renderView('dashboard', model, null, ctx);
   const discoveryHtml = renderView('discovery', model, null, ctx);
-  for (const [html, sort, tab] of [[dashboardHtml, 'intensity', 'tracks'], [dashboardHtml, 'skipRate', 'artists'], [discoveryHtml, 'constancy', 'artists'], [discoveryHtml, 'longevity', 'artists']]) {
+  const habitsHtml = renderView('habits', model, null, ctx);
+  for (const [html, sort, tab] of [[dashboardHtml, 'intensity', 'tracks'], [dashboardHtml, 'skipRate', 'artists'], [discoveryHtml, 'constancy', 'artists'], [discoveryHtml, 'longevity', 'artists'], [habitsHtml, 'dominance', 'artists'], [habitsHtml, 'deepCatalog', 'artists'], [habitsHtml, 'forgotten', 'tracks']]) {
     const links = [...html.matchAll(/href="(#\/v1\/explore\?[^\"]+)"/g)].map(match => parseRoute(match[1].replaceAll('&amp;', '&')));
     const found = links.find(route => new URLSearchParams(route.query).get('sort') === sort && new URLSearchParams(route.query).get('tab') === tab);
     assert.ok(found, `${sort} link`);

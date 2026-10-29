@@ -18,6 +18,9 @@ export const ALL_COLUMNS = {
     { key: 'skipRate', label: 'Tasa de salto', defaultVisible: false, sortKey: 'skipRate' },
     { key: 'constancy', label: 'Constancia', defaultVisible: false, sortKey: 'constancy' },
     { key: 'longevity', label: 'Años activos', defaultVisible: false, sortKey: 'longevity' },
+    { key: 'dominance', label: 'Canción dominante', defaultVisible: false, sortKey: 'dominance' },
+    { key: 'deepCatalog', label: 'Catálogo', defaultVisible: false, sortKey: 'deepCatalog' },
+    { key: 'forgotten', label: 'Última escucha y distancias', defaultVisible: false, sortKey: 'forgotten' },
     { key: 'trend', label: 'Tendencia', defaultVisible: true, sortKey: null }
   ],
   tracks: [
@@ -32,6 +35,7 @@ export const ALL_COLUMNS = {
     { key: 'lastTs', label: 'Última vez', defaultVisible: false, sortKey: 'lastTs' },
     { key: 'intensity', label: 'Intensidad', defaultVisible: false, sortKey: 'intensity' },
     { key: 'skipRate', label: 'Tasa de salto', defaultVisible: false, sortKey: 'skipRate' },
+    { key: 'forgotten', label: 'Última escucha y distancias', defaultVisible: false, sortKey: 'forgotten' },
     { key: 'trend', label: 'Tendencia', defaultVisible: true, sortKey: null }
   ],
   albums: [
@@ -241,6 +245,12 @@ export function catalogTableHTML(queryResult, {
         }
         case 'longevity':
           return `<td class="n" data-label="Años activos">${fmtNum(it.years?.size ?? 0)}</td>`;
+        case 'dominance':
+          return `<td data-label="Canción dominante">${it.dominantTrack ? `${esc(it.dominantTrack.name)} · ${fmtPct(it.dominance)}` : '—'}</td>`;
+        case 'deepCatalog':
+          return `<td class="n" data-label="Catálogo">${fmtNum(it.tracks?.size ?? 0)} canciones · ${fmtNum(it.albums?.size ?? 0)} álbumes</td>`;
+        case 'forgotten':
+          return `<td data-label="Última escucha y distancias">${it.lastTs != null ? locToISODate(it.lastTs) : '—'} · ${it.daysSinceEnd == null ? '—' : fmtNum(it.daysSinceEnd)} ${it.daysSinceEnd === 1 ? 'día' : 'días'} entre última escucha y fin del historial · ${it.daysSinceNow == null ? '—' : fmtNum(it.daysSinceNow)} ${it.daysSinceNow === 1 ? 'día' : 'días'} desde última escucha hasta hoy</td>`;
         case 'trend': {
           if (!spark) return `<td></td>`;
           const pts = spark(it);

@@ -105,6 +105,12 @@ function getItemSortValue(entry, sortBy) {
     }
     case 'longevity':
       return it.years?.size ?? 0;
+    case 'dominance':
+      return it.dominance ?? 0;
+    case 'deepCatalog':
+      return it.tracks?.size ?? 0;
+    case 'forgotten':
+      return it.lastUtc ?? Infinity;
     default:
       return it[sortBy] ?? 0;
   }
@@ -134,6 +140,8 @@ export function queryCatalog(items, {
     if (minMonths != null && (it.months?.size ?? it.months ?? 0) < minMonths) return false;
     if (minKnownSkips != null && (it.skipKnown ?? 0) < minKnownSkips) return false;
     if (sortBy === 'constancy' && (it.firstTs == null || it.lastTs == null)) return false;
+    if (sortBy === 'dominance' && (!it.dominantTrack || it.dominance < 0.8)) return false;
+    if (sortBy === 'forgotten' && it.lastUtc == null) return false;
     if (filterFn != null && !filterFn(it)) return false;
     if (normQuery && !matchesQuery(it, normQuery, searchFields)) return false;
     return true;
@@ -144,7 +152,7 @@ export function queryCatalog(items, {
   // Criterio de dirección predeterminado si no se especifica
   let effectiveDir = sortDir;
   if (!effectiveDir) {
-    if (sortBy === 'name' || sortBy === 'artist' || sortBy === 'rank' || sortBy === 'metric' || sortBy === 'lowSkipRate') {
+    if (sortBy === 'name' || sortBy === 'artist' || sortBy === 'rank' || sortBy === 'metric' || sortBy === 'lowSkipRate' || sortBy === 'forgotten') {
       effectiveDir = 'asc';
     } else {
       effectiveDir = 'desc';
@@ -175,6 +183,14 @@ export function queryCatalog(items, {
       if (playDifference) return playDifference;
     }
     if (sortBy === 'skipRate' || sortBy === 'lowSkipRate' || sortBy === 'intensity') {
+      const difference = (b.item.plays ?? 0) - (a.item.plays ?? 0) || (b.item.ms ?? 0) - (a.item.ms ?? 0);
+      if (difference) return difference;
+    }
+    if (sortBy === 'deepCatalog') {
+      const difference = (b.item.albums?.size ?? 0) - (a.item.albums?.size ?? 0) || (b.item.plays ?? 0) - (a.item.plays ?? 0) || (b.item.ms ?? 0) - (a.item.ms ?? 0);
+      if (difference) return difference;
+    }
+    if (sortBy === 'dominance' || sortBy === 'forgotten') {
       const difference = (b.item.plays ?? 0) - (a.item.plays ?? 0) || (b.item.ms ?? 0) - (a.item.ms ?? 0);
       if (difference) return difference;
     }

@@ -270,6 +270,7 @@ function buildStats({ ds, tz, now, minMs, skipThresholdMs, cols, localOrder, tot
       firstTs: n ? cols.loc[localOrder[0]] : null,
       firstEventLocal: n ? cols.loc[0] : null,
       lastTs: n ? cols.loc[localOrder[n - 1]] : null,
+      lastLoadedUtc,
       datedEvents: n,
       sources: ds.meta.sources,
       warnings: ds.meta.warnings,

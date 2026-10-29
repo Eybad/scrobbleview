@@ -41,7 +41,7 @@ function catalogHref(ctx, tab, sort, thresholdKey, threshold) {
   const params = new URLSearchParams((ctx.query ?? '').replace(/^\?/, ''));
   params.set('tab', tab);
   params.set('sort', sort);
-  params.set('dir', sort === 'lowSkipRate' ? 'asc' : 'desc');
+  params.set('dir', sort === 'lowSkipRate' || sort === 'forgotten' ? 'asc' : 'desc');
   if (thresholdKey) params.set(thresholdKey, String(threshold));
   return `#/v1/explore?${params}`;
 }
@@ -1716,18 +1716,18 @@ export function habitsView(model, ctx = {}) {
     <div class="grid-2">
       ${cardWithLimit('One-hit wonders (≥80% en 1 canción)', 'habits-onehit', oneHitLimit, oneHitRows.length
         ? table(['#', 'Artista', 'Canción dominante', 'Concentración', 'Reproducciones'], oneHitRows, '', ['c', '', '', 'n', 'n'], null, 'Artistas cuyas reproducciones se concentran en una sola canción')
-        : '<p class="empty">Sin artistas con ≥80% en una sola canción (mínimo 20 reproducciones).</p>')}
+        : '<p class="empty">Sin artistas con ≥80% en una sola canción (mínimo 20 reproducciones).</p>', '', catalogHref(ctx, 'artists', 'dominance', 'minPlays', 20))}
       ${cardWithLimit('Catálogo profundo (más canciones distintas)', 'habits-deep', deepLimit, deepRows.length
         ? table(['#', 'Artista', 'Canciones', 'Álbumes', 'Reproducciones', 'Tiempo'], deepRows, '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con más canciones distintas escuchadas')
-        : '<p class="empty">Sin datos.</p>')}
+        : '<p class="empty">Sin datos.</p>', '', catalogHref(ctx, 'artists', 'deepCatalog'))}
     </div>
     <div class="grid-2">
       ${cardWithLimit('Artistas olvidados', 'habits-forg-art', forgArtLimit, forgArtRows.length
         ? table(['#', 'Artista', 'Reproducciones', 'Tiempo', 'Última escucha'], forgArtRows, '', ['c', '', 'n', 'n', ''], null, 'Artistas con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
-        : '<p class="empty">Sin artistas con ≥15 reproducciones.</p>')}
+        : '<p class="empty">Sin artistas con ≥15 reproducciones.</p>', '', catalogHref(ctx, 'artists', 'forgotten', 'minPlays', 15))}
       ${cardWithLimit('Canciones olvidadas', 'habits-forg-trk', forgTrkLimit, forgTrkRows.length
         ? table(['#', 'Canción', 'Reproducciones', 'Tiempo', 'Última escucha'], forgTrkRows, '', ['c', '', 'n', 'n', ''], null, 'Canciones con al menos 15 reproducciones cuya última escucha fue hace más tiempo')
-        : '<p class="empty">Sin canciones con ≥15 reproducciones.</p>')}
+        : '<p class="empty">Sin canciones con ≥15 reproducciones.</p>', '', catalogHref(ctx, 'tracks', 'forgotten', 'minPlays', 15))}
     </div>`;
 }
 
@@ -1883,11 +1883,11 @@ export function exploreView(model, ctx = {}) {
         <span>Mín. eventos conocidos:</span>
         <input type="number" min="1" max="10000" data-min-plays value="${minKnownSkips}" class="pagination-select" aria-label="Mínimo de eventos con bandera conocida">
       </label>`;
-  } else if (sortBy === 'intensity') {
+  } else if (sortBy === 'intensity' || sortBy === 'dominance' || sortBy === 'forgotten') {
     thresholdControl = `
       <label class="explore-threshold-label">
         <span>Mín. reproducciones:</span>
-        <input type="number" min="1" max="10000" data-min-plays value="${minPlays ?? 5}" class="pagination-select" aria-label="Mínimo de reproducciones para intensidad">
+        <input type="number" min="1" max="10000" data-min-plays value="${minPlays}" class="pagination-select" aria-label="Mínimo de reproducciones">
       </label>`;
   } else if (sortBy === 'constancy') {
     thresholdControl = `

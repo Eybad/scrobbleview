@@ -44,3 +44,23 @@ test('auxiliary rankings sort the full catalog with continuity and longevity cri
   assert.match(html, /data-label="Constancia">100%/);
   assert.match(html, /6\/6 meses/);
 });
+
+test('catalog depth, one-hit and forgotten rankings use complete entity data', () => {
+  const artists = Array.from({ length: 105 }, (_, id) => ({
+    id: id + 1, name: `Artist ${id}`, plays: 20, ms: 1200000, lastUtc: 1704067200 + id,
+    tracks: new Set([id + 1]), albums: new Set(id === 104 ? [1, 2] : [1])
+  }));
+  const tracks = new Map(artists.map((artist, index) => [index + 1, { tk: index + 1, name: `Track ${index}`, plays: index === 104 ? 20 : 15, ms: 1200000 }]));
+  const model = { totals: { records: 2100, ms: 126000000 }, meta: { lastLoadedUtc: 1704153600, generatedAt: 1704240000 },
+    artists: { byId: new Map(artists.map(item => [item.id, item])) }, tracks: { byId: tracks }, monthlyArtistMs: new Map() };
+  const oneHit = describeCatalogQuery(model, { exploreState: { sortBy: 'dominance' } });
+  assert.equal(queryCatalog(oneHit.pool, oneHit.options).rows[0].item.name, 'Artist 104');
+  assert.equal(queryCatalog(oneHit.pool, oneHit.options).totalMatches, 1);
+  const deep = describeCatalogQuery(model, { exploreState: { sortBy: 'deepCatalog' } });
+  assert.equal(queryCatalog(deep.pool, deep.options).rows[0].item.name, 'Artist 104');
+  const forgotten = describeCatalogQuery(model, { exploreState: { sortBy: 'forgotten' } });
+  assert.equal(queryCatalog(forgotten.pool, forgotten.options).rows[0].item.name, 'Artist 0');
+  assert.equal(queryCatalog(forgotten.pool, forgotten.options).rows[0].item.daysSinceEnd, 1);
+  assert.match(exploreView(model, { exploreState: { sortBy: 'dominance' } }), /Track 104 · 100%/);
+  assert.match(exploreView(model, { exploreState: { sortBy: 'forgotten' } }), /1 día entre última escucha y fin del historial · 2 días desde última escucha hasta hoy/);
+});
