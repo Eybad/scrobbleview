@@ -65,7 +65,7 @@ Estas muestras muestran un menor pico RSS en la corrida compacta. El conteo dire
 
 ### Comparación R10 del 29 de octubre de 2026
 
-Comando: `node --expose-gc bench/r10.js 100000 5`. Se comparó la base `55f9d9289f09b07808147de0b03e0b413b5e0852` con el checkout de R10 en Termux/Android aarch64, Node v26.12.1. Como el harness R10 no existía en la base, se copió temporalmente el mismo archivo al worktree separado de esa revisión. Ambas corridas usaron el mismo fixture sintético: 100.000 eventos, 10.000 canciones, 500 artistas, 500 álbumes, 23.133.801 bytes JSON y rango `2020-01-01T00:00:00.000Z..2021-04-16T21:18:00.000Z`. Cinco muestras por operación; se informa mediana y peor muestra. No se ejecutó la prueba de 500.000 eventos porque el proceso de 100.000 ya alcanzó 407,8 MiB de RSS en Android.
+Comando: `node --expose-gc bench/r10.js 100000 5`. Se comparó la base `55f9d9289f09b07808147de0b03e0b413b5e0852` con el checkout de R10 en Termux/Android aarch64, Node v26.12.1. Como el harness R10 no existía en la base, se copió temporalmente el mismo archivo al worktree separado de esa revisión. Ambas corridas usaron el mismo fixture sintético: 100.000 eventos, 10.000 canciones, 500 artistas, 500 álbumes, 23.133.801 bytes JSON y rango `2020-01-01T00:00:00.000Z..2021-04-16T21:18:00.000Z`. Cinco muestras por operación; se informa mediana y peor muestra. La comparación R10 se limitó a 100.000 eventos porque ese proceso alcanzó 407,8 MiB de RSS en Android.
 
 | Operación | Base mediana / peor (ms) | R10 mediana / peor (ms) |
 | --- | ---: | ---: |
@@ -78,6 +78,8 @@ Comando: `node --expose-gc bench/r10.js 100000 5`. Se comparó la base `55f9d928
 | RSS pico del proceso | 359,3 MiB | 407,8 MiB |
 
 En esta comparación, parseo y consulta quedaron cerca de la base; derivación/agregación, render y exportación fueron algo más lentos. El clonado de la proyección y el RSS aumentaron de forma clara. Consulta y render quedaron debajo de 200 ms en estas muestras Node, pero eso no mide latencia del DOM ni respuesta visual en navegador. `structuredClone` representa el costo de copiar la proyección, no el mensaje real de un Worker; el render solo produce un string y no construye el DOM; la exportación mide la tabla sintética y su ZIP. La medición no demuestra el objetivo de feedback de 100 ms ni la RAM disponible para un historial personal. Las corridas son sensibles a la carga y temperatura del dispositivo.
+
+El 29 de octubre se ejecutó además una corrida compacta de 500.000 eventos: `node --expose-gc bench/aggregate.js 500000 --compact`. Con 50.000 canciones sintéticas registró 11.624 ms de agregación, 8.619 ms de filtro, 6 ms de conteo y 802 MiB de RSS pico. Es una muestra aislada sin lectura JSON, construcción de zona IANA, Worker ni renderizado; no es comparable con la tabla R10 de 100.000 eventos ni sustituye la carga de 500.000 eventos en navegador.
 
 ## Verificación de navegador y pendientes manuales
 
@@ -97,7 +99,7 @@ El harness descargó y se inspeccionaron tres ZIP reales del navegador. Los tres
 
 Las cuatro ejecuciones extendidas guardaron ocho eventos tras consentimiento, reabrieron el dataset en una pestaña nueva con `s=unknown` y `m=plays`, borraron todas las claves y comprobaron un error real de versión de IndexedDB sin dejar caché parcial ni perder el análisis en memoria. Una exportación activa se canceló antes de recibir la respuesta del Worker; durante un segundo no se llamó al enlace de descarga.
 
-Siguen pendientes comprobaciones con TalkBack y tacto físico, scroll de mapas/calendario, revisión visual del resto de controles, consola/CSP en otros navegadores y carga de 500.000 eventos. El harness usa teclado/CDP y clic sintético; no sustituye esas pruebas.
+Siguen pendientes comprobaciones con TalkBack y tacto físico, scroll de mapas/calendario, revisión visual del resto de controles, consola/CSP en otros navegadores y carga de 500.000 eventos en navegador. El harness usa teclado/CDP y clic sintético; no sustituye esas pruebas.
 
 ## Cobertura de la auditoría
 
