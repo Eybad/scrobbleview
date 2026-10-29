@@ -30,7 +30,7 @@ test('calculateCompareRange: detects when comparison window exceeds loaded datas
 
   const res = calculateCompareRange('equal_previous', rangeA, dataRange);
   assert.equal(res.isOutOfRange, true);
-  assert.ok(res.warning.includes('excede el intervalo'));
+  assert.ok(res.warning.includes('exceden el intervalo observado'));
 });
 
 test('computeMetricDelta: base zero handles new and zero without NaN or Infinity', () => {
