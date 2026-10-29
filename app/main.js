@@ -8,8 +8,8 @@ import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptText, emptyFiltersHTML, footerMetaText, calendarYearGridHTML } from './views.js';
 import { exportExploreTableCSV, exportFilename } from '../src/export.js';
 import { queryCatalog } from '../src/query.js';
-import { fmtNum } from '../src/charts.js';
-import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, advancedFilterCount } from './filter-ui.js';
+import { esc, fmtNum } from '../src/charts.js';
+import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, paramsToFilterState, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
 import { parseRoute, resolveRoute, formatSemanticRoute } from './routes.js';
@@ -63,6 +63,7 @@ let model = null; // modelo completo (sin filtros)
 let current = null; // modelo activo (filtrado o completo)
 let currentPrev = null;
 let currentDetail = null, detailContext = null, detailPage = 1, detailPageSize = 25;
+let unresolvedFilter = false;
 let initializing = false;
 let state = emptyFilterState();
 let activeMetric = resolveMetric(null, typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null);
@@ -238,7 +239,7 @@ function parseHash() {
 // volver, los params del hash de esa entrada restauran sus filtros).
 function syncHash() {
   const [name, id, , resolved] = parseHash();
-  const fParams = filterParams(state);
+  const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   const [, , rawQuery] = parseHash();
@@ -272,7 +273,9 @@ async function applyHashParams() {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null;
   activeMetric = resolveMetric(parsed.metric, stored);
   rankUI.metric = activeMetric;
-  state = paramsToFilterState(query) ?? emptyFilterState();
+  const restored = resolvePortableFilters(query, model);
+  state = restored.state;
+  unresolvedFilter = restored.unresolved;
   return refreshModel();
 }
 
@@ -330,16 +333,16 @@ function resetPreferences() {
 }
 
 function navHTML(active) {
-  const fParams = filterParams(state);
+  const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
-  const link = (hash, label, view) => `<a href="#/${hash}${queryStr}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
+  const link = (hash, label, view) => `<a href="#/${hash}${esc(queryStr)}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
 
   let favsHTML = '';
   if (favorites.size > 0) {
     const favLinks = [...favorites]
       .filter((v) => SECTION_NAMES[v])
-      .map((v) => `<a href="#/${v}${queryStr}" class="nav-fav-chip${active === v ? ' active' : ''}">${SECTION_NAMES[v]}</a>`)
+      .map((v) => `<a href="#/${v}${esc(queryStr)}" class="nav-fav-chip${active === v ? ' active' : ''}">${SECTION_NAMES[v]}</a>`)
       .join('');
     if (favLinks) {
       favsHTML = `<div class="app-nav-favorites" aria-label="Accesos rápidos favoritos"><span class="nav-fav-title">Favoritos:</span>${favLinks}</div>`;
@@ -420,7 +423,7 @@ cacheToast.addEventListener('click', async (e) => {
 });
 
 function buildViewContext(viewName) {
-  const fParams = filterParams(state);
+  const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   const [, , rawQuery] = parseHash();
@@ -489,7 +492,8 @@ function render() {
   } else {
     viewContent = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
   }
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + `<div id="view-root">${viewContent}</div>`;
+  const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
+  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -526,6 +530,8 @@ function render() {
 // barra (presets, meses, fechas, chips, fila de Limpiar). La barra persiste: no
 // se pierde el foco ni el estado del <details> de avanzados.
 async function applyAndRenderView(focusSelector = null) {
+  unresolvedFilter = false;
+  appRoot.querySelector('#filter-resolution-warning')?.remove();
   syncHash();
   updateFilterDynamics();
   if (!await refreshModel()) return;
@@ -1364,7 +1370,7 @@ appRoot.addEventListener('click', (e) => {
   if (returnState) {
     history.replaceState({ ...history.state, returnState }, '', location.href);
   }
-  const fParams = filterParams(state);
+  const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
   const [base, destinationQuery = ''] = a.getAttribute('href').split('?');
@@ -1417,7 +1423,7 @@ appRoot.addEventListener('click', (e) => {
 
       if (selDate) selDate.textContent = iso;
       if (detailLink) {
-        const params = new URLSearchParams(filterParams(state).replace(/^\?/, ''));
+        const params = new URLSearchParams(portableFilterParams(state, model).replace(/^\?/, ''));
         params.set('m', activeMetric);
         detailLink.href = formatSemanticRoute('day', iso, `?${params}`);
         detailLink.hidden = false;

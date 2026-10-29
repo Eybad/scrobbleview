@@ -8,6 +8,7 @@
 import { RANGE_PRESETS, emptyFilterState } from '../src/filters.js';
 import { esc, MONTHS_SHORT, fmtNum, fmtMs } from '../src/charts.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
+import { encodeRouteSegment, decodeRouteSegment } from './routes.js';
 
 export const BLOCKS = [
   { id: 0, label: 'Madrugada', hours: [0, 1, 2, 3, 4, 5] },
@@ -269,6 +270,51 @@ export function paramsToFilterState(search) {
   state.trackId = id(p.get('tk'));
   state.albumId = id(p.get('al'));
   return state;
+}
+
+export function portableFilterParams(state, model) {
+  const params = new URLSearchParams(filterParams(state).replace(/^\?/, ''));
+  for (const key of ['ar', 'tk', 'al']) params.delete(key);
+  const encode = (key, value) => params.set(key, encodeRouteSegment(value));
+  if (state.artistId != null) {
+    const artist = model.artists.byId.get(state.artistId);
+    if (!artist) throw new Error('El artista filtrado no está disponible.');
+    encode('filterArtist', artist.name);
+  }
+  if (state.trackId != null) {
+    const track = model.tracks.byId.get(state.trackId);
+    if (!track) throw new Error('La canción filtrada no está disponible.');
+    encode('filterTrackArtist', track.artist);
+    encode('filterTrack', track.name);
+  }
+  if (state.albumId != null) {
+    const album = model.albums.byId.get(state.albumId);
+    if (!album) throw new Error('El álbum filtrado no está disponible.');
+    encode('filterAlbumArtist', album.artist);
+    encode('filterAlbum', album.name);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function resolvePortableFilters(search, model) {
+  const params = new URLSearchParams(search ?? '');
+  const state = paramsToFilterState(search) ?? emptyFilterState();
+  let unresolved = ['ar', 'tk', 'al'].some(key => params.has(key));
+  state.artistId = state.trackId = state.albumId = null;
+  const resolve = (keys, group, matches, field, idKey) => {
+    if (!keys.some(key => params.has(key))) return;
+    if (!keys.every(key => params.has(key))) { unresolved = true; return; }
+    const values = keys.map(key => decodeRouteSegment(params.get(key)));
+    for (const entity of group.byId.values()) {
+      if (matches(entity, values)) { state[field] = entity[idKey]; return; }
+    }
+    unresolved = true;
+  };
+  resolve(['filterArtist'], model.artists, (entity, [name]) => entity.name === name, 'artistId', 'id');
+  resolve(['filterTrackArtist', 'filterTrack'], model.tracks, (entity, [artist, name]) => entity.artist === artist && entity.name === name, 'trackId', 'tk');
+  resolve(['filterAlbumArtist', 'filterAlbum'], model.albums, (entity, [artist, name]) => entity.artist === artist && entity.name === name, 'albumId', 'id');
+  return { state, unresolved };
 }
 
 export function filterBarHTML(model, state) {
