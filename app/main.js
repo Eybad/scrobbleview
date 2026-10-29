@@ -615,8 +615,8 @@ function resetPreferences() {
   }
   syncHash();
   analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
-  announce('Preferencias restablecidas a los valores predeterminados.');
   render();
+  announce('Preferencias restablecidas a los valores predeterminados.');
 }
 
 function navHTML(active) {
