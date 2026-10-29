@@ -269,10 +269,13 @@ export function catalogTableHTML(queryResult, {
   }).join('');
 
   const densityClass = density === 'compact' ? 'table--compact' : '';
+  const tableName = tab === 'artists' ? 'Artistas' : tab === 'tracks' ? 'Canciones' : 'Álbumes';
+  const matchLabel = totalMatches === 1 ? 'coincidencia' : 'coincidencias';
 
   return `
     <div class="table-scroll catalog-table-wrap ${densityClass}" tabindex="0" role="region" aria-label="Tabla de catálogo">
       <table class="catalog-table">
+        <caption class="visually-hidden">${tableName}: ${totalMatches} ${matchLabel}</caption>
         <thead>
           <tr>${headerCells}</tr>
         </thead>

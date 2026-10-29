@@ -29,6 +29,7 @@ test('catalogTableHTML: renders table with sortable headers and aria-sort', () =
   });
 
   assert.ok(html.includes('table class="catalog-table'));
+  assert.ok(html.includes('<caption class="visually-hidden">Artistas: 1 coincidencia</caption>'));
   assert.ok(html.includes('aria-sort="descending"'));
   assert.ok(html.includes('Daft Punk'));
   assert.ok(html.includes('25%')); // Share 0.25
