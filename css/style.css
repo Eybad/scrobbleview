@@ -848,6 +848,7 @@ main.container {
   letter-spacing: 0.08em;
   line-height: 1.33;
   margin-bottom: var(--sp-1);
+  overflow-wrap: anywhere;
 }
 
 .kpi dd {

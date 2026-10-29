@@ -409,21 +409,31 @@ async function run() {
   const afterCyclesMemory = appWindow.performance.memory?.usedJSHeapSize ?? null;
   window.__r10Report = { phase: 'cycles-complete', beforeCyclesMemory, afterCyclesMemory, cycleMemory, actionEffects, routeEffects };
 
-  navLink('Explorar').click();
-  await waitFor(() => Boolean(element('#explore-card')), 'abrir catálogo responsive');
+  navLink('Resumen').click();
+  await waitFor(() => viewHeading() === 'Resumen' && Boolean(element('.kpis')), 'abrir resumen responsive');
   const viewportWidths = [320, 360, 393, 412, 640];
   const viewportChecks = [];
   for (const width of viewportWidths) {
     frame.style.width = `${width}px`;
     await nextFrame();
-    viewportChecks.push({ width, scrollWidth: appDocument.documentElement.scrollWidth, viewport: appWindow.innerWidth });
+    const kpiColumns = appWindow.getComputedStyle(element('.kpis')).gridTemplateColumns.trim().split(/\s+/).length;
+    const recordColumns = appWindow.getComputedStyle(element('.records-grid')).gridTemplateColumns.trim().split(/\s+/).length;
+    const clippedText = [...appDocument.querySelectorAll('.kpis dt, .kpis dd, .records-grid .record-label, .records-grid .record-value')]
+      .filter(node => node.clientWidth > 0 && (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1));
+    viewportChecks.push({ width, scrollWidth: appDocument.documentElement.scrollWidth, viewport: appWindow.innerWidth, kpiColumns, recordColumns, clippedText: clippedText.length });
     assert(appDocument.documentElement.scrollWidth <= appWindow.innerWidth, `Desbordamiento horizontal a ${width}px`);
+    assert(kpiColumns === 2, `Los KPIs deben tener dos columnas a ${width}px`);
+    assert(recordColumns === 2, `Los récords deben tener dos columnas a ${width}px`);
+    assert(clippedText.length === 0, `Texto de KPIs o récords recortado a ${width}px: ${clippedText.slice(0, 3).map(node => `${node.className}:${node.textContent.trim()}:${node.scrollWidth}/${node.clientWidth},${node.scrollHeight}/${node.clientHeight}`).join('; ')}`);
   }
   appDocument.documentElement.style.fontSize = '125%';
   await nextFrame();
   const enlargedFont = Number.parseFloat(appWindow.getComputedStyle(appDocument.documentElement).fontSize);
   assert(enlargedFont >= 20, 'El texto ampliado debe reflejarse en estilos calculados');
   assert(appDocument.documentElement.scrollWidth <= appWindow.innerWidth, 'El texto ampliado no debe desbordar el ancho de página');
+  const clippedEnlargedText = [...appDocument.querySelectorAll('.kpis dt, .kpis dd, .records-grid .record-label, .records-grid .record-value')]
+    .filter(node => node.clientWidth > 0 && (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1));
+  assert(clippedEnlargedText.length === 0, `El texto ampliado no debe recortar KPIs ni récords: ${clippedEnlargedText.slice(0, 3).map(node => `${node.className}:${node.textContent.trim()}:${node.scrollWidth}/${node.clientWidth},${node.scrollHeight}/${node.clientHeight}`).join('; ')}`);
   appDocument.documentElement.style.fontSize = '';
   frame.style.width = '640px';
   Object.assign(window.__r10Report, { phase: 'complete', viewportChecks, enlargedFont });
