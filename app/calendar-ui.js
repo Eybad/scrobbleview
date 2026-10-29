@@ -32,6 +32,24 @@ export function parseCalendarSelection(query) {
   };
 }
 
+export function calendarGridTargetDate(value, key) {
+  const date = validCalendarDate(value);
+  if (!date) return null;
+  const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000);
+  const weekday = (day + 3) % 7;
+  const targetDay = key === 'ArrowLeft' ? day - 1
+    : key === 'ArrowRight' ? day + 1
+      : key === 'ArrowUp' ? day - 7
+        : key === 'ArrowDown' ? day + 7
+          : key === 'Home' ? day - weekday
+            : key === 'End' ? day + 6 - weekday
+              : null;
+  if (targetDay == null) return null;
+  const target = new Date(targetDay * 86400000);
+  const year = target.getUTCFullYear();
+  return year < 100 || year > 9999 ? date : target.toISOString().slice(0, 10);
+}
+
 export function calendarQuery(query, calMonth, normalizeYears, selection = {}) {
   const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
   if (calMonth && Number.isInteger(calMonth.year) && calMonth.year >= 100 && calMonth.year <= 9999 && Number.isInteger(calMonth.month) && calMonth.month >= 1 && calMonth.month <= 12) {
@@ -92,13 +110,15 @@ export function calendarMonthViewHTML({
   daysMap,
   colorScale,
   byMs = true,
-  dataRange = null
+  dataRange = null,
+  selectedDate = null
 }) {
   const m = Math.max(1, Math.min(12, month));
   const valFmt = byMs ? fmtMs : fmtNum;
   const firstDate = new Date(Date.UTC(year, m - 1, 1));
   const firstDow = (firstDate.getUTCDay() + 6) % 7;
   const daysInMonth = new Date(Date.UTC(year, m, 0)).getUTCDate();
+  const hasSelectedDateInMonth = selectedDate?.slice(0, 7) === `${year}-${String(m).padStart(2, '0')}`;
 
   const prevMonthYear = m === 1 ? year - 1 : year;
   const prevMonth = m === 1 ? 12 : m - 1;
@@ -114,7 +134,7 @@ export function calendarMonthViewHTML({
   let dayOfWeek = firstDow;
 
   if (firstDow > 0) {
-    cellsHtml += `<td colspan="${firstDow}" class="cal-month-empty" aria-hidden="true"></td>`;
+    cellsHtml += `<td colspan="${firstDow}" class="cal-month-empty" role="presentation" aria-hidden="true"></td>`;
   }
 
   const dailyList = [];
@@ -131,8 +151,8 @@ export function calendarMonthViewHTML({
 
     dailyList.push({ iso, val, valLabel });
 
-    cellsHtml += `<td class="cal-month-day-cell">
-      <button type="button" class="cal-month-cell" data-day="${epochDay}" data-date="${iso}" data-val="${val}" data-label="${esc(valLabel)}" style="background-color: ${fill}" aria-label="${iso}: ${esc(valLabel)}">
+    cellsHtml += `<td class="cal-month-day-cell" role="gridcell" aria-selected="${iso === selectedDate}">
+      <button type="button" class="cal-month-cell${iso === selectedDate ? ' is-selected' : ''}" data-day="${epochDay}" data-date="${iso}" data-val="${val}" data-label="${esc(valLabel)}" tabindex="${iso === selectedDate || (!hasSelectedDateInMonth && d === 1) ? '0' : '-1'}" style="background-color: ${fill}" aria-label="${iso}: ${esc(valLabel)}">
         <span class="cal-month-cell__day">${d}</span>
       </button>
     </td>`;
@@ -144,7 +164,7 @@ export function calendarMonthViewHTML({
   }
 
   if (dayOfWeek > 0) {
-    cellsHtml += `<td colspan="${7 - dayOfWeek}" class="cal-month-empty" aria-hidden="true"></td>`;
+    cellsHtml += `<td colspan="${7 - dayOfWeek}" class="cal-month-empty" role="presentation" aria-hidden="true"></td>`;
   }
 
   const listRows = dailyList.map((item) => `<tr>

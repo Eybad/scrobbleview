@@ -16,7 +16,7 @@ import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_K
 import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } from './routes.js';
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { contextBarHTML } from './context-bar.js';
-import { parseCalendarState, parseCalendarSelection, calendarQuery } from './calendar-ui.js';
+import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGridTargetDate } from './calendar-ui.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -170,6 +170,7 @@ function restoreCalendarInspector() {
   const iso = state.calDate;
   if (!iso) {
     calAnchor = null;
+    syncCalendarGridSelection(null);
     return;
   }
   const day = Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86400000);
@@ -202,6 +203,19 @@ function restoreCalendarInspector() {
   }
   appRoot.querySelectorAll('[data-day].is-selected').forEach((cell) => cell.classList.remove('is-selected'));
   matchingCells.forEach((cell) => cell.classList.add('is-selected'));
+  syncCalendarGridSelection(iso);
+}
+
+function syncCalendarGridSelection(selectedDate) {
+  const cells = [...appRoot.querySelectorAll('.calendar-month__table [data-date]')];
+  const selectedCell = cells.find((cell) => cell.dataset.date === selectedDate);
+  const tabStop = selectedCell ?? cells[0];
+  for (const cell of cells) {
+    const selected = cell === selectedCell;
+    cell.tabIndex = cell === tabStop ? 0 : -1;
+    cell.parentElement?.setAttribute('aria-selected', String(selected));
+    cell.classList.toggle('is-selected', selected);
+  }
 }
 
 function chartIndexAt(svg, chart, event, points) {
@@ -651,6 +665,7 @@ function buildViewContext(viewName) {
     detailRequested: viewName === 'day' || viewName === 'session' || viewName === 'track',
     normalizeYears: state.normalizeYears ?? false,
     calMonth: state.calMonth,
+    calDate: state.calDate,
     month: state.calMonth?.month ?? (new Date().getMonth() + 1),
     comparePreset: state.comparePreset || 'equal_previous'
   };
@@ -731,12 +746,15 @@ async function applyAndRenderView(focusSelector = null) {
     const isEmpty = isFilterActive(state) && current.totals.records === 0;
     const viewCtx = buildViewContext(name);
     root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
+    resizeContractCharts();
+    restoreChartSelections();
+    restoreCalendarInspector();
   }
   updateFilterDynamics();
   announceFilters();
   syncHash();
   wireView();
-  if (focusSelector) appRoot.querySelector(focusSelector)?.focus();
+  if (focusSelector) (appRoot.querySelector(focusSelector) ?? appRoot.querySelector('#filter-chips'))?.focus();
 }
 
 // Sincroniza los controles de la barra con el estado (sin re-renderizarla).
@@ -1475,6 +1493,7 @@ if (cacheAvailable()) {
 
 let lastRoute = location.hash.split('?')[0];
 let pendingCalendarFocus = null;
+let pendingCalendarDate = null;
 function focusMainContent() {
   const main = document.getElementById('main-content');
   main.focus({ preventScroll: true });
@@ -1501,6 +1520,10 @@ window.addEventListener('hashchange', async () => {
     restoreHistoryState(popReturnState);
     popReturnState = null;
     pendingCalendarFocus = null;
+    pendingCalendarDate = null;
+  } else if (pendingCalendarDate) {
+    appRoot.querySelector(`.calendar-month__table [data-date="${pendingCalendarDate}"]`)?.focus({ preventScroll: true });
+    pendingCalendarDate = null;
   } else if (pendingCalendarFocus) {
     appRoot.querySelector(`[data-cal-nav="${pendingCalendarFocus}"]`)?.focus({ preventScroll: true });
     pendingCalendarFocus = null;
@@ -1653,6 +1676,7 @@ appRoot.addEventListener('click', (e) => {
 
       appRoot.querySelectorAll('[data-day].is-selected').forEach((cell) => cell.classList.remove('is-selected'));
       dayEl.classList.add('is-selected');
+      syncCalendarGridSelection(iso);
       syncHash();
       analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
     }
@@ -1663,7 +1687,7 @@ appRoot.addEventListener('click', (e) => {
     const act = calAction.dataset.calAction;
     if (act === 'filter-day' && calAnchor != null) {
       state.range = { from: calAnchor * 86400, to: calAnchor * 86400 + 86399 };
-      applyAndRenderView();
+      applyAndRenderView('#btn-cal-filter-day');
       return;
     }
     if (act === 'set-start' && calAnchor != null) {
@@ -1696,7 +1720,7 @@ appRoot.addEventListener('click', (e) => {
         const toDay = Math.floor(Date.parse(`${toInput.value}T00:00:00Z`) / 86400000);
         if (Number.isFinite(fromDay) && Number.isFinite(toDay)) {
           state.range = { from: Math.min(fromDay, toDay) * 86400, to: Math.max(fromDay, toDay) * 86400 + 86399 };
-          applyAndRenderView();
+          applyAndRenderView('#btn-cal-apply-range');
           return;
         }
       }
@@ -1803,6 +1827,33 @@ appRoot.addEventListener('click', (e) => {
 });
 
 appRoot.addEventListener('keydown', (e) => {
+  const calendarCell = e.target.closest?.('.calendar-month__table [data-date]');
+  if (calendarCell && appRoot.contains(calendarCell)) {
+    const targetDate = calendarGridTargetDate(calendarCell.dataset.date, e.key);
+    if (targetDate) {
+      e.preventDefault();
+      if (targetDate === calendarCell.dataset.date) return;
+      const target = appRoot.querySelector(`.calendar-month__table [data-date="${targetDate}"]`);
+      if (target) {
+        target.focus({ preventScroll: true });
+        target.click();
+        return;
+      }
+      const [year, month] = targetDate.split('-').map(Number);
+      state.calDate = targetDate;
+      state.calMonth = { year, month };
+      pendingCalendarDate = targetDate;
+      const [view, routeYear] = parseHash();
+      const filters = portableFilterParams(state, model);
+      const query = calendarQuery(`${filters || '?'}${filters ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears, {
+        date: state.calDate,
+        rangeFrom: state.calRangeFrom,
+        rangeTo: state.calRangeTo
+      });
+      location.hash = formatSemanticRoute('calendar', view === 'calendar' && routeYear != null ? year : null, query);
+      return;
+    }
+  }
   const nav = e.target.closest?.('.chart-nav');
   if (!nav || !appRoot.contains(nav) || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
   const chart = nav.closest('.chart-card');

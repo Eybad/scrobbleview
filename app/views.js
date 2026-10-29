@@ -1495,7 +1495,7 @@ export function calendarView(model, year, ctx = {}) {
       <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin registros dentro del período observado · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
     ${calendarInspectorHTML({ year, byMs })}
-    ${calendarMonthViewHTML({ year, month: currentMonth, daysMap, colorScale: makeScale(maxVal), byMs, dataRange })}
+    ${calendarMonthViewHTML({ year, month: currentMonth, daysMap, colorScale: makeScale(maxVal), byMs, dataRange, selectedDate: ctx.calDate })}
     ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(year))}">${calendarGrid({
       days,
       year,
@@ -1568,7 +1568,7 @@ export function calendarIndexView(model, ctx = {}) {
     </header>
     ${calendarScaleToggleHTML({ normalizeYears, maxValFormatted: valFmt(sharedMax) })}
     ${calendarInspectorHTML({ year: latestYear, byMs })}
-    ${calendarMonthViewHTML({ year: latestYear, month: currentMonth, daysMap: latestDaysMap, colorScale: normalizeYears ? makeScale(Math.max(...[...latestDaysMap.values()].map((d) => d.value), 1)) : makeScale(sharedMax), byMs, dataRange })}
+    ${calendarMonthViewHTML({ year: latestYear, month: currentMonth, daysMap: latestDaysMap, colorScale: normalizeYears ? makeScale(Math.max(...[...latestDaysMap.values()].map((d) => d.value), 1)) : makeScale(sharedMax), byMs, dataRange, selectedDate: ctx.calDate })}
     ${last != null ? card(`<a href="${esc(formatSemanticRoute('calendar', last, ctx.query))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${calendarYearGridHTML(model, last, ctx)}</div>`, '', true) : ''}
     ${prev.map((y) => {
       const yd = model.yearly.get(y);
