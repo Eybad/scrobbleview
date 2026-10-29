@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { buildDataset } from './fakes/dataset.js';
 import { aggregate } from '../src/aggregate/aggregate.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
+import { emptyFilterState } from '../src/filters.js';
 import { csvField, toCSV } from '../src/export/csv.js';
 import { exportExploreTableCSV, modelToTables } from '../src/export.js';
-import { renderView } from '../app/views.js';
+import { createAnalysisState } from '../app/analysis-state.js';
+import { renderView, receiptTextFromConfirmed } from '../app/views.js';
 
 test('A25: export explore table exports all matching rows, not only the current page', () => {
   const UTC = fixedTz('UTC', 0);
   const D0 = 1704067200;
 
-  // 35 distinct tracks: 20 match search 'Rock', 15 do not
   const events = [];
   for (let i = 0; i < 35; i++) {
     const title = i < 20 ? `Rock Anthem ${i}` : `Pop Melody ${i}`;
@@ -26,21 +27,20 @@ test('A25: export explore table exports all matching rows, not only the current 
     totalMetric: model.totals.plays,
     query: 'Rock',
     page: 1,
-    pageSize: 10 // Paginated view only displays 10 rows
+    pageSize: 10
   };
 
   const exported = exportExploreTableCSV(trackPool, queryOpts, 'tracks');
   assert.equal(exported.totalMatches, 20);
 
   const lines = exported.csv.replace(/^\uFEFF/, '').trim().split('\r\n');
-  assert.equal(lines.length, 21); // Header + 20 matched rows (NOT 10)
+  assert.equal(lines.length, 21);
   assert.ok(lines[1].includes('Rock Anthem 0'));
   assert.ok(exported.csv.includes('Rock Anthem 19'));
   assert.ok(!exported.csv.includes('Pop Melody'));
 });
 
 test('A26: CSV exporter neutralizes spreadsheet formula prefixes on strings and leaves numbers intact', () => {
-  // Formula prefixes: =, +, -, @, \t, \r
   assert.equal(csvField('=1+1'), "'=1+1");
   assert.equal(csvField('+1234'), "'+1234");
   assert.equal(csvField('-cmd'), "'-cmd");
@@ -48,13 +48,12 @@ test('A26: CSV exporter neutralizes spreadsheet formula prefixes on strings and 
   assert.equal(csvField('\tsecret'), "'\tsecret");
   assert.equal(csvField('\rtest'), '"\'\rtest"');
 
-  // Numbers are not strings, never formulas
   assert.equal(csvField(42), '42');
   assert.equal(csvField(-100), '-100');
   assert.equal(csvField(0), '0');
 });
 
-test('A27: HTML injection strings are safely escaped across all views and CSV export', () => {
+test('view markup and aggregate CSV escape injected HTML strings', () => {
   const UTC = fixedTz('UTC', 0);
   const D0 = 1704067200;
   const XSS_PAYLOAD = '<script>alert("xss")</script><img src=x onerror=alert(1)>';
@@ -65,13 +64,11 @@ test('A27: HTML injection strings are safely escaped across all views and CSV ex
   const ds = buildDataset(events);
   const model = aggregate(ds, { tz: UTC });
 
-  // Check views render without unescaped script or img tag
   const dashboardHtml = renderView('dashboard', model);
   assert.ok(!dashboardHtml.includes('<script>'));
   assert.ok(!dashboardHtml.includes('<img src=x'));
   assert.ok(dashboardHtml.includes('&lt;script&gt;'));
 
-  // Check CSV tables contain safely quoted content per RFC 4180
   const tables = modelToTables(model);
   const tracksTable = tables.find((t) => t.name === 'tracks');
   const csv = toCSV(tracksTable.headers, tracksTable.rows);
@@ -88,7 +85,6 @@ test('receiptText: formats custom period vs full year with timezone, metric crit
   const ds = buildDataset(events);
   const model = aggregate(ds, { tz: UTC });
 
-  // 1. Full year context
   const fullYearText = (await import('../app/views.js')).receiptText(model, {
     years: new Set([2024]),
     metric: 'ms'
@@ -98,15 +94,68 @@ test('receiptText: formats custom period vs full year with timezone, metric crit
   assert.ok(fullYearText.includes('Canción del año:'));
   assert.ok(fullYearText.includes('Criterio principal: Tiempo escuchado'));
 
-  // 2. Custom period context
   const periodText = (await import('../app/views.js')).receiptText(model, {
-    range: { start: 19500, end: 19800 },
+    range: { from: 19500 * 86400, to: 19800 * 86400 + 86399 },
     metric: 'plays'
   });
   assert.ok(periodText.includes('Mi resumen Scrobbleview (del período)'));
   assert.ok(periodText.includes('Artista del período:'));
   assert.ok(periodText.includes('Canción del período:'));
   assert.ok(periodText.includes('Criterio principal: Reproducciones'));
+});
+
+test('receipt text uses the confirmed model, period, and metric while a newer filter is pending', async () => {
+  const UTC = fixedTz('UTC', 0);
+  const events = [
+    { t: Date.parse('2023-06-01T12:00:00Z') / 1000, m: 60000, track: 'Past song', artist: 'Past artist', skipped: true },
+    { t: Date.parse('2024-06-01T12:00:00Z') / 1000, m: 120000, track: 'Pending song', artist: 'Pending artist', offline: true }
+  ];
+  const ds = buildDataset(events);
+  const fullModel = aggregate(ds, { tz: UTC });
+  const confirmedModel = aggregate(ds, { tz: UTC, indices: Uint32Array.of(0) });
+  const confirmedRange = {
+    from: Date.parse('2023-01-01T00:00:00Z') / 1000,
+    to: Date.parse('2023-12-31T23:59:59Z') / 1000
+  };
+  const pendingRange = {
+    from: Date.parse('2024-01-01T00:00:00Z') / 1000,
+    to: Date.parse('2024-12-31T23:59:59Z') / 1000
+  };
+  let deferFilter = false;
+  let pendingResolve;
+  const controller = createAnalysisState({
+    request() {
+      if (deferFilter) return new Promise((resolve) => { pendingResolve = resolve; });
+      return Promise.resolve({ model: confirmedModel, prev: null });
+    },
+    cancelUpdate() {}
+  });
+  controller.initialize(fullModel);
+  await controller.update({ ...emptyFilterState(), range: confirmedRange, skip: true }, {
+    view: 'wrapped', context: { hash: '#/v1/wrapped', metric: 'plays' }
+  });
+  deferFilter = true;
+  const pendingUpdate = controller.update({ ...emptyFilterState(), range: pendingRange, offline: true }, {
+    view: 'wrapped', context: { hash: '#/v1/wrapped?from=2024', metric: 'ms' }
+  });
+  const confirmed = controller.getConfirmed();
+  const text = receiptTextFromConfirmed({
+    confirmed,
+    fallbackModel: fullModel,
+    fallbackState: { range: pendingRange, years: null },
+    fallbackMetric: 'ms'
+  });
+
+  assert.match(text, /Mi resumen Scrobbleview \(año 2023\)/);
+  assert.match(text, /Criterio principal: Reproducciones/);
+  assert.match(text, /Artista del año: Past artist/);
+  assert.match(text, /Canción del año: Past song — Past artist/);
+  assert.match(text, /Filtros: Saltada: sí/);
+  assert.doesNotMatch(text, /2024|Pending artist|Pending song/);
+  assert.doesNotMatch(text, /Sin conexión/);
+  controller.cancelUpdate();
+  pendingResolve({ model: fullModel });
+  assert.equal(await pendingUpdate, null);
 });
 
 test('calendarIndexView: defers previous year grids until opened and provides calendarYearGridHTML on demand', async () => {
@@ -122,12 +171,11 @@ test('calendarIndexView: defers previous year grids until opened and provides ca
   const html = calendarIndexView(model);
   assert.ok(html.includes('data-deferred-year="2023"'));
 
-  // Standalone on-demand generation works
   const gridHtml = calendarYearGridHTML(model, 2023);
   assert.ok(gridHtml.includes('class="chart calendar"'));
 });
 
-test('A28: twenty consecutive aggregation and view render cycles execute with bounded heap', async () => {
+test('Node view-rendering smoke loop keeps temporary heap growth bounded', async () => {
   const UTC = fixedTz('UTC', 0);
   const D0 = 1704067200;
   const events = [];

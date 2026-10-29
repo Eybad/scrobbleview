@@ -105,13 +105,14 @@
     </div>
   </footer>
 
-  <dialog id="dialog-export" class="export-dialog" aria-labelledby="export-dialog-title">
+  <dialog id="dialog-export" class="export-dialog" aria-labelledby="export-dialog-title" aria-describedby="export-dialog-note">
     <form method="dialog" id="export-form">
       <h2 id="export-dialog-title">Exportar estadísticas</h2>
-      <p class="export-dialog-note">
-        Descarga de tablas tabulares en formato CSV comprimidas en un archivo ZIP. Este archivo contiene métricas agregadas para análisis en hojas de cálculo y no sustituye ni puede reimportarse como los archivos JSON originales de Spotify.
+      <p id="export-dialog-note" class="export-dialog-note">
+        Cada descarga es un ZIP con tablas CSV y un archivo de metadata. Contiene métricas agregadas para hojas de cálculo y no reemplaza ni se puede reimportar como el historial JSON original de Spotify.
       </p>
-      <div class="export-dialog-options">
+      <fieldset class="export-dialog-options">
+        <legend class="visually-hidden">Alcance de la exportación</legend>
         <label class="export-dialog-option">
           <input type="radio" name="export-scope" value="all" checked>
           <div>
@@ -130,10 +131,10 @@
           <input type="radio" name="export-scope" value="table">
           <div>
             <strong>Tabla actual del catálogo</strong>
-            <p id="export-table-desc" class="view-meta">Descarga todas las coincidencias de la consulta actual en un único archivo CSV.</p>
+            <p id="export-table-desc" class="view-meta">Descarga todas las coincidencias en un ZIP con el CSV y su metadata.</p>
           </div>
         </label>
-      </div>
+      </fieldset>
       <div class="export-dialog-actions">
         <button type="button" class="btn btn-secondary" data-action="close-export">Cancelar</button>
         <button type="submit" class="btn btn-primary" id="btn-confirm-export">Descargar</button>

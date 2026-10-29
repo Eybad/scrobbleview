@@ -23,7 +23,30 @@ test('screen, count and export share skip eligibility and the full denominator',
   const html = exploreView(model, { metric: 'plays', exploreState: { tab: 'artists', sortBy: 'skipRate' } });
   assert.match(html, /Eligible/);
   assert.doesNotMatch(html, /Unknown/);
-  assert.match(html, /Exportar CSV \(1\)/);
+  assert.match(html, /Exportar tabla \(1\)/);
+});
+
+test('catalog table export keeps global metric ranks, full-query shares, and known-duration counts', () => {
+  const artists = [
+    { id: 1, name: 'Match Alpha', plays: 10, ms: 1000, durationKnown: 8 },
+    { id: 2, name: 'Omit Beta', plays: 9, ms: 900, durationKnown: 7 },
+    { id: 3, name: 'Match Gamma', plays: 8, ms: 800 }
+  ];
+  const options = {
+    metric: 'plays', totalMetric: 40, query: 'Match', searchFields: ['name'],
+    sortBy: 'name', sortDir: 'asc', page: 2, pageSize: 1
+  };
+
+  const visible = queryCatalog(artists, options);
+  const exported = exportExploreTableCSV(artists, options, 'artists');
+  const rows = exported.csv.replace(/^\uFEFF/, '').trim().split('\r\n');
+
+  assert.equal(visible.rows[0].metricRank, 3);
+  assert.equal(visible.rows[0].share, 0.2);
+  assert.equal(exported.totalMatches, 2);
+  assert.match(rows[0], /duration_known/);
+  assert.match(rows[1], /^1,Match Alpha,1000,8,10,25\.00,/);
+  assert.match(rows[2], /^3,Match Gamma,800,,8,20\.00,/);
 });
 
 test('auxiliary rankings sort the full catalog with continuity and longevity criteria', () => {

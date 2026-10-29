@@ -5,7 +5,7 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
   const pending = new Map();
   let inFlightFilter = null;
   let pendingFilter = null;
-  let activeExport = null;
+  const activeExports = new Map();
   let dispatchedFilterCount = 0;
 
   function stop(error) {
@@ -13,7 +13,7 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
     worker = null;
     inFlightFilter = null;
     pendingFilter = null;
-    activeExport = null;
+    activeExports.clear();
     for (const request of pending.values()) request.reject(error);
     pending.clear();
   }
@@ -43,13 +43,12 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
       pending.delete(data.id);
 
       const isFilter = inFlightFilter && inFlightFilter.id === data.id;
-      const isExport = activeExport && activeExport.id === data.id;
+      const exportRequest = activeExports.get(data.id);
 
-      if (isExport) {
-        const exp = activeExport;
-        activeExport = null;
-        if (exp.cancelled) {
-          exp.reject(new AbortError('Exportación cancelada.'));
+      if (exportRequest) {
+        activeExports.delete(data.id);
+        if (exportRequest.cancelled) {
+          exportRequest.reject(new AbortError('Exportación cancelada.'));
           return;
         }
       }
@@ -117,12 +116,12 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
         const id = ++nextId;
         const req = { id, resolve, reject, onProgress, cancelled: false };
         if (type === 'export') {
-          activeExport = req;
+          activeExports.set(id, req);
         }
         pending.set(id, req);
         try { worker.postMessage({ id, type, payload }); }
         catch (error) {
-          if (activeExport === req) activeExport = null;
+          activeExports.delete(id);
           pending.delete(id);
           reject(error);
         }
@@ -139,12 +138,12 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
       }
     },
     cancelExport() {
-      if (activeExport) {
-        activeExport.cancelled = true;
-        activeExport.reject(new AbortError('Exportación cancelada.'));
-        pending.delete(activeExport.id);
-        activeExport = null;
+      for (const request of activeExports.values()) {
+        request.cancelled = true;
+        request.reject(new AbortError('Exportación cancelada.'));
+        pending.delete(request.id);
       }
+      activeExports.clear();
     },
     cancel() { stop(new AbortError('Procesamiento cancelado.')); },
     cancelImport() { stop(new AbortError('Procesamiento cancelado.')); }

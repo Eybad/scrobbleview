@@ -6,6 +6,9 @@ import { emptyFilterState } from '../src/filters.js';
 import { createAnalysisState } from '../app/analysis-state.js';
 import { renderView } from '../app/views.js';
 import { parseRoute, resolveRoute } from '../app/routes.js';
+import { describeCatalogQuery } from '../app/catalog-query.js';
+import { exportExploreTableCSV } from '../src/export.js';
+import { crc32 } from '../src/export/zip.js';
 
 function clientForTest(t) {
   const client = createAnalysisClient({ createWorker() {
@@ -26,6 +29,81 @@ function clientForTest(t) {
 function file(events) {
   const blob = new Blob([JSON.stringify(events)]);
   return { name: 'synthetic.json', size: blob.size, lastModified: 1, blob };
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let index = text.charCodeAt(0) === 0xFEFF ? 1 : 0; index < text.length; index++) {
+    const char = text[index];
+    if (quoted && char === '"' && text[index + 1] === '"') {
+      field += '"';
+      index++;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (!quoted && char === ',') {
+      row.push(field);
+      field = '';
+    } else if (!quoted && char === '\r' && text[index + 1] === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      index++;
+    } else {
+      field += char;
+    }
+  }
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function readCsvArchive(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  for (let index = bytes.length - 22; index >= Math.max(0, bytes.length - 65557); index--) {
+    if (view.getUint32(index, true) === 0x06054b50) { eocd = index; break; }
+  }
+  assert.notEqual(eocd, -1);
+  const count = view.getUint16(eocd + 10, true);
+  let offset = view.getUint32(eocd + 16, true);
+  const decoder = new TextDecoder();
+  const files = new Map();
+
+  for (let entryIndex = 0; entryIndex < count; entryIndex++) {
+    assert.equal(view.getUint32(offset, true), 0x02014b50);
+    const method = view.getUint16(offset + 10, true);
+    const crc = view.getUint32(offset + 16, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+    let content = compressed;
+    if (method === 8) {
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      content = new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+    assert.equal(method === 0 || method === 8, true);
+    assert.equal(content.length, uncompressedSize);
+    assert.equal(crc32(content), crc);
+    files.set(name, decoder.decode(content));
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return files;
+}
+
+function metadataMap(csv) {
+  return new Map(parseCsv(csv).slice(1).map(([key, value]) => [key, value]));
 }
 
 const events = [
@@ -61,9 +139,120 @@ test('real worker preserves filters, historical discovery and deferred album att
   assert.equal(filtered.prev.records, 0);
   const reset = await client.request('filter', { state: emptyFilterState() });
   assert.equal(reset.model, null);
-  const exported = await client.request('export');
+  const compareRanges = {
+    rangeA: { from: Date.parse('2024-01-01T00:00:00Z') / 1000, to: Date.parse('2024-01-15T23:59:59Z') / 1000 },
+    rangeB: { from: Date.parse('2024-01-16T00:00:00Z') / 1000, to: Date.parse('2024-01-31T23:59:59Z') / 1000 }
+  };
+  const exported = await client.request('export', { compareRanges });
   assert.match(exported.filename, /\.zip$/);
   assert.equal(new DataView(exported.bytes.buffer).getUint32(0, true), 0x04034b50);
+  const archive = await readCsvArchive(exported.bytes);
+  const metadata = metadataMap(archive.get('metadata.csv'));
+  assert.equal(metadata.get('scope'), 'all');
+  assert.equal(metadata.get('schema_version'), '2');
+  assert.equal(metadata.get('records_in_scope'), '2');
+  assert.equal(metadata.has('observed_range_last_local'), true);
+  assert.equal(metadata.has('last_event_local'), false);
+  assert.equal(metadata.get('compare.range_a.local_epoch_s'), `${compareRanges.rangeA.from}..${compareRanges.rangeA.to}`);
+  assert.equal(metadata.get('compare.range_b.local_epoch_s'), `${compareRanges.rangeB.from}..${compareRanges.rangeB.to}`);
+  assert.match(archive.get('artists.csv'), /duration_known/);
+  const albumTracks = parseCsv(archive.get('album_tracks.csv'));
+  const trackId = String([...model.tracks.byId.keys()][0]);
+  assert.deepEqual(new Set(albumTracks.slice(1).map(([albumId]) => albumId)), new Set([...model.albums.byId.keys()].map(String)));
+  assert.deepEqual(albumTracks.slice(1).map((row) => row.slice(1, 4)), [[trackId, '1', '180000'], [trackId, '1', '180000']]);
+});
+
+test('table export reads the worker ZIP and matches the confirmed catalog query and filters', async (t) => {
+  const client = clientForTest(t);
+  const events = [
+    { ts: '2024-01-01T00:00:00Z', ms_played: 60000, skipped: null, shuffle: null, offline: null,
+      master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'A', master_metadata_album_album_name: 'First' },
+    { ts: '2024-01-02T00:00:00Z', skipped: null, shuffle: null, offline: null,
+      master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'A', master_metadata_album_album_name: 'Second' },
+    { ts: '2024-01-03T00:00:00Z', ms_played: 120000, skipped: null, shuffle: null, offline: null,
+      master_metadata_track_name: 'Echo', master_metadata_album_artist_name: 'B', master_metadata_album_album_name: 'Third' },
+    { ts: '2024-01-04T00:00:00Z', ms_played: 30000, skipped: null, shuffle: null, offline: null,
+      master_metadata_track_name: '=1+1', master_metadata_album_artist_name: 'C', master_metadata_album_album_name: 'Fourth' }
+  ];
+  const { model: fullModel } = await client.request('load', { files: [file(events)], timeZone: 'UTC' });
+  const filterState = {
+    ...emptyFilterState(),
+    range: { from: Date.parse('2024-01-01T00:00:00Z') / 1000, to: Date.parse('2024-01-04T23:59:59Z') / 1000 },
+    years: new Set([2024]),
+    months: new Set([202401]),
+    dows: new Set([0, 1, 2, 3]),
+    hours: new Set([0]),
+    skip: 'unknown',
+    shuffle: 'unknown',
+    offline: 'unknown'
+  };
+  const filtered = await client.request('filter', { state: filterState });
+  const exploreState = {
+    tab: 'tracks', query: 'Echo', sortBy: 'name', sortDir: 'asc', page: 1, pageSize: 25,
+    minPlays: null, minMonths: null
+  };
+  const description = describeCatalogQuery(filtered.model, { metric: 'plays', exploreState });
+  const visible = (await import('../src/query.js')).queryCatalog(description.pool, description.options);
+  const expected = exportExploreTableCSV(description.pool, description.options, description.tab);
+  const result = await client.request('export', {
+    scope: 'table', filterState, metric: 'plays', exploreState
+  });
+  const archive = await readCsvArchive(result.bytes);
+  const metadata = metadataMap(archive.get('metadata.csv'));
+
+  assert.equal(fullModel.totals.records, 4);
+  assert.equal(filtered.model.totals.durationKnown, 3);
+  assert.equal(filtered.model.totals.durationUnknown, 1);
+  assert.equal(visible.totalMatches, 2);
+  assert.equal(visible.rows[1].metricRank, 2);
+  assert.equal(result.totalMatches, visible.totalMatches);
+  assert.equal(archive.get('tracks.csv'), expected.csv.replace(/^\uFEFF/, ''));
+  assert.equal(metadata.get('scope'), 'table');
+  assert.equal(metadata.get('metric'), 'plays');
+  assert.equal(metadata.get('effective_schema'), 'catalog-table-v1');
+  assert.equal(metadata.get('records_in_scope'), '4');
+  assert.equal(metadata.get('duration_known_records'), '3');
+  assert.equal(metadata.get('duration_unknown_records'), '1');
+  assert.equal(metadata.get('skip_known_records'), '0');
+  assert.equal(metadata.get('skip_unknown_records'), '4');
+  assert.equal(metadata.get('shuffle_known_records'), '0');
+  assert.equal(metadata.get('shuffle_unknown_records'), '4');
+  assert.equal(metadata.get('offline_known_records'), '0');
+  assert.equal(metadata.get('offline_unknown_records'), '4');
+  assert.equal(metadata.get('catalog.match_count'), '2');
+  assert.equal(metadata.get('catalog.search'), 'Echo');
+  assert.equal(metadata.get('catalog.sort_direction'), 'asc');
+  assert.equal(metadata.get('catalog.share_denominator'), '4');
+  assert.equal(metadata.get('filter.range.from'), String(filterState.range.from));
+  assert.equal(metadata.get('filter.range.to'), String(filterState.range.to));
+  assert.equal(metadata.get('filter.years'), '2024');
+  assert.equal(metadata.get('filter.months'), '202401');
+  assert.equal(metadata.get('filter.dows'), '0;1;2;3');
+  assert.equal(metadata.get('filter.hours'), '0');
+  assert.equal(metadata.get('filter.skip'), 'unknown');
+  assert.equal(metadata.get('filter.shuffle'), 'unknown');
+  assert.equal(metadata.get('filter.offline'), 'unknown');
+  assert.equal(metadata.get('observed_range_local_epoch_s'), `${filterState.range.from}..${Date.parse('2024-01-04T00:00:00Z') / 1000}`);
+  assert.equal(metadata.has('last_event_local'), false);
+  const exportedRows = parseCsv(archive.get('tracks.csv'));
+  assert.equal(exportedRows.length, 3);
+  assert.equal(exportedRows[1][0], '1');
+  assert.equal(exportedRows[1][4], '1');
+  assert.equal(exportedRows[2][0], '2');
+
+  const artistId = [...fullModel.artists.byId.entries()].find(([, artist]) => artist.name === 'A')[0];
+  const entitySelection = { ...filterState, artistId };
+  const selection = await client.request('export', { scope: 'selection', filterState: entitySelection, metric: 'plays' });
+  const selectionArchive = await readCsvArchive(selection.bytes);
+  const selectionMetadata = metadataMap(selectionArchive.get('metadata.csv'));
+  assert.equal(selectionMetadata.get('scope'), 'selection');
+  assert.equal(selectionMetadata.get('filter.artistId'), String(artistId));
+  assert.equal(selectionMetadata.get('filter.artistId.name'), 'A');
+  assert.equal(selectionMetadata.get('records_in_scope'), '2');
+
+  const completeExport = await client.request('export');
+  const completeArchive = await readCsvArchive(completeExport.bytes);
+  assert.match(completeArchive.get('tracks.csv'), /,'=1\+1,/);
 });
 
 test('worker errors are localized and a later request can recover', async (t) => {

@@ -30,6 +30,14 @@ La lectura limita bytes, eventos, longitud de tokens y anidamiento. El ZIP limit
 
 La caché es opcional y descartable. Errores de apertura o transacción se informan como fallo de guardado/borrado o ausencia de una caché utilizable. No se anuncia borrado exitoso antes de confirmar la transacción. La serialización conserva identidades Unicode y rechaza diccionarios con conteos o rangos inválidos. Las cachés anteriores a los bits de validez no se reinterpretan como si sus flags fueran conocidos: hay que reimportar los archivos.
 
+## Exportación y contexto confirmado
+
+La exportación de tabla usa la misma descripción de catálogo que el render: selección analítica, búsqueda, campos buscados, elegibilidad, orden y desempates. El Worker exporta todas las coincidencias sin paginación; la posición y cuota mantienen sus denominadores de catálogo completos. El ZIP de tabla separa `<tab>.csv` de `metadata.csv`, para que la metadata no altere el formato tabular. La metadata declara versión/esquema, zona horaria, alcance, filtros y rangos, métrica y unidad, elegibilidad, denominadores y definiciones de ranking/cuota.
+
+El diálogo toma el conteo y la dirección efectiva del resultado ya renderizado. Si no encuentra ese resultado, deshabilita la opción de tabla y muestra un mensaje recuperable en vez de recalcular el catálogo. Cancelar exportaciones concurrentes invalida sus respuestas sin terminar el Worker ni descartar el dataset. La verificación Node lee el ZIP generado por el Worker, revisa CRC y compara filtros, cantidad y filas con la consulta; todavía no prueba la descarga del navegador.
+
+Copiar resumen toma modelo, período y métrica del último contexto confirmado. Restablecer preferencias elimina ajustes visuales persistidos y sincroniza URL/controles conservando filtros analíticos, historial en memoria e IndexedDB. Las operaciones de almacenamiento siguen sus errores y confirmaciones transaccionales; las regresiones actuales usan IndexedDB simulado, con aceptación del navegador pendiente.
+
 ## Procesamiento y memoria
 
 La aplicación ejecuta lectura, preparación de zona horaria, agregación, filtros y exportación en un [Worker de módulo](https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker). La comparación anterior calcula solo conteos y tiempo. Los cambios de vista o de controles de tabla reutilizan las estadísticas cuando los filtros no cambian.

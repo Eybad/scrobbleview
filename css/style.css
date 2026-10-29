@@ -2919,6 +2919,9 @@ details.calendar-year summary:hover {
   padding: var(--sp-4);
   max-width: 520px;
   width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
   margin: auto;
 }
@@ -2946,6 +2949,10 @@ details.calendar-year summary:hover {
   flex-direction: column;
   gap: var(--sp-3);
   margin-bottom: var(--sp-4);
+  min-inline-size: 0;
+  width: 100%;
+  border: 0;
+  padding: 0;
 }
 
 .export-dialog-option {
@@ -2957,6 +2964,14 @@ details.calendar-year summary:hover {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-2);
+}
+
+.export-dialog-option > div {
+  min-width: 0;
+}
+
+.export-dialog-option p {
+  overflow-wrap: anywhere;
 }
 
 .export-dialog-option:hover {

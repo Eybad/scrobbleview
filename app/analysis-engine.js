@@ -8,9 +8,10 @@ import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { applyFilters, countFiltered, emptyFilterState } from '../src/filters.js';
 import { fileBytes } from '../src/parse/adapters/file-bytes.js';
 import { zipSources } from '../src/parse/adapters/zip-bytes.js';
-import { modelToTables, exportFilename } from '../src/export.js';
+import { modelToTables, exportExploreTableCSV, exportFilename } from '../src/export.js';
 import { toCSV } from '../src/export/csv.js';
 import { buildZip } from '../src/export/zip.js';
+import { describeCatalogQuery } from './catalog-query.js';
 import { save, load } from './storage.js';
 import { assertDistinctFiles } from './input.js';
 import { isFilterActive, previousRange } from './filter-ui.js';
@@ -69,6 +70,153 @@ function compareProjection(model) {
     entities,
     daily: new Map([...model.daily].map(([day, totals]) => [day, { plays: totals.plays, ms: totals.ms }]))
   };
+}
+
+function metadataFilterRows(filterState, model) {
+  const rows = [];
+  const filters = filterState ?? emptyFilterState();
+  const setValue = (value) => value == null ? 'all' : [...value].sort((a, b) => a - b).join(';');
+  const flagValue = (value) => value == null ? 'all' : String(value);
+  const entityValue = (kind, id) => {
+    if (id == null) return ['all', ''];
+    const entity = model[kind].byId.get(id);
+    const label = kind === 'tracks' || kind === 'albums' ? `${entity?.name ?? ''} — ${entity?.artist ?? ''}` : entity?.name ?? '';
+    return [String(id), label];
+  };
+
+  rows.push(['filter.range.from', filters.range?.from ?? 'all']);
+  rows.push(['filter.range.to', filters.range?.to ?? 'all']);
+  rows.push(['filter.range.unit', 'local epoch seconds']);
+  rows.push(['filter.years', setValue(filters.years)]);
+  rows.push(['filter.months', setValue(filters.months)]);
+  rows.push(['filter.months.unit', 'YYYYMM']);
+  rows.push(['filter.dows', setValue(filters.dows)]);
+  rows.push(['filter.dows.unit', 'Monday is 0']);
+  rows.push(['filter.hours', setValue(filters.hours)]);
+  rows.push(['filter.hours.unit', 'local hour']);
+  rows.push(['filter.skip', flagValue(filters.skip)]);
+  rows.push(['filter.shuffle', flagValue(filters.shuffle)]);
+  rows.push(['filter.offline', flagValue(filters.offline)]);
+
+  for (const [field, kind, id] of [
+    ['artistId', 'artists', filters.artistId],
+    ['trackId', 'tracks', filters.trackId],
+    ['albumId', 'albums', filters.albumId]
+  ]) {
+    const [value, label] = entityValue(kind, id);
+    rows.push([`filter.${field}`, value]);
+    if (id != null) rows.push([`filter.${field}.name`, label]);
+  }
+  return rows;
+}
+
+function localTimestamp(epochLocalSeconds) {
+  return new Date(epochLocalSeconds * 1000).toISOString().slice(0, 16).replace('T', ' ');
+}
+
+function catalogEligibility(options) {
+  const rules = [];
+  if (options.minPlays != null) rules.push(`plays >= ${options.minPlays}`);
+  if (options.minMonths != null) rules.push(`active months >= ${options.minMonths}`);
+  if (options.minKnownSkips != null) rules.push(`known skips >= ${options.minKnownSkips}`);
+  if (options.sortBy === 'constancy') rules.push('entity has first and last observed dates');
+  if (options.sortBy === 'dominance') rules.push('dominant track represents at least 80% of artist plays');
+  if (options.sortBy === 'forgotten') rules.push('entity has a last observed date');
+  return rules.length ? rules.join('; ') : 'No additional eligibility rules.';
+}
+
+function exportMetadataRows(model, {
+  scope,
+  metric,
+  filterState,
+  compareRanges,
+  catalog = null
+}) {
+  const totals = model.totals;
+  const firstLocal = model.meta?.firstTs;
+  const lastLocal = model.meta?.lastTs;
+  const rows = [
+    ['format', catalog ? 'scrobbleview-catalog-table' : 'scrobbleview-aggregated-export'],
+    ['export_version', 1],
+    ['schema_version', 2],
+    ['effective_schema', catalog ? 'catalog-table-v1' : 'aggregated-csv-v2'],
+    ['exported_at_utc', new Date().toISOString()],
+    ['timezone', model.meta?.tzId ?? ''],
+    ['scope', scope],
+    ['metric', metric],
+    ['metric_unit', metric === 'ms' ? 'milliseconds' : 'playback events'],
+    ['records_in_scope', totals.records],
+    ['total_ms', totals.ms],
+    ['duration_known_records', totals.durationKnown],
+    ['duration_unknown_records', totals.durationUnknown],
+    ['skip_known_records', totals.skippedKnown],
+    ['skip_unknown_records', totals.records - totals.skippedKnown],
+    ['shuffle_known_records', totals.shuffleKnown],
+    ['shuffle_unknown_records', totals.records - totals.shuffleKnown],
+    ['offline_known_records', totals.offlineKnown],
+    ['offline_unknown_records', totals.records - totals.offlineKnown],
+    ['observed_range_first_local', firstLocal == null ? '' : localTimestamp(firstLocal)],
+    ['observed_range_last_local', lastLocal == null ? '' : localTimestamp(lastLocal)],
+    ['observed_range_local_epoch_s', firstLocal == null ? '' : `${firstLocal}..${lastLocal}`],
+    ['definitions.total_ms', 'Sum of parsed milliseconds for events in scope; duration-unknown events remain in records.'],
+    ['definitions.records', 'Count of successfully parsed playback events in scope.'],
+    ['definitions.plays', 'Playback event count.'],
+    ['definitions.duration_known_records', 'Events whose playback duration is known; use this as the denominator for duration means.'],
+    ['definitions.duration_unknown_records', 'Events whose playback duration is unknown; they are not zero-duration observations.'],
+    ['definitions.skip_known_records', 'Events with a known skipped flag; use this as the denominator for skip rates.'],
+    ['definitions.skip_unknown_records', 'Events whose skipped flag is unknown.'],
+    ['definitions.shuffle_known_records', 'Events with a known shuffle flag.'],
+    ['definitions.shuffle_unknown_records', 'Events whose shuffle flag is unknown.'],
+    ['definitions.offline_known_records', 'Events with a known offline flag.'],
+    ['definitions.offline_unknown_records', 'Events whose offline flag is unknown.'],
+    ['definitions.timestamp_columns', 'Local wall-clock values in timezone above; *_utc values are UTC epoch seconds.'],
+    ['definitions.ms', 'Milliseconds.'],
+    ['definitions.days', 'Distinct local calendar days.'],
+    ['definitions.month', 'Absolute month encoded as YYYYMM.'],
+    ['definitions.session_duration_s', 'Estimated session span in seconds; it is not the sum of listened milliseconds.'],
+    ['grouping', catalog ? catalog.tab : 'totals; artist; track-by-artist; album-by-artist; exact album-track attribution; sessions; month'],
+    ['ordering', catalog ? `catalog sort ${catalog.sortBy}, ${catalog.effectiveDir}; rows include every match and omit pagination` : 'Each table uses its documented key order.'],
+    ['eligibility', catalog ? catalog.eligibility : 'All successfully parsed events in the selected scope; parser-rejected records are excluded.'],
+    ['note', 'Agregados para análisis. No reimportar como historial original de Spotify.']
+  ];
+
+  rows.push(...metadataFilterRows(filterState, model));
+
+  if (catalog) {
+    rows.push(
+      ['catalog.table', catalog.tab],
+      ['catalog.match_count', catalog.matchCount],
+      ['catalog.entity_count', catalog.entityCount],
+      ['catalog.search', catalog.query],
+      ['catalog.search_fields', catalog.searchFields.join(';')],
+      ['catalog.sort_by', catalog.sortBy],
+      ['catalog.sort_direction', catalog.effectiveDir],
+      ['catalog.minimum_plays', catalog.minPlays ?? 'none'],
+      ['catalog.minimum_active_months', catalog.minMonths ?? 'none'],
+      ['catalog.minimum_known_skips', catalog.minKnownSkips ?? 'none'],
+      ['catalog.share_denominator', catalog.totalMetric],
+      ['definitions.catalog_rank', 'One-based global position by the principal metric within the analytical selection, before catalog search and eligibility filters.'],
+      ['definitions.catalog_share', 'Entity principal metric divided by the full analytical-selection metric total, before catalog search and eligibility filters.'],
+      ['definitions.catalog_share_precision', 'CSV share is a percentage rounded to two decimal places.'],
+      ['definitions.catalog_sort_ties', 'Criterion-specific tie-breakers are applied before the final global metric rank and entity id.']
+    );
+  }
+
+  if (compareRanges?.rangeA && compareRanges?.rangeB) {
+    rows.push(
+      ['compare.range_a.local_epoch_s', `${compareRanges.rangeA.from}..${compareRanges.rangeA.to}`],
+      ['compare.range_b.local_epoch_s', `${compareRanges.rangeB.from}..${compareRanges.rangeB.to}`]
+    );
+  }
+  return rows;
+}
+
+function csvArchiveEntries(tables) {
+  const encoder = new TextEncoder();
+  return tables.map(({ name, headers, rows }) => ({
+    name: `${name}.csv`,
+    bytes: encoder.encode(`\uFEFF${toCSV(headers, rows)}`)
+  }));
 }
 
 export function createAnalysisEngine() {
@@ -288,45 +436,65 @@ export function createAnalysisEngine() {
         return model.albums.byId.get(id) ?? null;
       }
       if (type === 'export') {
-        const scope = payload.scope === 'selection' ? 'selection' : 'all';
-        const filterState = scope === 'selection' && payload.filterState ? payload.filterState : emptyFilterState();
+        const scope = ['selection', 'table'].includes(payload.scope) ? payload.scope : 'all';
+        const filterState = scope !== 'all' && payload.filterState ? payload.filterState : emptyFilterState();
+        const metric = payload.metric === 'plays' ? 'plays' : 'ms';
         const model = await aggregateSelection(filterState, { albumDetails: undefined, onProgress: report });
         report(0, 'Exportando tablas');
-        const encoder = new TextEncoder();
-        const tables = modelToTables(model);
+        const timestamp = exportFilename(Math.floor(Date.now() / 1000))
+          .replace(/^scrobbleview-/, '')
+          .replace(/\.json$/, '.zip');
 
-        const metaRows = [
-          ['format', 'scrobbleview-aggregated-export'],
-          ['export_version', 1],
-          ['schema_version', 2],
-          ['exported_at_utc', new Date().toISOString()],
-          ['timezone', tz?.id ?? timeZone],
-          ['scope', scope],
-          ['total_records', model.totals.records],
-          ['total_ms', model.totals.ms],
-          ['first_event_local', model.meta?.firstEventLocal ?? ''],
-          ['last_event_local', model.meta?.lastEventLocal ?? ''],
-          ['is_filtered', scope === 'selection' && payload.filterState && isFilterActive(payload.filterState) ? 'true' : 'false'],
-          ['note', 'Agregados para analisis estadistico. No reimportar como historial original de Spotify.']
-        ];
-        if (payload.filterState && scope === 'selection') {
-          if (payload.filterState.range) metaRows.push(['filter_range', `${payload.filterState.range.start}..${payload.filterState.range.end}`]);
-          if (payload.filterState.years?.size) metaRows.push(['filter_years', [...payload.filterState.years].join(';')]);
-          if (payload.filterState.dow?.size) metaRows.push(['filter_dow', [...payload.filterState.dow].join(';')]);
-          if (payload.filterState.hours?.size) metaRows.push(['filter_hours', [...payload.filterState.hours].join(';')]);
+        if (scope === 'table') {
+          const description = describeCatalogQuery(model, {
+            metric,
+            exploreState: payload.exploreState
+          });
+          const exported = exportExploreTableCSV(description.pool, description.options, description.tab);
+          const catalog = {
+            tab: description.tab,
+            matchCount: exported.totalMatches,
+            entityCount: exported.totalItems,
+            query: description.options.query,
+            searchFields: description.options.searchFields,
+            sortBy: description.options.sortBy,
+            effectiveDir: exported.effectiveDir,
+            minPlays: description.options.minPlays,
+            minMonths: description.options.minMonths,
+            minKnownSkips: description.options.minKnownSkips,
+            totalMetric: description.options.totalMetric,
+            eligibility: catalogEligibility(description.options)
+          };
+          const metadataCsv = new TextEncoder().encode(`\uFEFF${toCSV(['key', 'value'], exportMetadataRows(model, {
+              scope,
+              metric,
+              filterState,
+              compareRanges: payload.compareRanges,
+              catalog
+            }))}`);
+          const tableCsv = new TextEncoder().encode(exported.csv);
+          const bytes = await buildZip([
+            { name: 'metadata.csv', bytes: metadataCsv },
+            { name: `${description.tab}.csv`, bytes: tableCsv }
+          ]);
+          report(1, 'Exportación lista');
+          return { bytes, filename: `scrobbleview-${description.tab}-${timestamp}`, totalMatches: exported.totalMatches };
         }
+
+        const tables = modelToTables(model);
         tables.unshift({
           name: 'metadata',
           headers: ['key', 'value'],
-          rows: metaRows
+          rows: exportMetadataRows(model, {
+            scope,
+            metric,
+            filterState,
+            compareRanges: payload.compareRanges
+          })
         });
-
-        const entries = tables.map(({ name, headers, rows }) => ({
-          name: `${name}.csv`, bytes: encoder.encode(`\uFEFF${toCSV(headers, rows)}`)
-        }));
-        const bytes = await buildZip(entries);
+        const bytes = await buildZip(csvArchiveEntries(tables));
         report(1, 'Exportación lista');
-        return { bytes, filename: exportFilename(Math.floor(Date.now() / 1000)).replace(/\.json$/, '.zip') };
+        return { bytes, filename: `scrobbleview-${timestamp}` };
       }
       throw new TypeError('Operación de análisis desconocida.');
     }

@@ -65,6 +65,31 @@ test('A13: burst of 5 filter requests dispatches at most 2 requests to the worke
   assert.ok(client.dispatchedFilterCount <= 2, `expected <= 2 dispatched filter requests, got ${client.dispatchedFilterCount}`);
 });
 
+test('B14: filter coalescing does not drop a concurrent export or save request', async (t) => {
+  const client = clientForTest(t);
+  const { model } = await client.request('load', { files: [file(events)], timeZone: 'UTC' });
+  assert.equal(model.totals.records, 3);
+
+  const filters = [
+    { ...emptyFilterState(), skip: true },
+    { ...emptyFilterState(), offline: true },
+    { ...emptyFilterState(), shuffle: true },
+    { ...emptyFilterState(), skip: false },
+    { ...emptyFilterState(), range: { from: Date.parse('2024-03-01') / 1000, to: Date.parse('2024-03-31') / 1000 } }
+  ].map((state) => client.request('filter', { state }));
+  const exportRequest = client.request('export', {});
+  const saveRequest = client.request('save');
+  const [filterResults, exported, saved] = await Promise.all([
+    Promise.all(filters), exportRequest, saveRequest
+  ]);
+
+  assert.ok(filterResults.at(-1).model);
+  assert.equal(filterResults.at(-1).model.totals.records, 1);
+  assert.equal(exported.bytes[0], 0x50);
+  assert.equal(saved, false);
+  assert.ok(client.dispatchedFilterCount <= 2);
+});
+
 test('A14: logical cancellation of filter update does not terminate worker or discard dataset', async (t) => {
   const client = clientForTest(t);
   const { model } = await client.request('load', { files: [file(events)], timeZone: 'UTC' });
@@ -94,6 +119,37 @@ test('A14: logical cancellation of export does not terminate worker', async (t) 
   // Subsequent request works without re-loading
   const filter = await client.request('filter', { state: emptyFilterState() });
   assert.equal(filter.model, null);
+});
+
+test('overlapping export requests cancel together and ignore cancelled late results', async () => {
+  const messages = [];
+  let onMessage;
+  const worker = {
+    postMessage(message) { messages.push(message); },
+    terminate() {},
+    addEventListener(type, listener) {
+      if (type === 'message') onMessage = listener;
+    }
+  };
+  const client = createAnalysisClient({ createWorker: () => worker });
+  const first = client.request('export');
+  const second = client.request('export');
+
+  client.cancelExport();
+  await Promise.all([
+    assert.rejects(first, (error) => error.code === 'E_ABORT'),
+    assert.rejects(second, (error) => error.code === 'E_ABORT')
+  ]);
+  onMessage({ data: { id: messages[0].id, result: { bytes: new ArrayBuffer(1) } } });
+
+  const latest = client.request('export');
+  const latestId = messages[2].id;
+  onMessage({ data: { id: latestId, result: { bytes: new ArrayBuffer(2) } } });
+  const result = await latest;
+
+  assert.equal(messages.length, 3);
+  assert.equal(result.bytes.byteLength, 2);
+  client.cancel();
 });
 
 test('analysisState preserves confirmed model and supports cancelUpdate', async () => {

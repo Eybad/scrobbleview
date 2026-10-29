@@ -1,18 +1,10 @@
-// src/export.js — modelo procesado → JSON plano (backup) y tablas CSV (análisis)
-//
-// Seam puro: modelToJSON(model, { now }) → objeto sin Map/Set/typed arrays,
-// listo para JSON.stringify. Serializa el modelo recibido; el caller elige su alcance.
-// Las claves de Map numéricas se serializan como strings de objeto (igual
-// que JSON haría de todos modos); los Set salen como arrays ordenados.
-// modelToTables(model) aplana los maps a filas relacionales para el export
-// de análisis (un CSV por tabla, clave foránea artist_id en tracks/albums).
-
 import { civilFromDays } from './aggregate/impl/derive.js';
 import { queryCatalog } from './query.js';
 import { toCSV } from './export/csv.js';
 
 export const EXPORT_FORMAT = 'scrobbleview-export';
 export const EXPORT_VERSION = 1;
+const ALL_ROWS_PAGE_SIZE = Number.MAX_SAFE_INTEGER;
 
 function toPlain(v) {
   if (v instanceof Map) {
@@ -22,7 +14,6 @@ function toPlain(v) {
   }
   if (v instanceof Set) {
     const arr = [...v].map(toPlain);
-    // Sets del modelo guardan números (días, meses, ids): ordenados.
     if (arr.every((x) => typeof x === 'number')) arr.sort((a, b) => a - b);
     return arr;
   }
@@ -48,14 +39,12 @@ export function modelToJSON(model, { now = Math.floor(Date.now() / 1000) } = {})
   };
 }
 
-// exportedAt (epoch s, UTC) → 'scrobbleview-YYYYMMDD-HHMMSS.json'.
 export function exportFilename(exportedAt) {
   const d = new Date(exportedAt * 1000);
   const p = (n, w = 2) => String(n).padStart(w, '0');
   return `scrobbleview-${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}.json`;
 }
 
-// epoch-local (s) → 'YYYY-MM-DD HH:MM': legible en Sheets/Excel sin fórmulas.
 function locISO(loc) {
   const c = civilFromDays(Math.floor(loc / 86400));
   const sec = ((loc % 86400) + 86400) % 86400;
@@ -63,12 +52,9 @@ function locISO(loc) {
   return `${c.y}-${p(c.m)}-${p(c.d)} ${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}`;
 }
 
-const TRACK_KEY_ARTIST = 4294967296; // 2^32: tk = tr*2^32 + ar
+const TRACK_KEY_ARTIST = 2 ** 32;
 
 export function modelToTables(model) {
-  // tracks.album_id is 0 unless every event has the same known album.
-  // album_tracks carries exact attribution; session duration_s is estimated,
-  // start is local display time and start_utc/end_utc are epoch seconds.
   const tables = [{ name: 'totals', headers: ['metric', 'value'], rows: Object.entries(model.totals).filter(([, value]) => value === null || typeof value === 'number') }];
   const artists = [...model.artists.byId.entries()].sort((a, b) => a[0] - b[0]);
   tables.push({
@@ -109,18 +95,19 @@ export function modelToTables(model) {
 }
 
 export function exportExploreTableCSV(items, queryOpts = {}, tab = 'artists') {
-  const result = queryCatalog(items, { ...queryOpts, page: 1, pageSize: 10000000 });
+  const result = queryCatalog(items, { ...queryOpts, page: 1, pageSize: ALL_ROWS_PAGE_SIZE });
   let headers = [];
   let rows = [];
 
   if (tab === 'artists') {
-    headers = ['#', 'Artista', 'Tiempo (ms)', 'Reproducciones', 'Cuota (%)', 'Días activos', 'Meses activos', 'Primera escucha', 'Última escucha'];
-    rows = result.rows.map((entry, idx) => {
+    headers = ['#', 'Artista', 'Tiempo (ms)', 'duration_known', 'Reproducciones', 'Cuota (%)', 'Días activos', 'Meses activos', 'Primera escucha', 'Última escucha'];
+    rows = result.rows.map((entry) => {
       const a = entry.item;
       return [
-        idx + 1,
+        entry.metricRank,
         a.name,
         a.ms,
+        a.durationKnown ?? '',
         a.plays,
         (entry.share * 100).toFixed(2),
         a.days?.size ?? a.days ?? 0,
@@ -130,14 +117,15 @@ export function exportExploreTableCSV(items, queryOpts = {}, tab = 'artists') {
       ];
     });
   } else if (tab === 'tracks') {
-    headers = ['#', 'Canción', 'Artista', 'Tiempo (ms)', 'Reproducciones', 'Cuota (%)', 'Días activos', 'Primera escucha', 'Última escucha'];
-    rows = result.rows.map((entry, idx) => {
+    headers = ['#', 'Canción', 'Artista', 'Tiempo (ms)', 'duration_known', 'Reproducciones', 'Cuota (%)', 'Días activos', 'Primera escucha', 'Última escucha'];
+    rows = result.rows.map((entry) => {
       const tr = entry.item;
       return [
-        idx + 1,
+        entry.metricRank,
         tr.name,
         tr.artist,
         tr.ms,
+        tr.durationKnown ?? '',
         tr.plays,
         (entry.share * 100).toFixed(2),
         tr.days?.size ?? tr.days ?? 0,
@@ -146,14 +134,15 @@ export function exportExploreTableCSV(items, queryOpts = {}, tab = 'artists') {
       ];
     });
   } else {
-    headers = ['#', 'Álbum', 'Artista', 'Tiempo (ms)', 'Reproducciones', 'Cuota (%)', 'Canciones', 'Días activos', 'Primera escucha', 'Última escucha'];
-    rows = result.rows.map((entry, idx) => {
+    headers = ['#', 'Álbum', 'Artista', 'Tiempo (ms)', 'duration_known', 'Reproducciones', 'Cuota (%)', 'Canciones', 'Días activos', 'Primera escucha', 'Última escucha'];
+    rows = result.rows.map((entry) => {
       const al = entry.item;
       return [
-        idx + 1,
+        entry.metricRank,
         al.name,
         al.artist,
         al.ms,
+        al.durationKnown ?? '',
         al.plays,
         (entry.share * 100).toFixed(2),
         al.tracks?.size ?? al.tracks ?? 0,
@@ -166,6 +155,8 @@ export function exportExploreTableCSV(items, queryOpts = {}, tab = 'artists') {
 
   return {
     totalMatches: result.totalMatches,
+    totalItems: result.totalItems,
+    effectiveDir: result.effectiveDir,
     csv: `\uFEFF${toCSV(headers, rows)}`
   };
 }

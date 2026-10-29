@@ -2113,15 +2113,37 @@ export function receiptText(model, ctx = {}) {
     : ctx?.years?.size === 1 ? [...ctx.years][0] : null;
   const isFullYear = onlyYear != null;
   const periodLabel = ctx?.range ? rangeChipLabel(ctx.range)
-    : (model.meta.firstTs != null ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}` : '—');
+    : ctx?.years?.size ? [...ctx.years].sort((a, b) => a - b).join(', ')
+      : (model.meta.firstTs != null ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}` : '—');
   const tzLabel = model.meta.tzId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC');
   const metricLabel = evoByMs ? 'Tiempo escuchado' : 'Reproducciones';
+  const filters = ctx?.filters ?? {};
+  const filterParts = [];
+  if (filters.months?.size) filterParts.push(`meses: ${[...filters.months].sort((a, b) => a - b).map(monthLabel).join(', ')}`);
+  if (filters.dows?.size) {
+    const weekdays = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+    filterParts.push(`días: ${[...filters.dows].sort((a, b) => a - b).map((day) => weekdays[day]).join(', ')}`);
+  }
+  if (filters.hours?.size) filterParts.push(`horas: ${[...filters.hours].sort((a, b) => a - b).map((hour) => String(hour).padStart(2, '0')).join(', ')}`);
+  for (const [id, kind, label] of [
+    [filters.artistId, 'artists', 'Artista'],
+    [filters.trackId, 'tracks', 'Canción'],
+    [filters.albumId, 'albums', 'Álbum']
+  ]) {
+    if (id == null) continue;
+    const entity = model[kind].byId.get(id);
+    filterParts.push(`${label}: ${entity ? `${entity.name}${entity.artist ? ` — ${entity.artist}` : ''}` : id}`);
+  }
+  for (const [key, label] of [['skip', 'Saltada'], ['shuffle', 'Aleatoria'], ['offline', 'Sin conexión']]) {
+    if (filters[key] != null) filterParts.push(`${label}: ${filters[key] === 'unknown' ? 'desconocida' : filters[key] ? 'sí' : 'no'}`);
+  }
 
   const lines = [
     isFullYear ? `Mi resumen Scrobbleview (año ${onlyYear})` : 'Mi resumen Scrobbleview (del período)',
     `Período: ${periodLabel}`,
     `Zona horaria: ${tzLabel}`,
     `Criterio principal: ${metricLabel}`,
+    ...(filterParts.length ? [`Filtros: ${filterParts.join('; ')}`] : []),
     `Reproducciones: ${t.records}`,
     `Tiempo escuchado: ${fmtMs(t.ms)}`,
     `Artistas distintos: ${model.artists.byId.size}`,
@@ -2133,6 +2155,18 @@ export function receiptText(model, ctx = {}) {
     `Racha más larga: ${model.streak.len} días`
   ];
   return lines.join('\n');
+}
+
+export function receiptTextFromConfirmed({ confirmed, fallbackModel, fallbackState = {}, fallbackMetric = 'ms' }) {
+  const model = confirmed?.model ?? fallbackModel;
+  if (!model) return '';
+  const state = confirmed?.context?.state ?? fallbackState;
+  return receiptText(model, {
+    range: state.range,
+    years: state.years,
+    filters: state,
+    metric: confirmed?.context?.metric ?? fallbackMetric
+  });
 }
 
 export function exploreView(model, ctx = {}) {
@@ -2178,7 +2212,7 @@ export function exploreView(model, ctx = {}) {
         ${thresholdControl}
         ${densityControlsHTML(density)}
         ${columnsPickerHTML(tab, visibleCols)}
-        <button type="button" class="btn btn-secondary btn-sm" data-action="export-table" title="Exportar todas las ${queryResult.totalMatches} coincidencias de la consulta actual a CSV">Exportar CSV (${queryResult.totalMatches})</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-action="export-table" data-total-matches="${queryResult.totalMatches}" data-sort-direction="${queryResult.effectiveDir}" title="Preparar ZIP con las ${queryResult.totalMatches} coincidencias y su metadata">Exportar tabla (${queryResult.totalMatches})</button>
       </div>
     </div>
     <div class="explore-search-wrap">
