@@ -17,7 +17,7 @@ import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } fro
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { contextBarHTML } from './context-bar.js';
 import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGridTargetDate } from './calendar-ui.js';
-import { parseCompareState, compareQuery, compareDateRange, compareDateAt } from './compare-state.js';
+import { parseCompareState, compareQuery, compareDateRange, compareDateAt, compareEntityKey, normalizeCompareEntities } from './compare-state.js';
 import { calculateCompareRange } from '../src/compare.js';
 
 const appRoot = document.getElementById('app-root');
@@ -728,6 +728,8 @@ function buildViewContext(viewName) {
     month: state.calMonth?.month ?? (new Date().getMonth() + 1),
     comparePreset: state.comparePreset,
     compareGranularity: state.compareGranularity,
+    compareEntities: state.compareEntities,
+    compareEntityMode: state.compareEntityMode,
     compareFrom,
     compareTo,
     compareRefFrom: state.compareRefFrom,
@@ -1368,6 +1370,12 @@ function wireView() {
     render();
     appRoot.querySelector('[data-compare-field="granularity"]')?.focus();
   });
+  appRoot.querySelector('[data-compare-entity-mode]')?.addEventListener('change', (event) => {
+    state.compareEntityMode = event.target.value === 'share' ? 'share' : 'absolute';
+    pushCompareHash();
+    render();
+    appRoot.querySelector('[data-compare-entity-mode]')?.focus();
+  });
   compareForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     const fromA = compareForm.querySelector('[data-compare-field="fromA"]')?.value;
@@ -1748,6 +1756,37 @@ window.addEventListener('hashchange', async () => {
 // Chips para quitar filtros activos + "Borrar todo". Delegado una sola vez:
 // #filter-chips se re-renderiza en cada cambio (los listeners directos morirían
 // al primero). El foco va a la fila de chips (tabindex -1).
+appRoot.addEventListener('click', (e) => {
+  const compareEntityButton = e.target.closest?.('[data-compare-entity]');
+  if (!compareEntityButton || !appRoot.contains(compareEntityButton)) return;
+  let selection;
+  try {
+    selection = normalizeCompareEntities([JSON.parse(compareEntityButton.dataset.compareEntity)])[0];
+  } catch {
+    selection = null;
+  }
+  if (!selection) return;
+  const selections = normalizeCompareEntities(state.compareEntities);
+  const selectedKey = compareEntityKey(selection);
+  const existingIndex = selections.findIndex((entity) => compareEntityKey(entity) === selectedKey);
+  if (existingIndex < 0 && selections.length >= 3) {
+    const status = appRoot.querySelector('[data-compare-entity-status]');
+    if (status) status.textContent = 'Podés seleccionar hasta tres entidades.';
+    announce('Podés seleccionar hasta tres entidades.');
+    return;
+  }
+  if (existingIndex >= 0) selections.splice(existingIndex, 1);
+  else selections.push(selection);
+  state.compareEntities = selections;
+  pushCompareHash();
+  render();
+  const focusTarget = [...appRoot.querySelectorAll('[data-compare-entity]')].find((button) => {
+    try { return compareEntityKey(JSON.parse(button.dataset.compareEntity)) === selectedKey; } catch { return false; }
+  });
+  (focusTarget ?? appRoot.querySelector('#compare-selected-title'))?.focus?.({ preventScroll: true });
+  announce(existingIndex >= 0 ? `${selection.kind === 'artist' ? selection.name : `${selection.title} — ${selection.artist}`} se quitó de la comparación.` : `${selection.kind === 'artist' ? selection.name : `${selection.title} — ${selection.artist}`} se agregó a la comparación.`);
+});
+
 appRoot.addEventListener('click', (e) => {
   const clearBtn = e.target.closest?.('[data-action="clear"]');
   if (clearBtn && appRoot.contains(clearBtn)) {

@@ -1,5 +1,7 @@
 const PRESETS = new Set(['equal_previous', 'same_period_last_year', 'manual']);
 const GRANULARITIES = new Set(['daily', 'weekly', 'monthly']);
+const ENTITY_KINDS = new Set(['artist', 'track', 'album']);
+const ENTITY_MODES = new Set(['absolute', 'share']);
 
 function validDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return null;
@@ -9,17 +11,56 @@ function validDate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? value : null;
 }
 
+function normalizeCompareEntity(value) {
+  if (!value || typeof value !== 'object' || !ENTITY_KINDS.has(value.kind)) return null;
+  if (value.kind === 'artist') {
+    return typeof value.name === 'string' && value.name.length <= 2048
+      ? { kind: 'artist', name: value.name }
+      : null;
+  }
+  return typeof value.artist === 'string' && value.artist.length <= 2048 &&
+    typeof value.title === 'string' && value.title.length <= 2048
+    ? { kind: value.kind, artist: value.artist, title: value.title }
+    : null;
+}
+
+export function normalizeCompareEntities(values) {
+  if (!Array.isArray(values)) return [];
+  const selected = [];
+  const seen = new Set();
+  for (const value of values) {
+    const entity = normalizeCompareEntity(value);
+    if (!entity) continue;
+    const key = JSON.stringify(entity);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push(entity);
+    if (selected.length === 3) break;
+  }
+  return selected;
+}
+
+export function compareEntityKey(value) {
+  const entity = normalizeCompareEntity(value);
+  return entity ? JSON.stringify(entity) : null;
+}
+
 export function parseCompareState(query) {
   const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
   const preset = params.get('cp');
   const granularity = params.get('cg');
+  const mode = params.get('cem');
+  let selectedEntities = [];
+  try { selectedEntities = normalizeCompareEntities(JSON.parse(params.get('ce') ?? '[]')); } catch {}
   return {
     comparePreset: PRESETS.has(preset) ? preset : 'equal_previous',
     compareGranularity: GRANULARITIES.has(granularity) ? granularity : 'weekly',
     compareFrom: validDate(params.get('af')),
     compareTo: validDate(params.get('at')),
     compareRefFrom: validDate(params.get('bf')),
-    compareRefTo: validDate(params.get('bt'))
+    compareRefTo: validDate(params.get('bt')),
+    compareEntities: selectedEntities,
+    compareEntityMode: ENTITY_MODES.has(mode) ? mode : 'absolute'
   };
 }
 
@@ -37,6 +78,10 @@ export function compareQuery(query, state) {
     if (date) params.set(key, date);
     else params.delete(key);
   }
+  const entities = normalizeCompareEntities(state.compareEntities);
+  if (entities.length) params.set('ce', JSON.stringify(entities));
+  else params.delete('ce');
+  params.set('cem', ENTITY_MODES.has(state.compareEntityMode) ? state.compareEntityMode : 'absolute');
   return params.toString();
 }
 

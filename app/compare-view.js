@@ -1,8 +1,9 @@
 import { buildCompareSeries, compareAverages, compareEntityRankings, computeMetricDelta } from '../src/compare.js';
 import { esc, fmtMs, fmtNum } from '../src/charts.js';
-import { compareDateAt } from './compare-state.js';
+import { compareDateAt, compareEntityKey, normalizeCompareEntities } from './compare-state.js';
 
 const CATEGORY_NAMES = { artists: 'Artistas', tracks: 'Canciones', albums: 'Álbumes' };
+const ENTITY_KINDS = { artists: 'artist', tracks: 'track', albums: 'album' };
 
 function dateRangeLabel(range) {
   const from = compareDateAt(range, 'from');
@@ -122,7 +123,7 @@ function seriesRows(periodA, periodB, rangeA, rangeB, granularity, metric) {
   </table></div>${controls}`;
 }
 
-function rankingTable(kind, periodA, periodB, metric) {
+function rankingTable(kind, periodA, periodB, metric, selectedEntities) {
   const entitiesA = periodA.entities[kind];
   const entitiesB = periodB.entities[kind];
   const rankMap = (entities) => new Map([...entities].map(([key, entity]) => [key, { ...entity, value: entity[metric] ?? 0 }]));
@@ -131,17 +132,109 @@ function rankingTable(kind, periodA, periodB, metric) {
   const rows = compareEntityRankings(rankMap(entitiesA), rankMap(entitiesB), totalA, totalB, 50);
   if (!rows.length) return `<p class="empty">No hay ${CATEGORY_NAMES[kind].toLowerCase()} en estos períodos.</p>`;
   const format = metric === 'ms' ? fmtMs : fmtNum;
+  const selectedKeys = new Set(selectedEntities.map(compareEntityKey));
   return `<div class="table-scroll"><table class="compare-ranking-table">
     <caption>Top 50 ${CATEGORY_NAMES[kind].toLowerCase()}: posiciones y cuotas (${metric === 'ms' ? 'tiempo' : 'reproducciones'})</caption>
-    <thead><tr><th scope="col">Entidad</th><th scope="col" class="n">Pos. A</th><th scope="col" class="n">Pos. B</th><th scope="col" class="n">Valor A</th><th scope="col" class="n">Valor B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Cuota A</th><th scope="col" class="n">Cuota B</th><th scope="col" class="n">Cambio</th><th scope="col">Movimiento</th></tr></thead>
-    <tbody>${rows.map((row) => `<tr>
-      <th scope="row">${esc(row.name)}</th>
-      <td class="n">${row.rankA ?? '—'}</td><td class="n">${row.rankB ?? '—'}</td>
-      <td class="n">${esc(format(row.valA))}</td><td class="n">${esc(format(row.valB))}</td>
-      <td class="n">${esc(format(row.diff))}</td><td class="n">${row.shareA == null ? 'sin base' : `${row.shareA.toFixed(1).replace('.', ',')}%`}</td>
-      <td class="n">${row.shareB == null ? 'sin base' : `${row.shareB.toFixed(1).replace('.', ',')}%`}</td><td class="n">${esc(row.shareDiffLabel)}</td><td>${esc(row.status)}</td>
-    </tr>`).join('')}</tbody>
+    <thead><tr><th scope="col">Entidad</th><th scope="col" class="n">Pos. A</th><th scope="col" class="n">Pos. B</th><th scope="col" class="n">Valor A</th><th scope="col" class="n">Valor B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Cuota A</th><th scope="col" class="n">Cuota B</th><th scope="col" class="n">Cambio</th><th scope="col">Movimiento</th><th scope="col">Comparar</th></tr></thead>
+    <tbody>${rows.map((row) => {
+      const entity = entitiesA.get(row.key) ?? entitiesB.get(row.key);
+      const identity = kind === 'artists'
+        ? { kind: 'artist', name: entity?.title }
+        : { kind: ENTITY_KINDS[kind], artist: entity?.artist, title: entity?.title };
+      const key = compareEntityKey(identity);
+      const isSelected = key != null && selectedKeys.has(key);
+      const canSelect = isSelected || selectedEntities.length < 3;
+      const button = key == null ? '—' : `<button type="button" class="btn btn-secondary compare-select-button" data-compare-entity="${esc(JSON.stringify(identity))}" aria-pressed="${isSelected}" aria-label="${isSelected ? 'Quitar' : 'Agregar'} ${esc(row.name)} ${isSelected ? 'de' : 'a'} la comparación"${canSelect ? '' : ' disabled'}>${isSelected ? 'Quitar' : 'Agregar'}</button>`;
+      return `<tr>
+        <th scope="row">${esc(row.name)}</th>
+        <td class="n">${row.rankA ?? '—'}</td><td class="n">${row.rankB ?? '—'}</td>
+        <td class="n">${esc(format(row.valA))}</td><td class="n">${esc(format(row.valB))}</td>
+        <td class="n">${esc(format(row.diff))}</td><td class="n">${row.shareA == null ? 'sin base' : `${row.shareA.toFixed(1).replace('.', ',')}%`}</td>
+        <td class="n">${row.shareB == null ? 'sin base' : `${row.shareB.toFixed(1).replace('.', ',')}%`}</td><td class="n">${esc(row.shareDiffLabel)}</td><td>${esc(row.status)}</td><td>${button}</td>
+      </tr>`;
+    }).join('')}</tbody>
   </table></div>`;
+}
+
+function entityLabel(entity) {
+  return entity.kind === 'artist' ? entity.name : `${entity.title} — ${entity.artist}`;
+}
+
+function selectedEntityIndex(period, selections) {
+  const selectedKeys = new Set(selections.map(compareEntityKey));
+  const index = new Map();
+  const kinds = new Set(selections.map((selection) => selection.kind));
+  for (const kind of kinds) {
+    const entities = period.entities[`${kind}s`];
+    for (const entity of entities.values()) {
+      const identity = kind === 'artist'
+        ? { kind, name: entity.title }
+        : { kind, artist: entity.artist, title: entity.title };
+      const key = compareEntityKey(identity);
+      if (selectedKeys.has(key)) index.set(key, entity);
+    }
+  }
+  return index;
+}
+
+function selectedEntityValue(index, selection, metric) {
+  const entity = index.get(compareEntityKey(selection));
+  return entity?.[metric] ?? 0;
+}
+
+function selectedEntityShare(period, index, selection, metric) {
+  const total = period.entityTotals[`${selection.kind}s`][metric];
+  return total > 0 ? (selectedEntityValue(index, selection, metric) / total) * 100 : null;
+}
+
+function selectedEntitiesView(periodA, periodB, selections, mode, metric) {
+  const format = metric === 'ms' ? fmtMs : fmtNum;
+  const indexA = selectedEntityIndex(periodA, selections);
+  const indexB = selectedEntityIndex(periodB, selections);
+  const values = selections.flatMap((selection) => mode === 'share'
+    ? [selectedEntityShare(periodA, indexA, selection, metric), selectedEntityShare(periodB, indexB, selection, metric)]
+    : [selectedEntityValue(indexA, selection, metric), selectedEntityValue(indexB, selection, metric)]).filter(Number.isFinite);
+  const maxValue = mode === 'share' ? 100 : Math.max(0, ...values);
+  const domain = maxValue || 1;
+  const rows = selections.map((selection) => {
+    const valueA = selectedEntityValue(indexA, selection, metric);
+    const valueB = selectedEntityValue(indexB, selection, metric);
+    const shownA = mode === 'share' ? selectedEntityShare(periodA, indexA, selection, metric) : valueA;
+    const shownB = mode === 'share' ? selectedEntityShare(periodB, indexB, selection, metric) : valueB;
+    const shown = (value) => value == null ? 'sin base' : mode === 'share' ? `${value.toFixed(1).replace('.', ',')}%` : format(value);
+    const delta = mode === 'share'
+      ? shownA == null || shownB == null ? 'sin base' : `${shownA - shownB >= 0 ? '+' : ''}${(shownA - shownB).toFixed(1).replace('.', ',')} pp`
+      : computeMetricDelta(valueA, valueB, format).diffFormatted;
+    const widthA = shownA == null ? 0 : Math.max(0, Math.min(100, shownA / domain * 100));
+    const widthB = shownB == null ? 0 : Math.max(0, Math.min(100, shownB / domain * 100));
+    return `<article class="compare-entity-card">
+      <div class="compare-entity-card__heading"><h3>${esc(entityLabel(selection))}</h3><button type="button" class="btn btn-secondary compare-select-button" data-compare-entity="${esc(JSON.stringify(selection))}" aria-pressed="true" aria-label="Quitar ${esc(entityLabel(selection))} de la comparación">Quitar</button></div>
+      <div class="compare-entity-bars" role="img" aria-label="${esc(`${entityLabel(selection)}: A ${shown(shownA)}, B ${shown(shownB)}`)}">
+        <div class="compare-entity-bar-row"><span>A</span><span class="compare-entity-bar"><span style="--bar-width:${widthA}%"></span></span><strong>${esc(shown(shownA))}</strong></div>
+        <div class="compare-entity-bar-row"><span>B</span><span class="compare-entity-bar"><span style="--bar-width:${widthB}%"></span></span><strong>${esc(shown(shownB))}</strong></div>
+      </div>
+      <p class="compare-entity-delta">Diferencia: ${esc(delta)}</p>
+    </article>`;
+  });
+  const announcement = selections.length === 3 ? 'Límite de tres entidades alcanzado.' : `Podés agregar ${3 - selections.length} ${3 - selections.length === 1 ? 'entidad más' : 'entidades más'}.`;
+  const empty = '<p class="empty">Agregá artistas, canciones o álbumes desde los rankings para compararlos.</p>';
+  const tableRows = selections.map((selection) => {
+    const valueA = selectedEntityValue(indexA, selection, metric);
+    const valueB = selectedEntityValue(indexB, selection, metric);
+    const shownA = mode === 'share' ? selectedEntityShare(periodA, indexA, selection, metric) : valueA;
+    const shownB = mode === 'share' ? selectedEntityShare(periodB, indexB, selection, metric) : valueB;
+    const shown = (value) => value == null ? 'sin base' : mode === 'share' ? `${value.toFixed(1).replace('.', ',')}%` : format(value);
+    const delta = mode === 'share'
+      ? shownA == null || shownB == null ? 'sin base' : `${shownA - shownB >= 0 ? '+' : ''}${(shownA - shownB).toFixed(1).replace('.', ',')} pp`
+      : computeMetricDelta(valueA, valueB, format).diffFormatted;
+    return `<tr><th scope="row">${esc(entityLabel(selection))}</th><td class="n">${esc(shown(shownA))}</td><td class="n">${esc(shown(shownB))}</td><td class="n">${esc(delta)}</td></tr>`;
+  });
+  return `<section class="compare-selected card" aria-labelledby="compare-selected-title">
+    <div class="compare-selected__heading"><div><h2 id="compare-selected-title" tabindex="-1">Entidades seleccionadas (${selections.length} de 3)</h2><p>Escala común para A y B${mode === 'share' ? ': cuota del total de su categoría.' : ` en ${metric === 'ms' ? 'tiempo' : 'reproducciones'}.`}</p></div>
+      <label class="field"><span>Comparar por</span><select data-compare-entity-mode><option value="absolute"${mode === 'absolute' ? ' selected' : ''}>Valor absoluto</option><option value="share"${mode === 'share' ? ' selected' : ''}>Cuota</option></select></label></div>
+    <p class="compare-selected__status" data-compare-entity-status role="status" aria-live="polite">${announcement}</p>
+    ${selections.length ? `<div class="compare-entity-grid">${rows.join('')}</div><div class="table-scroll"><table class="compare-selected-table"><caption>Valores exactos de las entidades seleccionadas (${mode === 'share' ? 'cuota' : metric === 'ms' ? 'tiempo' : 'reproducciones'})</caption><thead><tr><th scope="col">Entidad</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th></tr></thead><tbody>${tableRows.join('')}</tbody></table></div>` : empty}
+  </section>`;
 }
 
 export function compareView(_model, _id, ctx = {}) {
@@ -157,7 +250,8 @@ export function compareView(_model, _id, ctx = {}) {
       ${result.warning ? `<p class="status status--warning" role="status">${esc(result.warning)}</p>` : ''}
       ${totalsTable(result.periodA, result.periodB, result.rangeA, result.rangeB)}
       <section class="compare-series card-subtle"><h2>Evolución por período</h2>${seriesRows(result.periodA, result.periodB, result.rangeA, result.rangeB, ctx.compareGranularity, byMs ? 'ms' : 'plays')}</section>
-      <div class="grid-2 compare-rankings">${Object.keys(CATEGORY_NAMES).map((kind) => `<section class="card"><h2>${CATEGORY_NAMES[kind]}</h2>${rankingTable(kind, result.periodA, result.periodB, byMs ? 'ms' : 'plays')}</section>`).join('')}</div>`;
+      ${selectedEntitiesView(result.periodA, result.periodB, normalizeCompareEntities(ctx.compareEntities), ctx.compareEntityMode === 'share' ? 'share' : 'absolute', byMs ? 'ms' : 'plays')}
+      <div class="grid-2 compare-rankings">${Object.keys(CATEGORY_NAMES).map((kind) => `<section class="card"><h2>${CATEGORY_NAMES[kind]}</h2>${rankingTable(kind, result.periodA, result.periodB, byMs ? 'ms' : 'plays', normalizeCompareEntities(ctx.compareEntities))}</section>`).join('')}</div>`;
   } else if (ctx.compareError) results = `<p class="status error" role="alert">${esc(ctx.compareError)}</p>`;
   else if (ctx.compareLoading) results = '<p class="status" role="status">Preparando comparación…</p>';
   return `<header class="view-header"><h1>Comparación de períodos</h1></header>
