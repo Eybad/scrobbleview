@@ -74,7 +74,7 @@ node --expose-gc bench/aggregate.js 100000 --compact
 
 Las pruebas usan datos sintéticos e incluyen parsing por distintos tamaños de chunk, agregación, DST, filtros, exportación, Unicode, fallos de almacenamiento y comunicación real con un Worker de Node. El conteo vigente lo informa el runner.
 
-Serví el checkout y abrí `browser-tests/navigation.html` para ejecutar el harness de ocho eventos sintéticos: carga, filtros, Atrás/Adelante, búsqueda, fichas, comparación, exportaciones, preferencias, gráficos, cinco anchos, etiquetas y valores de KPIs y récords sin desborde calculado, y veinte ciclos de navegación. El harness verifica teclado y foco en Chromium; TalkBack y el tacto en un dispositivo físico siguen requiriendo validación manual. Las pruebas de Node no sustituyen esa comprobación.
+Serví el checkout y abrí `browser-tests/navigation.html` para ejecutar el harness de ocho eventos sintéticos: carga, filtros, Atrás/Adelante, búsqueda, fichas, comparación, exportaciones, preferencias, cancelación sin descarga tardía, IndexedDB real, nueva pestaña con datos guardados, restauración del scroll, gráficos, cinco anchos sin desborde de KPIs y récords, y veinte ciclos de navegación. El harness verifica teclado y foco en Chromium; TalkBack y el tacto en un dispositivo físico siguen requiriendo validación manual. Las pruebas de Node no sustituyen esa comprobación.
 
 ## Estructura del proyecto
 

@@ -307,8 +307,8 @@ La matriz A01–A28 de arriba conserva los significados y resultados históricos
 | B07 | **Verificado en Node**: detalle de día/sesión pagina nombres y cifras exactas mientras la proyección global omite `cols`; `test/analysis-detail.test.js`, `test/worker.test.js`. |
 | B08 | **Verificado en Worker, navegador y ZIP**: dos Echo conservan artista, Shared conserva dos álbumes; `test/worker.test.js`, harness y exportación real. |
 | B09 | **Verificado en Node y parcialmente en navegador**: rutas semánticas resuelven identidad al invertir archivos; el harness abre y vuelve de fichas por href semántico; `test/acceptance-etapa2.test.js`, `test/routes.test.js`. |
-| B10 | **Parcial**: hrefs reales conservan búsqueda y métrica al copiarlos; no se verificó apertura en pestaña nueva con dataset cargado; `test/acceptance-etapa2.test.js`, `browser-tests/navigation.js`. |
-| B11 | **Parcial en navegador**: consulta y foco del enlace vuelven tras abrir detalle; el scroll solo está cubierto por el adaptador/mocks Node, no por scroll real del navegador. |
+| B10 | **Verificado en Chromium**: pestaña nueva carga el dataset consentido desde IndexedDB y abre la ruta semántica conservando `s=unknown` y `m=plays`; `browser-tests/navigation.js`. |
+| B11 | **Verificado en Chromium**: Atrás restaura foco, `scrollY=250` y `scrollLeft=180` del catálogo; el harness fuerza overflow de tabla con CSS de prueba. |
 | B12 | **Parcial en navegador**: caret, foco y `aria-sort` comprobados en la búsqueda/orden; paginación está cubierta por consulta Node, no por interacción real en el harness. |
 | B13 | **Parcial**: botón real cancela el filtro y conserva el análisis; error, snapshot confirmado y reintento están en `test/analysis-state.test.js`, no se inyectó el fallo en navegador. |
 | B14 | **Verificado en Worker**: coalescencia conserva una exportación/guardado concurrente; `test/analysis-coalescence.test.js`. |
@@ -321,8 +321,8 @@ La matriz A01–A28 de arriba conserva los significados y resultados históricos
 | B21 | **Verificado en ZIP Worker y descargas de navegador**: filtros de selección y metadata; los tres alcances reales pasan CRC; `test/worker.test.js` y harness. |
 | B22 | **Parcial en navegador y Node**: serie de 60 puntos, cero y desconocido en tabla; el reloj de 168 puntos responde a teclado y clic sintético. Tacto físico/TalkBack siguen pendientes; `test/chart-contract.test.js`, harness. |
 | B23 | **Verificado en Node**: parser estricto, Unicode, XSS de markup, rutas y neutralización CSV; el recorrido adversarial del DOM real no se ejecutó. |
-| B24 | **Parcial**: reset de preferencias comprobado en navegador; IndexedDB y fallos son simulados en Node; no se canceló una exportación activa desde el navegador para buscar una descarga tardía. |
-| B25 | **Parcial con evidencia repetida**: 20 ciclos en navegador completados en 5 corridas, 120 efectos/60 rutas por corrida; heap después de GC +100.270/+95.242/+95.422/+91.070/+100.717 bytes. Las muestras intermedias son variables; no equivalen a RSS total ni a ausencia universal de fugas. Benchmark Node de cinco repeticiones en `docs/analysis.md`. |
+| B24 | **Verificado en Chromium**: reset de preferencias, guardar/cargar/borrar en IndexedDB real, error por versión incompatible sin caché parcial y cancelación activa sin descarga tardía; `browser-tests/navigation.js`. |
+| B25 | **Parcial con evidencia repetida**: 20 ciclos en 10 corridas, 120 efectos/60 rutas por corrida; cinco muestras con GC después de ciclos: +100.270/+95.242/+95.422/+91.070/+100.717 bytes. Las otras cinco corridas no forzaron GC y no se mezclan con esas muestras. Los datos no equivalen a RSS total ni a ausencia universal de fugas. Benchmark Node de cinco repeticiones en `docs/analysis.md`. |
 
 ### Estado actualizado de A01–A28
 
@@ -333,16 +333,16 @@ La matriz A01–A28 de arriba conserva los significados y resultados históricos
 | A03–A06 | **Verificado en Node**: límites de duración, desconocidos, artistas identificados y ambos denominadores de continuidad; `test/acceptance-etapa1.test.js`. |
 | A07–A08 | **Verificado en Node**: cardinalidad, orden global, paginación y cuota estable; `test/acceptance-etapa3.test.js`, `test/acceptance-r10.test.js`. |
 | A09 | **Worker y navegador**: homónimos enlazan por artista y abren fichas distintas; `test/worker.test.js`, harness. |
-| A10–A11 | **Parcial**: historial del navegador devuelve consulta/foco; href transporta query/métrica. El scroll real y la nueva pestaña no están comprobados. |
-| A12–A14 | **Node/Worker**: orden de archivos, coalescencia y cancelación lógica; falta probar una exportación activa cancelada en navegador. |
+| A10–A11 | **Verificado en Chromium**: consulta, foco y scroll de página/tabla se restauran al volver; pestaña nueva con dataset guardado conserva filtro y métrica en la ruta semántica. |
+| A12–A14 | **Node/Worker y Chromium**: orden y coalescencia siguen cubiertos por Node/Worker; el harness cancela una exportación activa y verifica que no haya descarga tardía. |
 | A15–A17 | **Node y navegador parcial**: 24 horas, calendario, escalas y contrato de 168 puntos; clic sintético y teclado probados, TalkBack/tacto físico pendientes. |
 | A18–A19 | **Worker/Node y navegador parcial**: base cero, rangos y series DST; el navegador muestra base cero, el resto tiene prueba Worker. |
 | A20–A22 | **Worker, Node y navegador parcial**: álbumes, sesiones y secuencias reconciliados; la aceptación del scroll y tacto permanece pendiente. |
 | A23–A24 | **Verificado en Node**: primeras apariciones, regresos y seguimiento insuficiente; `test/acceptance-etapa7.test.js`. |
 | A25 | **Verificado en Worker y navegador**: los tres alcances reales, tabla completa de consulta y metadata ZIP; CRC inspeccionado. |
 | A26 | **Verificado en Node**: escaping y fórmulas; falta fixture hostil ejecutado en DOM real. |
-| A27 | **Parcial**: IndexedDB simulado cubre éxito/fallo; reset de preferencias está en navegador; IndexedDB real sigue pendiente. |
-| A28 | **Parcial en navegador**: 20 ciclos en cinco corridas, sin excepción JS ni conteos duplicados en el harness; deltas de heap acotados a este flujo, sin una medición independiente de RAM del navegador. |
+| A27 | **Verificado en Chromium**: consentimiento, escritura, resumen, rehidratación y borrado en IndexedDB real; una versión incompatible se informa y no deja datos parciales. |
+| A28 | **Parcial en navegador**: 20 ciclos en diez corridas, sin excepción JS ni conteos duplicados; cinco deltas post-GC acotados a este flujo, sin medición independiente de RAM del navegador. |
 
 ### Trazabilidad del plan original (etapas 0–8)
 
@@ -372,6 +372,6 @@ Se conservaron las ocho secciones, Explorar, Comparar, las fichas de artista/can
 
 El harness de tabla inicialmente podía aceptar por coincidencia un conteo de dos con una búsqueda aún no confirmada mientras seguía activo el filtro de 4 semanas. Se corrigió para limpiar ese filtro y esperar query en hash, filas Echo y enlaces de ambos artistas; el ZIP descargado confirma `catalog.search=Echo` y dos filas. No era un fallo de filtrado del producto.
 
-El código, el harness automatizable y la documentación R10 están implementados. La aceptación global queda **parcial**, no total: permanecen las verificaciones manuales enumeradas en B10–B12, B15–B16, B22–B24 y en `docs/analysis.md`, además de la prueba de 500.000 eventos no ejecutada. Los conteos de tests históricos no se reciclan como estado actual.
+El código, el harness automatizable y la documentación R10 están implementados. La aceptación global queda **parcial**, no total: permanecen verificaciones manuales de errores de filtro/reintento, paginación con cardinalidad grande en DOM, recarga de calendario, TalkBack/tacto, prueba adversarial de XSS en DOM, scroll de mapas/calendario y CSP/otros navegadores; la prueba de 500.000 eventos tampoco se ejecutó. Los conteos de tests históricos no se reciclan como estado actual.
 
-Verificación final de código: `node --test` en Termux/Android aarch64 con Node v26.12.1, 354 aprobadas, 0 fallidas (13,38 s). Las pruebas sintéticas no contienen historial personal. `git diff --check` también aprobó antes del commit documental.
+Verificación final de código: `node --test` en Termux/Android aarch64 con Node v26.12.1, 354 aprobadas, 0 fallidas (16,86 s). Las pruebas sintéticas no contienen historial personal. `git diff --check` también aprobó antes del commit documental.
