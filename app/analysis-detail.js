@@ -72,7 +72,7 @@ export function getEventDetail(ds, derived, tz, type, id, page, pageSize) {
   };
 }
 
-export function getTrackDetail(ds, derived, id, firstUtc, page, pageSize) {
+export function getTrackDetail(ds, derived, id, firstUtc, page, pageSize, originId = null) {
   ({ page, pageSize } = pageOptions(page, pageSize));
   const trackId = Number(id);
   if (!Number.isSafeInteger(trackId) || trackId <= 0 || firstUtc == null) return null;
@@ -88,5 +88,5 @@ export function getTrackDetail(ds, derived, id, firstUtc, page, pageSize) {
   }
   const all = [...albums.values()].sort((a, b) => b.plays - a.plays || b.ms - a.ms || a.name.localeCompare(b.name));
   if (page > Math.max(1, Math.ceil(all.length / pageSize))) throw new RangeError('Página fuera de rango.');
-  return { firstUtc, page, pageSize, total: all.length, rows: all.slice((page - 1) * pageSize, page * pageSize) };
+  return { firstUtc, page, pageSize, total: all.length, rows: all.slice((page - 1) * pageSize, page * pageSize), origin: albums.get(originId) ?? null };
 }

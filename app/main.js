@@ -196,7 +196,7 @@ async function clearCached() {
 
 async function refreshModel() {
   if (!model) return false;
-  const [view, id] = parseHash();
+  const [view, id, originQuery] = parseHash();
   const nextDetailContext = (view === 'day' || view === 'session' || view === 'track') ? JSON.stringify([view, id, filterParams(state)]) : null;
   if (nextDetailContext !== detailContext) {
     detailContext = nextDetailContext;
@@ -208,7 +208,7 @@ async function refreshModel() {
   appRoot.setAttribute('aria-busy', 'true');
   appRoot.classList.add('app--updating');
   try {
-    const result = await analysisState.update(state, { view, id, page: detailPage, pageSize: detailPageSize, onProgress: job.progress });
+    const result = await analysisState.update(state, { view, id, originQuery, page: detailPage, pageSize: detailPageSize, onProgress: job.progress });
     if (!result || requestedHash !== location.hash) return false;
     current = result.model;
     currentPrev = result.prev;
@@ -241,6 +241,7 @@ function syncHash() {
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
+  const [, , rawQuery] = parseHash();
   let hash;
   if (name === 'explore') {
     const [, , rawQ] = parseHash();
@@ -251,7 +252,12 @@ function syncHash() {
     }
     hash = `#/v1/explore${merged.toString() ? `?${merged.toString()}` : ''}`;
   } else if (resolved?.entity && (name === 'artist' || name === 'track' || name === 'album')) {
-    hash = formatSemanticRoute(name, resolved.entity, queryStr);
+    const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
+    if (name === 'track') {
+      const existing = new URLSearchParams(rawQuery);
+      for (const key of ['originArtist', 'originAlbum']) if (existing.has(key)) merged.set(key, existing.get(key));
+    }
+    hash = formatSemanticRoute(name, resolved.entity, `?${merged}`);
   } else {
     hash = `#/${name}${id != null ? `/${id}` : ''}${queryStr}`;
   }
@@ -417,6 +423,7 @@ function buildViewContext(viewName) {
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
+  const [, , rawQuery] = parseHash();
 
   let exploreState = null;
   if (viewName === 'explore') {
@@ -455,6 +462,7 @@ function buildViewContext(viewName) {
     query: queryStr,
     exploreState,
     detail: currentDetail,
+    rawQuery,
     detailRequested: viewName === 'day' || viewName === 'session' || viewName === 'track',
     normalizeYears: state.normalizeYears ?? false,
     month: state.calMonth?.month,
@@ -1359,8 +1367,10 @@ appRoot.addEventListener('click', (e) => {
   const fParams = filterParams(state);
   const mParam = serializeMetricParam(activeMetric);
   const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
-  const base = a.getAttribute('href').split('?')[0];
-  a.setAttribute('href', base + queryStr);
+  const [base, destinationQuery = ''] = a.getAttribute('href').split('?');
+  const merged = new URLSearchParams(queryStr.replace(/^\?/, ''));
+  for (const [key, value] of new URLSearchParams(destinationQuery)) merged.set(key, value);
+  a.setAttribute('href', `${base}?${merged}`);
 });
 
 // Títulos de gráficos en táctil: el <title> del SVG no se muestra al toque.

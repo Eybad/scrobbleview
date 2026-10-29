@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRoute, resolveRoute, formatSemanticRoute } from '../app/routes.js';
+import { parseRoute, resolveRoute, formatSemanticRoute, formatTrackFromAlbum, resolveAlbumOrigin } from '../app/routes.js';
 
 test('parseRoute: recognizes versioned semantic routes and legacy routes', () => {
   const r1 = parseRoute('#/v1/artist/Radiohead?m=ms');
@@ -126,4 +126,15 @@ test('semantic routes preserve isolated surrogates without colliding with litera
   const routes = names.map(name => formatSemanticRoute('artist', name));
   assert.equal(new Set(routes).size, names.length);
   assert.deepEqual(routes.map(route => parseRoute(route).params.artist), names);
+});
+
+test('track links carry a reversible album origin by identity', () => {
+  const album = { id: 42, artist: 'Artist/\ud800', name: 'Album?%uD800' };
+  const track = { artist: album.artist, name: 'Track' };
+  const href = formatTrackFromAlbum(track, album, '?m=plays');
+  const route = parseRoute(href);
+  const model = { albums: { byId: new Map([[42, album]]) } };
+  assert.equal(route.params.artist, track.artist);
+  assert.equal(resolveAlbumOrigin(route.query, model).id, 42);
+  assert.equal(new URLSearchParams(route.query).get('m'), 'plays');
 });

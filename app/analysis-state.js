@@ -1,4 +1,5 @@
 import { filterParams } from './filter-ui.js';
+import { resolveAlbumOrigin } from './routes.js';
 
 // A response can replace visible statistics only while its requested state is
 // still current. Reusing a result also avoids recalculation for table controls.
@@ -17,7 +18,7 @@ export function createAnalysisState(client) {
       client.cancelUpdate?.();
       return { model: current, prev, key: appliedKey };
     },
-    async update(state, { view, id, page = 1, pageSize = 25, onProgress } = {}) {
+    async update(state, { view, id, page = 1, pageSize = 25, originQuery = '', onProgress } = {}) {
       const requestedRevision = ++revision;
       const isCurrent = () => revision === requestedRevision;
       const progress = (fraction, label) => { if (isCurrent()) onProgress?.(fraction, label); };
@@ -40,11 +41,12 @@ export function createAnalysisState(client) {
         }
         let nextDetail = null, nextDetailKey = null;
         if (view === 'day' || view === 'session' || view === 'track') {
-          nextDetailKey = JSON.stringify([key, view, id, page, pageSize]);
+          const origin = view === 'track' ? resolveAlbumOrigin(originQuery, next) : null;
+          nextDetailKey = JSON.stringify([key, view, id, page, pageSize, origin?.id ?? null]);
           if (detailKey === nextDetailKey) nextDetail = detail;
           else {
             const type = view === 'day' ? 'dayDetail' : view === 'session' ? 'sessionDetail' : 'trackDetail';
-            nextDetail = await client.request(type, { state, id, page, pageSize }, { onProgress: progress });
+            nextDetail = await client.request(type, { state, id, page, pageSize, originId: origin?.id ?? null }, { onProgress: progress });
             if (!isCurrent()) return null;
           }
         }

@@ -15,6 +15,7 @@ import { queryCatalog } from '../src/query.js';
 import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsPickerHTML } from './catalog-table.js';
 import { calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML } from './calendar-ui.js';
 import { compareView } from './compare-view.js';
+import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -772,11 +773,9 @@ export function trackView(model, tk, ctx = {}) {
   const totalMs = model.totals.ms;
   const ar = tk % 4294967296;
 
-  const originAk = ctx?.albumOrigin != null
-    ? Number(ctx.albumOrigin)
-    : (ctx?.query ? Number(new URLSearchParams(ctx.query.replace(/^\?/, '')).get('album')) : null);
-  const originAlbum = originAk != null ? model.albums.byId.get(originAk) : null;
-  const originStats = originAlbum?.trackStats?.get(tk);
+  const originStats = ctx.detail?.origin ?? null;
+  const originAlbum = originStats ? model.albums.byId.get(originStats.id) : null;
+  const originRequested = new URLSearchParams(ctx.rawQuery ?? '').has('originAlbum');
 
   const albumList = ctx.detail ? ctx.detail.rows.map(item => ({ ak: item.id, name: item.name, plays: item.plays, ms: item.ms })) : [...tr.albums]
     .map((ak) => {
@@ -808,10 +807,12 @@ export function trackView(model, tk, ctx = {}) {
         </p>
         <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
           Totales como <strong>Canción agrupada</strong>: ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)}.
-          <a href="#/track/${tk}">Ver ficha global de la canción agrupada</a>
+          <a href="${esc(formatSemanticRoute('track', tr, ctx.query))}">Ver ficha global de la canción agrupada</a>
         </p>
        </div>`
-    : ((ctx.detail?.total ?? albumList.length) > 1
+    : (originRequested
+      ? '<p class="empty">El álbum de origen no está disponible en la selección actual.</p>'
+      : (ctx.detail?.total ?? albumList.length) > 1
       ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;">
           <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
             <strong>Canción agrupada:</strong> consolida ${fmtNum(tr.plays)} reproducciones a través de ${fmtNum(ctx.detail?.total ?? albumList.length)} atribuciones de álbum.
@@ -905,7 +906,7 @@ export function albumView(model, ak, ctx = {}) {
           valueFmt: valFmt,
           subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
           valueLabel: valLabel,
-          link: (r) => `#/track/${r.id}`,
+          link: (r) => esc(formatTrackFromAlbum(model.tracks.byId.get(r.id), al, ctx.query ?? '')),
           caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
           spark: (r) => albumSeries(model, al.trackStats.get(r.id).monthly, byMs ? 'ms' : 'plays').map((point) => point.y)
         })

@@ -244,3 +244,23 @@ export function formatSemanticRoute(view, entityOrParams, query = '') {
   }
   return `#/v1/${view}${cleanQ}`;
 }
+
+export function formatTrackFromAlbum(track, album, query = '') {
+  const params = new URLSearchParams(query.replace(/^\?/, ''));
+  params.set('originArtist', encodeRouteSegment(album.artist));
+  params.set('originAlbum', encodeRouteSegment(album.name));
+  return formatSemanticRoute('track', track, params.toString());
+}
+
+export function resolveAlbumOrigin(query, model) {
+  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
+  const artist = params.get('originArtist');
+  const name = params.get('originAlbum');
+  if (artist == null || name == null) return null;
+  const decodedArtist = decodeRouteSegment(artist);
+  const decodedName = decodeRouteSegment(name);
+  for (const album of model.albums.byId.values()) {
+    if (album.artist === decodedArtist && album.name === decodedName) return album;
+  }
+  return null;
+}

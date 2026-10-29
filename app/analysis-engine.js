@@ -75,7 +75,7 @@ export function createAnalysisEngine() {
         const indices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : null;
         const selection = indices ? selectDerived(derived, indices) : derived;
         if (type === 'trackDetail') {
-          const detail = getTrackDetail(ds, selection, payload.id, history.tracks.get(Number(payload.id))?.firstUtc, payload.page, payload.pageSize);
+          const detail = getTrackDetail(ds, selection, payload.id, history.tracks.get(Number(payload.id))?.firstUtc, payload.page, payload.pageSize, payload.originId);
           if (detail) detail.firstLocal = detail.firstUtc + tz.offsetMinutes(detail.firstUtc) * 60;
           return detail;
         }

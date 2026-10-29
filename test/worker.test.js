@@ -5,6 +5,7 @@ import { createAnalysisClient } from '../app/analysis-client.js';
 import { emptyFilterState } from '../src/filters.js';
 import { createAnalysisState } from '../app/analysis-state.js';
 import { renderView } from '../app/views.js';
+import { parseRoute, resolveRoute } from '../app/routes.js';
 
 function clientForTest(t) {
   const client = createAnalysisClient({ createWorker() {
@@ -99,6 +100,25 @@ test('worker client and controller render actual track album attribution', async
   assert.match(html, /Second/);
   assert.match(html, /Primera aparición histórica/);
   assert.doesNotMatch(html, /NaN|undefined/);
+});
+
+test('album link opens the track with verified album attribution', async (t) => {
+  const client = clientForTest(t);
+  const { model } = await client.request('load', { files: [file(events)], timeZone: 'UTC' });
+  const controller = createAnalysisState(client);
+  controller.initialize(model);
+  const album = [...model.albums.byId.values()].find(item => item.name === 'First');
+  const albumResult = await controller.update(emptyFilterState(), { view: 'album', id: album.id });
+  const albumHtml = renderView('album', albumResult.model, album.id, { query: '?m=plays' });
+  const href = albumHtml.match(/href="(#\/v1\/track\/[^\"]+)"/)[1].replaceAll('&amp;', '&');
+  const parsed = parseRoute(href);
+  const resolved = resolveRoute(parsed, model);
+  const result = await controller.update(emptyFilterState(), { view: 'track', id: resolved.id, originQuery: parsed.query });
+  assert.equal(result.detail.origin.name, 'First');
+  assert.equal(result.detail.origin.plays, 1);
+  const html = renderView('track', result.model, resolved.id, { detail: result.detail, rawQuery: parsed.query, query: '?m=plays' });
+  assert.match(html, /Alcance: En este álbum/);
+  assert.match(html, /First/);
 });
 
 test('worker cancellation rejects pending work and permits a fresh load', async (t) => {
