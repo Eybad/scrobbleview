@@ -6,7 +6,7 @@ import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 import { buildDataset } from './fakes/dataset.js';
 
 const UTC = fixedTz('utc', 0);
-const D0 = 1704067200; // 2024-01-01T00:00:00Z
+const D0 = 1704067200;
 
 test('A03: redondeo coherente de duraciones en fmtMs sin 60s', () => {
   assert.equal(fmtMs(500), '500 ms');
@@ -42,7 +42,7 @@ test('A04: tasas de salto conservan base conocida y desconocidos separados', () 
 test('A05: una reproducción sin artista coincide en artistas identificados entre Resumen y Años', () => {
   const events = [
     { t: D0, m: 180000, track: 'Track 1', artist: 'Artist A' },
-    { t: D0 + 86400, m: 180000, track: 'Track 2' } // Sin artista (desconocido)
+    { t: D0 + 86400, m: 180000, track: 'Track 2' }
   ];
   const ds = buildDataset(events);
   const model = aggregate(ds, { tz: UTC });
@@ -56,7 +56,6 @@ test('A05: una reproducción sin artista coincide en artistas identificados entr
 
 test('A06: constancia separa continuidad activa (100%) de cobertura del período (50%)', () => {
   const events = [];
-  // Enero a Junio para Artista 1 (6 meses, 1 evento por mes)
   for (let month = 0; month < 6; month++) {
     const date = new Date(Date.UTC(2024, month, 15, 12, 0, 0));
     events.push({
@@ -66,7 +65,6 @@ test('A06: constancia separa continuidad activa (100%) de cobertura del período
       artist: 'Artista Continuo'
     });
   }
-  // Diciembre 2024 para Artista 2 (ancla el fin del período observado a Dic 2024 -> 12 meses observados)
   const decDate = new Date(Date.UTC(2024, 11, 15, 12, 0, 0));
   events.push({
     t: Math.floor(decDate.getTime() / 1000),
@@ -83,9 +81,9 @@ test('A06: constancia separa continuidad activa (100%) de cobertura del período
   assert.ok(a1, 'artista 1 encontrado en constancia');
   assert.equal(a1.months.size, 6);
   assert.equal(a1.activeMonthsSpan, 6);
-  assert.equal(a1.coverage, 1); // 100% de continuidad activa
+  assert.equal(a1.coverage, 1);
   assert.equal(a1.observedMonths, 12);
-  assert.equal(a1.periodCoverage, 0.5); // 50% de cobertura del período observado
+  assert.equal(a1.periodCoverage, 0.5);
 });
 
 test('A01 / A02: cascada CSS responsive de .kpis y .records-grid colocada tras sus bases', async () => {
@@ -99,7 +97,6 @@ test('A01 / A02: cascada CSS responsive de .kpis y .records-grid colocada tras s
   const media640Idx = css.indexOf('@media (max-width: 640px)');
   assert.ok(media640Idx >= 0, 'media query 640px presente');
 
-  // Verificar que el override de .kpis y .records-grid en móvil está DESPUÉS de la definición base
   const mobileKpiMatches = [...css.matchAll(/\.kpis\s*\{\s*grid-template-columns:\s*repeat\(2/g)];
   assert.ok(mobileKpiMatches.length > 0, 'override móvil de 2 columnas presente');
   for (const m of mobileKpiMatches) {

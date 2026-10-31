@@ -1,8 +1,3 @@
-// adapters/offset-table.js — mecanismo principal: búsqueda binaria sobre la tabla
-//
-// La tabla es [[epochSec, offsetMin], ...] ordenada por tiempo. El lookup es
-// O(log n) sobre ~21 entradas: sin Intl, sin Date, por evento.
-
 export function offsetTable(id, transitions) {
   const times = new Int32Array(transitions.length);
   const offsets = new Int32Array(transitions.length);
@@ -13,7 +8,6 @@ export function offsetTable(id, transitions) {
   return {
     id,
     offsetMinutes(t) {
-      // último tiempo <= t
       let lo = 0;
       let hi = times.length - 1;
       while (lo < hi) {

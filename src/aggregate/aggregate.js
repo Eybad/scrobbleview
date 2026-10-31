@@ -1,9 +1,3 @@
-// aggregate.js — aggregate(ds, opts) → StatsModel
-//
-// Pura, síncrona, determinista (byte-idéntico para mismo input). Un pase único
-// sobre los eventos ordenados por timestamp UTC con objeto ev reutilizable;
-// post-proceso: streak, tables (rankings precalculados), resolución de nombres.
-
 import { derive, selectDerived, civilFromDays } from './impl/derive.js';
 import { computeTotals } from './impl/totals.js';
 import { createGroupsAcc, trackKey } from './impl/groups.js';
@@ -169,8 +163,7 @@ function rankForgottenEntities(entities, lastLoadedUtc = null, now = null) {
     .slice(0, TOP_N);
 }
 
-// Meses absolutos (y*12+m-1) para medir distancias: restar índices YYYYMM
-// (y*100+m) cruza mal el año (202401 − 202312 + 1 = 90 en vez de 2).
+// Absolute month indices avoid invalid month distances across year boundaries.
 function absoluteMonths(loc) {
   const c = civilFromDays(Math.floor(loc / 86400));
   return c.y * 12 + (c.m - 1);
@@ -363,14 +356,12 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
   const deepCatalog = rankDeepCatalog(artistList);
   const forgotten = { artists: rankForgottenEntities(artistList, lastLoadedUtc, now), tracks: rankForgottenEntities(trackList, lastLoadedUtc, now) };
 
-  // Obsesión: intensidad = plays / días activos (mín. MIN_PLAYS_FOR_OBSESSION).
   const obsession = trackList
     .filter((t) => t.plays >= MIN_PLAYS_FOR_OBSESSION && t.days.size > 0)
     .map((t) => ({ ...t, intensity: t.plays / t.days.size }))
     .sort((a, b) => b.intensity - a.intensity || b.plays - a.plays)
     .slice(0, TOP_OBSESSION_N);
 
-  // Binge: rachas consecutivas de la misma canción.
   const bingeSource = behavior.runSelection ?? (behavior.maxRun instanceof Map ? behavior.maxRun : behavior.maxRun.selection);
   const binge = [...bingeSource.entries()]
     .map(([tk, run]) => ({ tk, run, track: tracks.get(tk) }))
@@ -378,7 +369,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b.run - a.run || b.track.plays - a.track.plays)
     .slice(0, TOP_RATE_N);
 
-  // Primera/última canción del día: el v2 keyea por tk (track+artista).
   const countByTrack = (map) => {
     const c = new Map();
     for (const tk of map.values()) c.set(tk, (c.get(tk) || 0) + 1);
@@ -407,7 +397,6 @@ function buildTables({ groups, temporal, sessions, behavior, transitions, streak
     .sort((a, b) => b[1].new / b[1].plays - a[1].new / a[1].plays || b[1].new - a[1].new)
     .slice(0, TOP_DISCOVERY_N);
 
-  // Constancia: meses activos / meses del intervalo (mín. MIN_MONTHS_FOR_CONSTANCY).
   const observedSpan = (firstTs != null && lastTs != null)
     ? Math.max(1, absoluteMonths(lastTs) - absoluteMonths(firstTs) + 1)
     : 1;

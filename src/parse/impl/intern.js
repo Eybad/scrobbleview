@@ -1,9 +1,4 @@
-// intern.js — interning de strings por bytes (hash FNV-1a), materializa solo en miss.
-//
-// V8 no internaliza strings de runtime: un Map<string,id> no deduplica memoria.
-// Este internador compara bytes UTF-8 contra las claves ya guardadas y solo
-// materializa el string cuando es una clave nueva. Claves en un Uint8Array grande
-// + offsets; id 0 = string vacío (artista/álbum/reason ausentes).
+// Compare UTF-8 bytes before materializing strings to reduce allocations.
 
 const INITIAL_KEYS = 4096;
 
@@ -30,9 +25,9 @@ export class Interner {
     this.offsets = new Uint32Array(64);
     this.lengths = new Uint32Array(64);
     this.count = 0;
-    this.table = new Map(); // hash → array de ids
-    this.strings = []; // strings materializados (uno por clave única)
-    this.insert(''); // id 0 = string vacío
+    this.table = new Map();
+    this.strings = [];
+    this.insert(''); // ID 0 represents the empty string.
   }
 
   get size() {
@@ -43,7 +38,6 @@ export class Interner {
     return this.strings[id];
   }
 
-  // bytes: Uint8Array con el string (puede tener escapes JSON). Devuelve el id.
   add(bytes, start = 0, end = bytes.length) {
     if (hasEscape(bytes, start, end)) {
       const value = decodeJSONString(bytes, start, end);
@@ -64,8 +58,7 @@ export class Interner {
       }
     }
     const s = decodeJSONString(bytes, start, end);
-    // Si había escapes, los bytes crudos difieren de los UTF-8 finales: re-buscar
-    // por los bytes del string decodificado antes de insertar (evita duplicados).
+    // Escaped JSON bytes differ from decoded UTF-8, so deduplicate after decoding.
     const ub = utf8Encode(s);
     const h2 = fnv1a(ub, 0, ub.length);
     const ids2 = this.table.get(h2);
@@ -114,13 +107,7 @@ export class Interner {
     this.lengths[id] = b.length;
   }
 
-  // Rehidrata un Interner desde partes serializadas (caché IndexedDB).
-  // keys/offsets/lengths pueden tener capacidad mayor que el uso real: count
-  // define las claves válidas. Reconstruye table (hash → ids) y strings.
-  // count se valida contra la longitud real de los arrays y los rangos de bytes
-  // se validan: un count fabricado o un rango corrupto (caché manipulada) lanzan
-  // en vez de recortar en silencio, que produciría entidades truncadas.
-  // El llamador (storage.js) convierte la excepción en un miss de caché.
+  // Validate cached counts and byte ranges; silent subarray truncation would corrupt entities.
   static fromParts({ keys, offsets, lengths, count, surrogates = [] }) {
     const it = new Interner();
     it.keys = keys;

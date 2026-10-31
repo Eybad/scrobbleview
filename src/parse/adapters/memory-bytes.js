@@ -1,5 +1,3 @@
-// adapters/memory-bytes.js — ByteSource desde string o Uint8Array (tests + demo)
-
 export function memoryBytes(label, data) {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
   let offset = 0;

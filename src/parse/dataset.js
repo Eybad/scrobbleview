@@ -1,7 +1,4 @@
-// dataset.js — contrato Dataset + helpers de inspección
-//
-// El Dataset es columnar (typed arrays) pero la interfaz es por nombre de campo:
-// ds.get(i, 't') — un typo en el campo lanza, no da undefined silencioso.
+// Field-name access fails fast on typos instead of returning undefined.
 
 export const FIELDS = ['t', 'm', 'tr', 'ar', 'al', 'rs', 're', 'flags'];
 

@@ -1,5 +1,3 @@
-// UI composition root: URL, filter state, worker responses and rendering.
-
 import { createAnalysisClient } from './analysis-client.js';
 import { createAnalysisState } from './analysis-state.js';
 import { AbortError } from '../src/parse/errors.js';
@@ -98,8 +96,8 @@ function saveStoredLimits() {
 }
 
 const initialLimits = loadStoredLimits();
-let model = null; // modelo completo (sin filtros)
-let current = null; // modelo activo (filtrado o completo)
+let model = null;
+let current = null;
 let currentPrev = null;
 let currentDetail = null, detailContext = null, detailPage = 1, detailPageSize = 25;
 let unresolvedFilter = false;
@@ -119,14 +117,13 @@ let state = emptyFilterState();
 let activeMetric = resolveMetric(null, typeof localStorage !== 'undefined' ? localStorage.getItem(METRIC_STORAGE_KEY) : null);
 let rankUI = { tab: 'artists', metric: activeMetric, topN: initialLimits.rankTopN, query: '' };
 const tableLimits = initialLimits.map;
-let cacheOffer = null; // null | 'save' | 'saved' | 'loaded' | 'error'
+let cacheOffer = null;
 let advState = null;
 let popReturnState = null;
 const chartSelections = new Map();
 let calAnchor = null;
 
-// Toast para títulos de gráficos en táctil (se crea una vez: sobrevive a los
-// re-renders porque vive fuera de #app-root; el texto va por textContent).
+// Keep the toast outside #app-root so it survives view renders.
 const toast = document.createElement('div');
 toast.id = 'chart-toast';
 toast.className = 'toast';
@@ -136,9 +133,7 @@ toast.hidden = true;
 document.body.appendChild(toast);
 let toastTimer = 0;
 
-// Región viva única para cambios asíncronos que no se anuncian solos
-// (WCAG 4.1.3): re-agregado por filtros, resultados de búsqueda, copia de
-// recibo. Persistente fuera de #app-root: sobrevive a los re-renders.
+// Keep one persistent live region for async updates.
 const liveRegion = document.createElement('p');
 liveRegion.id = 'live-status';
 liveRegion.className = 'visually-hidden';
@@ -508,9 +503,7 @@ function parseHash() {
   return [resolved.view, resolved.id, parsed.query, resolved];
 }
 
-// La URL refleja el estado de filtros (deep-link + reload). replaceState: sin
-// entrada de historial por cada chip (el Back queda para navegar vistas; al
-// volver, los params del hash de esa entrada restauran sus filtros).
+// Replace filter state without adding a history entry for every control change.
 function syncHash() {
   const [name, id, , resolved] = parseHash();
   const fParams = portableFilterParams(state, model);
@@ -566,8 +559,7 @@ async function updateDiscoveryView(focusSelector) {
   appRoot.querySelector(focusSelector)?.focus({ preventScroll: true });
 }
 
-// The URL is authoritative on load, Back/Forward and manual hash changes.
-// Restore state and its model together before any view reads either one.
+// Restore URL state and its model together before rendering a view.
 async function applyHashParams() {
   const [view, id, query] = parseHash();
   const parsed = parseQueryParams(query);
@@ -673,11 +665,7 @@ function navHTML(active) {
   </nav>`;
 }
 
-// Toast del guardado local: vive fuera de #app-root (sobrevive a los
-// re-renders) y flotante (no consume fold: el banner en línea empujaba los
-// datos más de media pantalla en móvil). La oferta 'save' es persistente
-// hasta responder; 'saved'/'loaded'/'error' son transitorios y reinician
-// el estado para que el próximo render no los reviva.
+// Keep the persistent save prompt separate from transient cache messages.
 const cacheToast = document.createElement('div');
 cacheToast.id = 'cache-toast';
 cacheToast.className = 'cache-toast';
@@ -709,7 +697,7 @@ function updateCacheToast() {
   cacheTimer = setTimeout(() => { cacheOffer = null; cacheToast.hidden = true; }, 4000);
 }
 
-// Delegación única: los botones del toast se re-crean con cada estado.
+// Toast buttons are re-created on each render, so delegate their events.
 cacheToast.addEventListener('click', async (e) => {
   const btn = e.target.closest?.('[data-cache]');
   if (!btn) return;
@@ -720,14 +708,14 @@ cacheToast.addEventListener('click', async (e) => {
     if (!model) return;
     if (ok) {
       cacheOffer = 'saved';
-      cachePersist(); // best-effort: pedir al SO que no evicte la caché
+      cachePersist();
     } else {
-      // Si falló y había caché previa, borrarla: datos viejos engañarían.
+      // Remove stale cache after a failed load to avoid showing old data.
       await cacheClear();
       cacheOffer = 'error';
     }
   } else {
-    cacheOffer = null; // No por ahora
+    cacheOffer = null;
   }
   updateCacheToast();
 });
@@ -928,9 +916,7 @@ function prepareComparison(context) {
 function render() {
   if (!current) return;
   const [name, id, , resolved] = parseHash();
-  // Reconstruir el HTML resetea el scroll de la fila: se conserva y restaura
-  // para que navegar no pegue un salto brusco (el bug se veía al tocar una
-  // sección con el nav deslizado a la derecha).
+  // Restore horizontal nav position after rebuilding its markup.
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);
@@ -960,7 +946,6 @@ function render() {
   const nav = appRoot.querySelector('.app-nav');
   if (nav) {
     nav.scrollLeft = navX;
-    // Fade izquierdo solo con scroll real: en reposo atenuaría la 1ra sección.
     const syncNavFade = () => {
       nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
       nav.classList.toggle('is-end', nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2);
@@ -977,10 +962,6 @@ function render() {
       else if (linkRect.right > visibleRight) nav.scrollLeft += linkRect.right - visibleRight;
     }
   }
-  // Header actions y footer solo en la vista app: en inicio el footer repite
-  // el aviso de privacidad y las acciones no aplican. La tagline también se
-  // oculta: junto al nav compite con el título de la vista (el reload del
-  // botón "Cargar archivos" la restaura).
   siteHeader?.classList.remove('site-header--home');
   headerActions?.removeAttribute('hidden');
   siteFooter?.removeAttribute('hidden');
@@ -993,9 +974,7 @@ function render() {
   wireView();
 }
 
-// Cambio de filtro: re-agrega y actualiza SOLO la vista + los dinámicos de la
-// barra (presets, meses, fechas, chips, fila de Limpiar). La barra persiste: no
-// se pierde el foco ni el estado del <details> de avanzados.
+// Keep the filter bar mounted so edits preserve focus and disclosure state.
 async function applyAndRenderView(focusSelector = null) {
   unresolvedFilter = false;
   appRoot.querySelector('#filter-resolution-warning')?.remove();
@@ -1020,7 +999,6 @@ async function applyAndRenderView(focusSelector = null) {
   if (focusSelector) (appRoot.querySelector(focusSelector) ?? appRoot.querySelector('#filter-chips'))?.focus({ preventScroll: true });
 }
 
-// Sincroniza los controles de la barra con el estado (sin re-renderizarla).
 function updateFilterDynamics() {
   const bar = document.getElementById('filter-bar');
   if (!bar || !model || !current) return;
@@ -1033,9 +1011,7 @@ function updateFilterDynamics() {
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', String(active));
   });
-  // Los shortcuts de año/mes reflejan el rango vigente (sync inverso): match
-  // exacto → el valor, rango arbitrario → "Personalizado", sin rango →
-  // placeholder. Nunca hay dos verdades sobre el período activo.
+  // Keep date shortcuts aligned with the active range.
   syncRangeShortcuts(bar.querySelector('[data-filter="year"]'), document.getElementById('filter-month'), state.range);
   bar.querySelectorAll('[data-dow]').forEach((btn) => {
     btn.setAttribute('aria-pressed', String(state.dows?.has(Number(btn.dataset.dow)) ?? false));
@@ -1100,8 +1076,7 @@ function wireFilters() {
     });
   });
 
-  // Rango personalizado con fechas (from/to en época local). `edited` dice qué
-  // input disparó el cambio: si el par queda invertido, colapsa al día editado.
+  // Collapse an inverted custom range to the edited date.
   const fromInput = appRoot.querySelector('[data-filter="from"]');
   const toInput = appRoot.querySelector('[data-filter="to"]');
   const onDate = (edited) => {
@@ -1147,7 +1122,7 @@ function wireFilters() {
     });
   });
 
-  // Flag filters distinguish all, true, false and unknown values.
+  // Keep unknown flags distinct from known true and false values.
   appRoot.querySelectorAll('[data-toggle3]').forEach((sel) => {
     sel.addEventListener('change', () => {
       const k = sel.dataset.toggle3;
@@ -1158,7 +1133,6 @@ function wireFilters() {
   });
 }
 
-// La vista se re-renderiza sin tocar la barra de filtros (persistencia de la barra).
 
 let searchTimer = 0;
 
@@ -1177,13 +1151,13 @@ function syncTallTables(root) {
 function updateRankCard(focusSel = null) {
   const card = document.getElementById('rank-card');
   if (!card || !current) return;
-  // Mismo caso que el nav: conservar el scroll de las filas de tabs.
+  // Restore horizontal tab position after rendering the new table.
   const tabsX = [...card.querySelectorAll('.tabs')].map((t) => t.scrollLeft);
   card.innerHTML = rankCardHTML(current, { ...rankUI, contextQuery: buildViewContext('dashboard').query });
   card.querySelectorAll('.tabs').forEach((t, i) => { t.scrollLeft = tabsX[i] ?? 0; });
   wireRankCard();
   syncTallTables(card);
-  // El re-render destruye el control activado: devolverle el foco (teclado).
+  // Restore keyboard focus after re-rendering the activated control.
   if (focusSel) card.querySelector(focusSel)?.focus({ preventScroll: true });
 }
 
@@ -1215,8 +1189,7 @@ function wireRankCard() {
     saveStoredLimits();
     updateRankCard('[data-topn]');
   });
-  // Flechas del tablist (APG, activación automática): la selección sigue al
-  // foco; el re-render reposiciona el foco en el tab activado.
+  // Automatic tab activation follows focus; restore focus after re-rendering.
   const tablist = card.querySelector('[role="tablist"][aria-label="Rankings"]');
   if (tablist) tablist.addEventListener('keydown', (e) => {
     const tabs = [...tablist.querySelectorAll('[role="tab"]')];
@@ -1240,7 +1213,7 @@ function wireRankCard() {
       updateRankCard('[data-search]');
       const again = card.querySelector('[data-search]');
       if (again) again.setSelectionRange(again.value.length, again.value.length);
-      // El cambio de tabla no se anuncia solo: la región viva da el conteo.
+      // Announce the result count after changing catalog tabs.
       const q = v.trim();
       if (q) {
         const n = card.querySelectorAll('tbody tr').length;
@@ -1579,7 +1552,6 @@ function wireView() {
     });
   });
 
-  // Filtro cruzado por entidad desde las fichas (el foco va al chip creado).
   appRoot.querySelectorAll('[data-filter-entity]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const [kind, raw] = btn.dataset.filterEntity.split(':');
@@ -1595,7 +1567,6 @@ function wireView() {
     });
   });
 
-  // Copiar resumen en texto plano (con fallback a copia manual).
   appRoot.querySelectorAll('[data-action="copy-receipt"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const confirmed = analysisState.getConfirmed();
@@ -1880,13 +1851,11 @@ headerActions?.querySelectorAll('[data-action="reset"]').forEach((btn) => {
 const inputApi = setupInput({
   analyze,
   onReady() {
-    // Deep-link: un hash existente (posiblemente con params de filtro) manda;
-    // solo la entrada sin hash aterriza en el dashboard.
+    // An existing hash takes precedence over the default dashboard route.
     if (!location.hash) location.hash = '#/dashboard';
     render();
   },
   onError() {
-    // El error ya se muestra en la vista de inicio (input.js).
   },
   onLoadCached: loadCached,
   onClearCached: clearCached
@@ -2007,9 +1976,7 @@ window.addEventListener('hashchange', async () => {
   lastRoute = route;
 });
 
-// Chips para quitar filtros activos + "Borrar todo". Delegado una sola vez:
-// #filter-chips se re-renderiza en cada cambio (los listeners directos morirían
-// al primero). El foco va a la fila de chips (tabindex -1).
+// Delegate chip events because the row is re-rendered after each filter change.
 appRoot.addEventListener('click', (e) => {
   const compareEntityButton = e.target.closest?.('[data-compare-entity]');
   if (!compareEntityButton || !appRoot.contains(compareEntityButton)) return;
@@ -2065,7 +2032,6 @@ appRoot.addEventListener('click', (e) => {
   document.getElementById('filter-chips')?.focus();
 });
 
-// Context bar: selector de métrica compartido con el ranking y foco a filtros
 appRoot.addEventListener('click', (e) => {
   const metricBtn = e.target.closest?.('.context-bar [data-metric]');
   if (metricBtn && appRoot.contains(metricBtn)) {
@@ -2087,9 +2053,7 @@ appRoot.addEventListener('click', (e) => {
   }
 });
 
-// Los enlaces internos llevan los filtros y métrica vigentes en el hash: el click los
-// reescribe antes de navegar (deep-link y Back coherentes entre vistas).
-// Captura el estado de retorno en history.state antes de navegar.
+// Preserve filters, metric, and return position across internal navigation.
 appRoot.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[href^="#/"]');
   if (!a || !appRoot.contains(a)) return;
@@ -2106,8 +2070,7 @@ appRoot.addEventListener('click', (e) => {
   a.setAttribute('href', `${base}?${merged}`);
 });
 
-// Títulos de gráficos en táctil: el <title> del SVG no se muestra al toque.
-// Delegado una sola vez (sobrevive a los re-renders). Solo sin hover.
+// SVG titles are unavailable on touch, so handle chart feedback without hover.
 appRoot.addEventListener('click', (e) => {
   if (!window.matchMedia('(hover: none)').matches) return;
   if (e.target.closest?.('.chart-card .chart-interactive-wrap')) return;
@@ -2122,7 +2085,6 @@ appRoot.addEventListener('click', (e) => {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 });
 
-// Selector de rango e inspector sobre el calendario
 appRoot.addEventListener('click', (e) => {
   const dayEl = e.target.closest?.('[data-day]');
   if (dayEl && appRoot.contains(dayEl)) {

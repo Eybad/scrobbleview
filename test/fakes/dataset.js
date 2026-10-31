@@ -1,7 +1,3 @@
-// fakes/dataset.js — construye un Dataset directamente (sin pasar por el parser)
-//
-// events: [{t, m, track, artist, album, reasonStart, reasonEnd, flags}]
-// t en epoch segundos; los strings se internan con dedup (id 0 = vacío).
 
 import { Interner } from '../../src/parse/impl/intern.js';
 

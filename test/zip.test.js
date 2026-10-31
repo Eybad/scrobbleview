@@ -1,8 +1,3 @@
-// test/zip.test.js — adapter zip-bytes: expandir el zip de Spotify a ByteSources
-//
-// Fixtures: el propio buildZip del proyecto (export) como writer de referencia
-// + zips mínimos artesanales para bordes que buildZip no produce (encriptado,
-// método exótico, Zip64). Node ≥ 21.2: DecompressionStream('deflate-raw').
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,14 +32,12 @@ async function readAll(src) {
   return out;
 }
 
-// Bytes incompresibles (random criptográfico): buildZip cae a store (method 0).
 function incompressible(n) {
   const out = new Uint8Array(n);
   crypto.getRandomValues(out);
   return out;
 }
 
-// Zip mínimo de un store entry con flags/métodos arbitrarios (writer ajeno).
 function craftZip({ name = 'Streaming_History_Audio_0.json', payload = encoder.encode('[]'), flags = 0, method = 0 }) {
   const nameBytes = encoder.encode(name);
   const crc = crc32(payload);
@@ -140,7 +133,7 @@ test('zip: método no soportado → E_ZIP_METHOD', async () => {
 
 test('zip: marcador Zip64 → E_ZIP64', async () => {
   const zip = craftZip({});
-  // EOCD con count 0xFFFF: el writer declaró Zip64 y no lo soportamos.
+
   const tail = [
     ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(0xFFFF), ...u16(0xFFFF),
     ...u32(0), ...u32(0), ...u16(0)

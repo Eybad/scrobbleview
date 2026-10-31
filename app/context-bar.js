@@ -1,8 +1,3 @@
-// app/context-bar.js — Franja contextual compacta (Etapa 2, punto 5)
-//
-// Franja compacta (<= 2 filas en móvil) que muestra el período activo,
-// resumen de filtros y selector unificado de métrica (Tiempo / Reproducciones).
-
 import { locToISODate, advancedFilterCount } from './filter-ui.js';
 import { esc } from '../src/charts.js';
 

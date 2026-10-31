@@ -1,10 +1,3 @@
-// src/synthetic.js — generador determinista de datos sintéticos (demo + tests)
-//
-// Produce el MISMO tipo de datos que el parser consume (JSON crudo → ByteSource
-// memory → analyze()). Patrones realistas: artistas con tracks propios, sesiones
-// de escucha por la tarde/noche, duraciones 30s-4min, skips cortos, algo de
-// shuffle/offline. Determinista por seed: la demo siempre muestra lo mismo.
-
 export function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -19,11 +12,10 @@ export function mulberry32(seed) {
 const REASONS_START = ['apptrack', 'clickrow', 'remote', 'autoplay'];
 const REASONS_END = ['trackdone', 'endplay', 'logout', 'fwdbtn'];
 
-// Distribución de hora local: picos 7-9h y 18-23h.
 function pickHour(rnd) {
   const r = rnd();
-  if (r < 0.12) return 7 + Math.floor(rnd() * 3); // mañana
-  if (r < 0.75) return 18 + Math.floor(rnd() * 6); // tarde/noche
+  if (r < 0.12) return 7 + Math.floor(rnd() * 3);
+  if (r < 0.75) return 18 + Math.floor(rnd() * 6);
   return Math.floor(rnd() * 24);
 }
 
@@ -41,11 +33,10 @@ export function generateSyntheticEvents(n, seed = 42) {
   }
 
   const events = [];
-  const base = Date.UTC(2024, 0, 1) / 1000; // 2024-01-01T00:00:00Z
-  const span = 86400 * 365 * 2; // 2 años
-  let cursor = base + Math.floor(rnd() * 86400 * 7); // arranca la primera semana
+  const base = Date.UTC(2024, 0, 1) / 1000;
+  const span = 86400 * 365 * 2;
+  let cursor = base + Math.floor(rnd() * 86400 * 7);
   for (let i = 0; i < n; i++) {
-    // Sesiones: saltos de minutos a horas; a veces un mismo día, a veces días.
     const gap = rnd() < 0.6 ? Math.floor(rnd() * 3600) + 60 : Math.floor(rnd() * 86400 * 3) + 3600;
     cursor += gap;
 
@@ -56,7 +47,6 @@ export function generateSyntheticEvents(n, seed = 42) {
     const shuffle = rnd() < 0.6;
     const offline = rnd() < 0.05;
 
-    // La hora local se aproxima con UTC (la demo no depende de tz exacta).
     const d = new Date((cursor + pickHour(rnd) * 3600) * 1000);
     events.push({
       ts: d.toISOString(),

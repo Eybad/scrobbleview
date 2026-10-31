@@ -1,9 +1,4 @@
-// impl/totals.js — totales globales (un pase sobre ds, sin ordenar)
-//
-// Port del v2 (totals + ms_dist + completed + median_ms) + métricas nuevas:
-// playsSignificant (ms >= minMs) y playsSkipped (ms < skipThresholdMs).
-// episodes se deriva de los warnings del parser (EPISODE): el parser descarta
-// episodios, así que el dataset nunca los contiene.
+// episodes is sourced from parser warnings because episodes are excluded from the dataset.
 
 const MS_BUCKETS = [
   [0, 10000, '<10 s'],
@@ -51,7 +46,6 @@ export function computeTotals(ds, minMs, skipThresholdMs, indices = null) {
     if (known) msDist[b]++;
   }
 
-  // TypedArray.sort ordena numéricamente (a diferencia de Array.sort).
   const knownMs = allMs.subarray(0, durationKnown);
   knownMs.sort();
   const medianMs = durationKnown === 0 ? null

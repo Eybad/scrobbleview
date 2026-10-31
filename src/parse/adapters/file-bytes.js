@@ -1,7 +1,4 @@
-// adapters/file-bytes.js — ByteSource desde un File (browser)
-//
-// Lee en slices de 256 KiB (evita el tope de memoria de Blob = RAM/100 en
-// Android: 80 MB en 8 GB, 40 MB en 4 GB; superado, Chrome pagea a disco).
+// Read in small slices to avoid materializing large Blob chunks in Android Chrome.
 
 const CHUNK = 262144;
 

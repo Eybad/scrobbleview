@@ -1,14 +1,3 @@
-// columns.js — column builders (layout 23 B/evento)
-//
-// t     Int32Array   segundos relativos a meta.tsMin (granularidad de segundo, exacto)
-// m     Uint32Array  ms reproducidos (máx 86,4M ms, exacto)
-// tr    Uint32Array  índice a dicts.tracks   (Uint16 desborda a 65.535: con 1M
-// ar    Uint32Array  índice a dicts.artists   eventos hay 50-70K tracks únicos)
-// al    Uint32Array  índice a dicts.albums
-// rs    Uint8Array   índice a dicts.reasons (set pequeño y cerrado)
-// re    Uint8Array   índice a dicts.reasons
-// flags Uint8Array   bit-packed: 1 shuffle, 2 skipped, 4 offline, 8 ms_unknown, 16 shuffle_unknown, 32 skipped_unknown, 64 offline_unknown
-
 const INITIAL_CAP = 1024;
 
 export function createColumns() {

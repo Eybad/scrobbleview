@@ -1,5 +1,3 @@
-// File selection and local loading status. Analysis runs through the worker client.
-
 import { fmtNum } from '../src/charts.js';
 
 export function assertDistinctFiles(files) {
@@ -41,7 +39,6 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
 
   let busy = false;
 
-  // En táctil no existe el gesto de arrastrar: el texto lo dice sin rodeos.
   if (window.matchMedia('(pointer: coarse)').matches) {
     zone.querySelector('.drop-zone-title').textContent = 'Tocá para seleccionar tus archivos';
     zone.querySelector('.drop-zone-hint').hidden = true;
@@ -51,9 +48,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   function setStatus(msg, kind = '') {
     status.textContent = msg;
     status.className = `status ${kind}`.trim();
-    // Los errores son asertivos (role=alert, se anuncian al insertarse); el
-    // resto queda como status (cortés). Cambiar el role dinámicamente es lo
-    // que el patrón pide: el elemento vive en el HTML estático.
+    // Keep the live region polite except when reporting an error.
     status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   }
 
@@ -138,15 +133,14 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   });
   input.addEventListener('change', () => {
     pickFiles(input.files);
-    input.value = ''; // permite re-cargar el mismo archivo
+    input.value = ''; // Allow selecting the same file again.
   });
 
   btnDemo.addEventListener('click', () => run({ demo: true }));
   if (btnUploadAlt) btnUploadAlt.addEventListener('click', () => input.click());
   if (btnCached) btnCached.addEventListener('click', runCached);
   if (btnCachedClear && onClearCached) {
-    // Confirmación en dos pasos: el primer toque arma el botón de papelera
-    // como píldora roja "Confirmar" (4 s); el segundo borra.
+    // Require a second action before deleting the saved history.
     const deleteLabel = btnCachedClear.querySelector('.cache-delete-label');
     let armed = false;
     let disarmTimer = 0;

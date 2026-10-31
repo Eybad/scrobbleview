@@ -1,22 +1,4 @@
-// charts.js — componentes SVG puros: (data, opts) → string HTML/SVG
-//
-// Sin DOM, sin estado, sin dependencias. Cada gráfico lleva role="img" +
-// aria-label y <title> por elemento (tooltip accesible, no solo hover).
-// Escala secuencial NO cromática (un solo tono) para heatmaps (WCAG 1.4.1).
-//
-// CONTRATO DE ESCAPING — leer antes de tocar un generator:
-//  · Todo string de dato (label, title, cellText, caption, centerLabel,
-//    cellTitle) se escapa con esc() EXACTAMENTE una vez, sobre el valor CRUDO.
-//    Nunca armar un string a partir de uno ya escapado y volver a pasar esc()
-//    (produce doble escape visible: "&amp;lt;").
-//  · `format` es la excepción: su retorno se emite crudo porque solo recibe
-//    números y debe poder devolver markup numérico. Los formatters del proyecto
-//    (fmtNum/fmtMs/fmtPct/fmtBytes) pasan por toLocaleString/toFixed y no pueden emitir
-//    "<". Si alguna vez se le pasa un formatter con dato de usuario, hay que
-//    escapar SU retorno en el generator.
-//  · `accent`, `colors` y `colorScale` se interpolan en atributos sin escapar:
-//    son constantes de paleta. Tratar cualquier valor de usuario como color
-//    sería un error de contrato, no de sanitización.
+// Escape untrusted strings exactly once. Formatters and palette values are trusted.
 
 export const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 export const DOW_SHORT = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
@@ -24,18 +6,13 @@ export const DOW_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 export const PALETTE = ['#3b82f6', '#f59e0b', '#1db954', '#a855f7', '#06b6d4', '#ec4899', '#eab308', '#10b981', '#8b5cf6', '#f97316'];
 
-// Acento del design system (css/style.css --accent) + escala secuencial de
-// heatmaps (css --heat-0…--heat-5). Los charts no leen variables CSS (son
-// strings SVG puros), así que la paleta se duplica acá como constantes.
+// Keep SVG colors in sync with CSS; generated strings cannot read CSS variables.
 export const ACCENT = '#1db954';
 export const HEAT = ['#1a1e26', '#123524', '#14532d', '#15803d', '#22c55e', '#4ade80'];
 
-// Color de "sin datos" (día fuera del rango cubierto por la fuente), distinto
-// del nivel 0 de la escala (cero actividad dentro del rango). Espejo de
-// --surface-2 (css/style.css): los charts no leen variables CSS.
+// No data differs from zero activity inside the observed range.
 export const NO_DATA = '#1e222b';
 
-// Espejo de --border (css/style.css): color de las guías de referencia.
 const GRID = '#2a2f3a';
 
 export function esc(s) {
@@ -47,10 +24,7 @@ export function esc(s) {
     .replaceAll("'", '&#39;');
 }
 
-// Agrupación manual de miles: el locale es-ES omite el separador en números
-// de 4 cifras (CLDR minimumGroupingDigits=2) y en un dashboard estadístico
-// eso rompe el escaneo visual (2538 vs 95.608 se leen distinto). El punto
-// es el separador correcto en es-ES; determinista e independiente de ICU.
+// es-ES omits grouping for four-digit values, so format separators explicitly.
 export function fmtNum(n) {
   return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
@@ -75,10 +49,6 @@ export function fmtPct(x) {
   return `${(x * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })}%`;
 }
 
-// Múltiplos binarios (1024), la convención de los gestores de archivos.
-// La base 'B' en el índice 0 alinea la escala con el contador de divisiones:
-// sin ella, 1 división (valor en KB) se etiquetaba 'MB' y 73 MB se mostraba
-// como 69,8 GB (regresión visible en el meta del dashboard).
 export function fmtBytes(n) {
   if (n < 1024) return `${Math.round(n)} B`;
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -91,9 +61,7 @@ export function fmtBytes(n) {
   return `${value.toLocaleString('es-ES', { maximumFractionDigits: 1 })} ${units[unitIndex]}`;
 }
 
-// Escala discreta cuantizada de 6 niveles sobre la paleta del design system.
-// Nivel 0 reservado para v <= 0 (sin actividad); v > 0 usa raíz cuadrada para
-// dar resolución a los valores chicos. Por encima del máximo satura.
+// Reserve level 0 for no activity; positive values use a square-root scale.
 export function makeScale(max, palette = HEAT) {
   const top = palette.length - 1;
   return (v) => {
@@ -102,8 +70,6 @@ export function makeScale(max, palette = HEAT) {
     return palette[1 + Math.min(top - 1, Math.floor(Math.sqrt(t) * top))];
   };
 }
-
-// ---------- barChart ----------
 
 const MAX_BAR_WIDTH = 48;
 const STACKED_VIEWBOX_PAD = 4;
@@ -129,8 +95,6 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
     const h = Math.max(1, (d.value / max) * plotH);
     const x = i * slot + (slot - barW) / 2;
     const y = topPad + plotH - h;
-    // Escapar SIEMPRE el valor crudo: armar el title desde el label ya
-    // escapado y volver a aplicar esc() produce doble escape ("&amp;lt;").
     const rawLabel = d.label != null ? String(d.label) : '';
     const label = esc(rawLabel);
     const title = d.title != null ? String(d.title) : `${rawLabel}: ${format(d.value)}`;
@@ -147,8 +111,6 @@ export function barChart({ data, width = 640, height = 220, format = fmtNum, acc
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(aria)}" class="chart">${bars}</svg>`;
 }
 
-// ---------- lineChart ----------
-
 export function lineChart({ points, width = 640, height = 200, format = fmtNum, accent = ACCENT, area = true }) {
   const n = points.length;
   if (n === 0) return '';
@@ -161,9 +123,6 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   const ys = points.map((point) => Number.isFinite(point.y)
     ? pad.t + plotH - (point.y / maxY) * plotH
     : pad.t + plotH);
-  // Guías de referencia a 1, 2/3 y 1/3 del máximo + el máximo rotulado:
-  // sin escala, la línea flotaba sin ancla y el lector no podía estimar
-  // valores intermedios.
   const grid = [1, 2 / 3, 1 / 3].map((f) => {
     const y = pad.t + plotH - f * plotH;
     return `<line x1="${pad.l}" x2="${width - pad.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${GRID}" stroke-width="1"/>`;
@@ -197,11 +156,6 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const title = raw ? `${raw}: ${format(p.y)}` : format(p.y);
     return `<circle data-chart-index="${i}" class="chart-point" cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="2.5" fill="${accent}"><title>${esc(title)}</title></circle>`;
   }).join('');
-  // Cadencia regular + último siempre: el greedy ("los que entran + último")
-  // dejaba intervalos irregulares (9, 6, 6… 13 meses) y el eje se leía mal.
-  // Paso fijo sobre posiciones etiquetadas; si el penúltimo pisa al último,
-  // se poda el penúltimo (la cadencia manda). Ancho 0.6em/char, gap 10px.
-  // Extremos visibles + ancla variable (no se cortan en el borde).
   const fs = 12, minGap = 10, maxTicks = 8;
   const estW = (s) => String(s).length * 0.6 * fs;
   const span = (i) => {
@@ -231,8 +185,7 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
     const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
     return `<text x="${xs[i].toFixed(1)}" y="${height - 4}" text-anchor="${anchor}" class="chart-label" font-size="${fs}">${esc(String(p.label))}</text>`;
   }).join('');
-  // Resumen para lectores de pantalla: rango, máximo y último. Enumerar todos
-  // los puntos (una evolución mensual multi-año) hacía el aria-label inusable.
+  // Summarize long series instead of listing every point in the accessible name.
   const nameOf = (p, i) => (p.label != null ? String(p.label) : `punto ${i + 1}`);
   let maxIdx = knownIndexes[0] ?? -1;
   for (const index of knownIndexes) if (points[index].y > points[maxIdx].y) maxIdx = index;
@@ -248,22 +201,17 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   </svg>`;
 }
 
-// ---------- heatmap (día × hora, etc.) ----------
-
 export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels = [], yLabels = [], cellTitle = (c) => `${c.x},${c.y}: ${c.value}`, cellSize = 14, gap = 2, ariaLabel = 'Mapa de calor' }) {
   if (cells.length === 0) return '';
   const labelW = yLabels.length ? 34 : 0;
   const labelH = xLabels.length ? 16 : 0;
   const plotW = width - labelW;
   const plotH = height - labelH;
-  // Columnas = máximo entre labels y datos: con xLabels diezmados (8) sobre
-  // 24 horas, usar xLabels.length achicaba la grilla y desalineaba los ticks.
+  // Keep data columns when labels are sampled to reduce tick density.
   const cols = Math.max(xLabels.length, Math.max(...cells.map((c) => c.x)) + 1);
   const rows = Math.max(yLabels.length, Math.max(...cells.map((c) => c.y)) + 1);
   const cw = Math.min(cellSize, (plotW - gap * (cols - 1)) / cols);
   const ch = Math.min(cellSize, (plotH - gap * (rows - 1)) / rows);
-  // viewBox ajustado al contenido (sin aire muerto a derecha/abajo).
-  // Labels a font 12 usuario mínimo (ONS): a 8 se vuelven ~7px al escalar.
   const fs = 12;
   const gridW = cols * (cw + gap) - gap;
   const gridH = rows * (ch + gap) - gap;
@@ -274,8 +222,6 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
     const y = c.y * (ch + gap);
     return `<rect data-chart-index="${i}" class="chart-point" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="${colorScale(c.value)}" rx="1.5"><title>${esc(cellTitle(c))}</title></rect>`;
   }).join('');
-  // Ticks posicionados por VALOR (no por índice) + ancla variable en los
-  // extremos para que no se corten contra el borde del viewBox.
   const xl = xLabels.map((l, i) => {
     const v = Number(l);
     const h = l !== '' && Number.isFinite(v) ? v : i;
@@ -286,7 +232,7 @@ export function heatmap({ cells, width = 640, height = 200, colorScale, xLabels 
   return `<svg viewBox="0 0 ${vbW} ${vbH}" data-grid-cols="${cols}" data-grid-rows="${rows}" data-grid-label-width="${labelW}" data-grid-label-top="0" data-grid-label-height="${labelH ? 20 : 0}" data-grid-cell-width="${cw.toFixed(1)}" data-grid-cell-height="${ch.toFixed(1)}" data-grid-gap="${gap}" role="img" aria-label="${esc(ariaLabel)}" class="chart">${rects}${xl}${yl}</svg>`;
 }
 
-// Tabla fallback cell-navegable para heatmaps (SC 2.5.8 / no solo hover).
+// Provide a keyboard-accessible data table alongside heatmaps.
 export function heatmapTable({ cells, xLabels, yLabels, cellText = (c) => String(c.value), caption }) {
   const rows = yLabels.length || Math.max(...cells.map((c) => c.y)) + 1;
   const cols = xLabels.length || Math.max(...cells.map((c) => c.x)) + 1;
@@ -307,8 +253,6 @@ export function heatmapTable({ cells, xLabels, yLabels, cellText = (c) => String
   html += '</tbody></table></div></details>';
   return html;
 }
-
-// ---------- donut ----------
 
 export function donut({ segments, size = 180, format = fmtNum, centerLabel = '', colors = PALETTE }) {
   const total = segments.reduce((a, s) => a + s.value, 0);
@@ -341,11 +285,6 @@ export function donut({ segments, size = 180, format = fmtNum, centerLabel = '',
   </div>`;
 }
 
-// ---------- hbarChart (barras horizontales HTML) ----------
-
-// Barras horizontales en HTML puro, misma gramática visual que las filas de
-// rankings (pista + relleno proporcional al máximo de la lista). El texto es
-// legible por sí solo (valor y porcentaje visibles): no necesita role="img".
 export function hbarChart({ rows, format = fmtNum, accent = ACCENT }) {
   if (rows.length === 0) return '';
   const max = Math.max(...rows.map((r) => r.value), 1);
@@ -362,8 +301,6 @@ export function hbarChart({ rows, format = fmtNum, accent = ACCENT }) {
   return `<ul class="hbar">${items}</ul>`;
 }
 
-// ---------- sparkline ----------
-
 export function sparkline({ points, width = 120, height = 32, accent = ACCENT }) {
   const n = points.length;
   if (n === 0) return '';
@@ -373,24 +310,15 @@ export function sparkline({ points, width = 120, height = 32, accent = ACCENT })
   const xs = points.map((_, i) => (n === 1 ? width / 2 : (i / (n - 1)) * width));
   const ys = points.map((v) => height - 2 - ((v - min) / span) * (height - 4));
   const line = points.map((_, i) => `${i === 0 ? 'M' : 'L'}${xs[i].toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  // Trazo fino + uniones redondeadas: las puntas miter de los picos agudos
-  // sobresalen hasta recortarse en el borde del viewBox (efecto "línea
-  // cortada"). preserveAspectRatio="none" + non-scaling-stroke: el CSS fija
-  // el alto (sparkline compacta en tablas) y el trazo queda uniforme en
-  // pantalla en vez de escalar con el ancho de columna.
   return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="sparkline" aria-hidden="true"><path d="${line}" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
-// ---------- calendarGrid (año × día, estilo GitHub) ----------
-
 export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.date}: ${d.value}`, cellSize = 11, gap = 2, dataRange = null, interactive = false }) {
   const byDate = new Map(days.map((d) => [d.date, d]));
-  const startDow = (new Date(Date.UTC(year, 0, 1)).getUTCDay() + 6) % 7; // lunes=0
+  const startDow = (new Date(Date.UTC(year, 0, 1)).getUTCDay() + 6) % 7; // Monday = 0.
   const daysInYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
   const weeks = Math.ceil((startDow + daysInYear) / 7);
   const width = weeks * (cellSize + gap) + 34;
-  // Banda de meses a font 12 (baseline 13) + celdas desde y=20: a font 8
-  // con baseline 10 las etiquetas quedaban en ~3.6px efectivas en 360px.
   const gridTop = 20;
   const height = gridTop + 7 * (cellSize + gap) - gap + 4;
   const monthLabels = [];
@@ -408,26 +336,19 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
     const x = 34 + col * (cellSize + gap);
     const y = gridTop + dow * (cellSize + gap);
     const v = byDate.get(iso)?.value ?? 0;
-    // Fuera del rango de datos = "sin datos" (NO_DATA); dentro del rango sin
-    // valor = cero actividad (nivel 0 de la escala). Sin esta distinción el
-    // calendario pintaba de "vacío" años enteros que la fuente no cubre.
+    // Distinguish uncovered dates from zero activity within the observed range.
     const day = Math.floor(Date.UTC(year, 0, 1 + doy) / 86400000);
     const outOfData = dataRange != null && (day < dataRange.from || day > dataRange.to);
     const fill = outOfData ? NO_DATA : colorScale(v);
     const title = outOfData ? `${iso}: sin datos` : cellTitle({ date: iso, value: v });
-    // Modo selector (main.js delega el click): data-day = día epoch del cell.
     const attrs = interactive ? ` data-day="${day}"` : '';
     cells.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${fill}" rx="2"${attrs}><title>${esc(title)}</title></rect>`);
   }
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Calendario de actividad ${esc(String(year))}" class="chart calendar">${monthLabels.join('')}${cells.join('')}</svg>`;
 }
 
-// ---------- listeningClock (hora × día) ----------
-
 export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LONG[c.dow]} ${c.hour}:00 — ${c.value}`, cellSize = 14, gap = 2 }) {
   const width = 24 * (cellSize + gap) + 30;
-  // Gutter bajo celdas: baseline de labels a 12px del borde de celda + 4px
-  // para descendentes (el `y=height-3` con font 8 pisaba la fila dom).
   const height = 7 * (cellSize + gap) + 28;
   const byKey = new Map(cells.map((c, index) => [`${c.hour}-${c.dow}`, { ...c, index }]));
   const rects = [];
@@ -447,8 +368,6 @@ export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LO
   const dowLabels = DOW_SHORT.map((l, d) => `<text x="26" y="${(14 + d * (cellSize + gap) + cellSize / 2 + 4).toFixed(1)}" text-anchor="end" class="chart-label" font-size="12">${l}</text>`).join('');
   return `<svg viewBox="0 0 ${width} ${height}" data-grid-cols="24" data-grid-rows="7" data-grid-label-width="30" data-grid-label-top="14" data-grid-cell-width="${cellSize}" data-grid-cell-height="${cellSize}" data-grid-gap="${gap}" role="img" aria-label="Reloj de escucha: hora del día por día de semana" class="chart clock">${rects}${hourLabels}${dowLabels}</svg>`;
 }
-
-// ---------- stackedBar ----------
 
 export function stackedBar({ series, width = 640, height = 200, colors = PALETTE, format = fmtNum, segmentLabels = null }) {
   const n = series.length;
@@ -479,17 +398,12 @@ export function stackedBar({ series, width = 640, height = 200, colors = PALETTE
         return `<li class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(String(l))}</li>`;
       }).join('')}</ul>`
     : '';
-  // Resumen para lectores de pantalla: totales por serie (los segmentos ya
-  // viajan en los <title> de cada rect).
+  // Keep the accessible name concise; segment details remain in SVG titles.
   const aria = `Barras apiladas: ${series.map((s) => `${s.label}: ${format(s.total ?? s.values.reduce((a, b) => a + b, 0))}`).join(', ')}`;
   return `<div class="stacked-wrap"><svg viewBox="0 0 ${width} ${viewBoxHeight}" role="img" class="chart" aria-label="${esc(aria)}">${rows}</svg>${legend}</div>`;
 }
 
-// ---------- heatLegend ----------
-
-// Leyenda de la escala secuencial: el swatch de nivel 0 (sin actividad) va
-// separado de la rampa 1..5 (menos → más). Sin ella, un heatmap no permite
-// decodificar color → valor (el calendario de GitHub la trae por eso).
+// Separate zero activity from the positive-value ramp.
 export function heatLegend({ palette = HEAT, zeroLabel = 'sin actividad', minLabel = 'menos', maxLabel = 'más' } = {}) {
   const ramp = palette.slice(1).map((c) => `<span class="heat-swatch" style="background:${c}"></span>`).join('');
   return `<div class="heat-legend">

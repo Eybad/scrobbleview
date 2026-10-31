@@ -1,4 +1,3 @@
-// filters.test.js — applyFilters/filterDataset contra un escaneo manual ingenuo
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from '../src/parse/parse.js';
@@ -16,10 +15,10 @@ const UTC = fixedTz('utc', 0);
 test('filters select both occurrences of a local range during DST fall-back', () => {
   const tz = offsetTable('ny', [[0, -240], [1730613600, -300]]);
   const ds = buildDataset([
-    { t: 1730613000, m: 180000, track: 'A', artist: 'X' }, // 01:50 EDT
-    { t: 1730614200, m: 60000, track: 'B', artist: 'Y' }, // 01:10 EST
-    { t: 1730616600, m: 120000, track: 'C', artist: 'X' }, // 01:50 EST
-    { t: 1730617800, m: 60000, track: 'D', artist: 'Y' } // 02:10 EST
+    { t: 1730613000, m: 180000, track: 'A', artist: 'X' },
+    { t: 1730614200, m: 60000, track: 'B', artist: 'Y' },
+    { t: 1730616600, m: 120000, track: 'C', artist: 'X' },
+    { t: 1730617800, m: 60000, track: 'D', artist: 'Y' }
   ]);
   const state = {
     ...emptyFilterState(),
@@ -43,7 +42,6 @@ async function makeDs() {
   return parse(memoryBytes('demo.json', syntheticJSON(800, 9)), {});
 }
 
-// Escaneo manual: mismo contrato que applyFilters, sin búsqueda binaria.
 function manualFilter(ds, derived, pred) {
   const { loc, hour, dow, ymd, day, order } = derived;
   const out = [];
@@ -78,20 +76,16 @@ test('filters: sin filtros devuelve todo el dataset', async () => {
   compare({ indices, counts }, expected, 'todo');
 });
 
-// La derivación base se puede precalcular una vez (main.js la conserva junto
-// al dataset) y reusar en cada cambio de filtro: mismo resultado que derivar
-// adentro, sin re-ejecutar order.sort(). El derived pertenece a esa tz: si se
-// pasa, manda sobre el parámetro tz.
+// Reuse precomputed derivation for a time zone without sorting on every filter.
 test('filters: derived precalculado tiene precedencia sobre tz', async () => {
   const ds = await makeDs();
   const tzB = fixedTz('b', -300);
   const derivedA = derive(ds, UTC);
   const crossed = emptyFilterState();
   crossed.hours = new Set([20, 21, 22]);
-  const a = applyFilters(ds, crossed, UTC); // deriva interno con UTC
-  const b = applyFilters(ds, crossed, tzB, derivedA); // el derived manda, no tzB
+  const a = applyFilters(ds, crossed, UTC);
+  const b = applyFilters(ds, crossed, tzB, derivedA);
   compare(b, { indices: [...a.indices], counts: a.counts }, 'derived precede a tz');
-  // Y con la misma tz, 3 args ≡ 4 args (caracterización).
   const c = applyFilters(ds, crossed, UTC, derivedA);
   compare(c, { indices: [...a.indices], counts: a.counts }, 'misma tz');
 });
@@ -139,7 +133,7 @@ test('filters: predicados cruzados (año, mes, hora, dow) coinciden con manual',
   compare(applyFilters(ds, byHour, UTC), manualFilter(ds, derived, (_i, k) => hour[k] >= 20 && hour[k] <= 22), 'horas');
 
   const byDow = emptyFilterState();
-  byDow.dows = new Set([0, 6]); // lunes y domingo
+  byDow.dows = new Set([0, 6]);
   compare(applyFilters(ds, byDow, UTC), manualFilter(ds, derived, (_i, k) => dow[k] === 0 || dow[k] === 6), 'dows');
 });
 
@@ -212,12 +206,10 @@ test('filters: filterDataset conserva orden local y dicts compartidos', async ()
   assert.equal(subset.meta.tsMin, ds.meta.tsMin);
   assert.equal(subset.meta.sources, ds.meta.sources);
 
-  // El subconjunto de un dataset ordenado por local conserva el orden.
   const subDerived = derive(subset, UTC);
   for (let k = 1; k < subDerived.loc.length; k++) {
     assert.ok(subDerived.loc[k] >= subDerived.loc[k - 1], `loc no decreciente en ${k}`);
   }
-  // Y las columnas del subconjunto coinciden con las del original en los índices elegidos.
   for (let k = 0; k < indices.length; k++) {
     const i = indices[k];
     assert.equal(subset.t[k], ds.t[i], `t[${k}]`);
@@ -244,9 +236,7 @@ test('filters: re-agregado del subconjunto == counts de applyFilters', async () 
 });
 
 test('filters: convención dow = lunes=0 (2024-01-01 lunes, 2024-01-07 domingo)', async () => {
-  // Ancla la convención del proyecto: si derive.js volviera a domingo=0, este
-  // test falla (los otros tests de dow comparan derive contra derive y no lo
-  // detectarían).
+
   const json = JSON.stringify([
     {
       ts: '2024-01-01T12:00:00Z', ms_played: 30000,

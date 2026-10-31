@@ -1,13 +1,4 @@
-// app/storage.js — caché descartable en IndexedDB (opcional, con consentimiento)
-//
-// Guarda el Dataset parseado (columnas + dicts como ArrayBuffer, una fila por
-// columna) para rehidratar sin re-parsear. NUNCA escribe sin consentimiento
-// explícito de la UI; clear() borra todo. El parseo funciona igual sin caché:
-// storage es best-effort — cuota, eviction de Safari (7 días sin uso) o
-// QuotaExceededError degradan a parse normal, nunca rompen la app.
-//
-// serialize/deserialize son puras (testeables en Node); la capa IndexedDB solo
-// existe en navegador (isAvailable() la detecta).
+// IndexedDB is optional and written only after explicit consent.
 
 import { FIELDS, assertDataset } from '../src/parse/dataset.js';
 import { Interner } from '../src/parse/impl/intern.js';
@@ -22,8 +13,7 @@ export function serialize(ds) {
   for (const f of FIELDS) rows[`col:${f}`] = ds[f].buffer;
   for (const name of DICT_NAMES) {
     const d = ds.dicts[name];
-    // Recortar a lo usado: keys/offsets/lengths crecen por potencias de dos y
-    // el buffer sobrante no aporta nada (cuota escasa en Android).
+    // Trim spare capacity to conserve limited browser storage.
     const used = d.count > 0 ? d.offsets[d.count - 1] + d.lengths[d.count - 1] : 0;
     rows[`dict:${name}:keys`] = d.keys.slice(0, used).buffer;
     rows[`dict:${name}:offsets`] = d.offsets.slice(0, d.count).buffer;
@@ -85,8 +75,7 @@ function openDB() {
       const db = req.result;
       if (settled) { db.close(); return; }
       settled = true;
-      // Otra pestaña del mismo origen pide una versión nueva: cerrar para no
-      // bloquear el upgrade (sin esto, open() de la otra pestaña queda en blocked).
+      // Close this connection so another tab can upgrade the database.
       db.onversionchange = () => db.close();
       resolve(db);
     };
@@ -112,8 +101,7 @@ function run(mode, fn) {
   }));
 }
 
-// Guarda el dataset. Best-effort: cualquier fallo (cuota, eviction) resuelve
-// con false, nunca lanza hacia la UI.
+// Save failures resolve false so optional caching never blocks analysis.
 export async function save(ds) {
   if (!isAvailable()) return false;
   const rows = serialize(ds);
@@ -127,7 +115,6 @@ export async function save(ds) {
   }
 }
 
-// Rehidrata el dataset guardado, o null si no hay caché / está corrupta.
 export async function load() {
   if (!isAvailable()) return null;
   try {
@@ -156,7 +143,6 @@ export async function load() {
   }
 }
 
-// ¿Existe caché? Chequeo liviano (solo claves, no deserializa).
 export async function hasCache() {
   if (!isAvailable()) return false;
   try {
@@ -194,8 +180,6 @@ export function summaryFromMetaAndT(meta, tCol) {
   };
 }
 
-// Lee solo meta y col:t para mostrar el resumen de la sesión guardada en el
-// inicio sin deserializar los diccionarios ni el resto de las columnas.
 export async function cacheSummary() {
   if (!isAvailable()) return null;
   try {
@@ -220,7 +204,6 @@ export async function cacheSummary() {
   }
 }
 
-// Borra toda la caché. Devuelve true si había algo que borrar.
 export async function clear() {
   if (!isAvailable()) return false;
   try {
@@ -231,7 +214,6 @@ export async function clear() {
   }
 }
 
-// Estimación de cuota (best-effort, puede no existir en todos los navegadores).
 export async function estimate() {
   if (!navigator.storage?.estimate) return null;
   try {
@@ -241,7 +223,7 @@ export async function estimate() {
   }
 }
 
-// Pide persistencia (best-effort; Safari evicta a los 7 días sin uso salvo PWA).
+// Request persistent storage to avoid browser eviction where supported.
 export async function persist() {
   if (!navigator.storage?.persist) return false;
   try {

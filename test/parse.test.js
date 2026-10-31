@@ -1,4 +1,3 @@
-// parse.test.js — red de seguridad del scanner y del pipeline de parseo
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -124,59 +123,44 @@ test('ts parseo: ISO con Z, offset y fracción', async () => {
   assert.equal(parseISOToEpoch(enc.encode('1970-01-01T00:00:00Z')), 0);
   assert.equal(parseISOToEpoch(enc.encode('1970-01-01T00:00:00.000Z')), 0);
   assert.equal(parseISOToEpoch(enc.encode('1970-01-01T01:00:00+01:00')), 0);
-  assert.equal(parseISOToEpoch(enc.encode('1970-01-01T23:00:00-01:00')), 86400); // 23:00 UTC-1 = 00:00 UTC del día siguiente
+  assert.equal(parseISOToEpoch(enc.encode('1970-01-01T23:00:00-01:00')), 86400);
   assert.equal(parseISOToEpoch(enc.encode('2020-01-02T03:04:05Z')), 1577934245);
   assert.equal(parseISOToEpoch(enc.encode('no-es-fecha')), null);
 });
 
-// La columna t es Int32Array (columns.js): un epoch > 0x7FFFFFFF desborda en
-// silencio al storear y derive.js calcula una fecha equivocada sin avisar.
-// El límite es el tope de Int32, NO el año 2100: el epoch de 2100 ya lo excede.
+// Absolute epochs must fit Int32 or silently corrupt stored dates.
 test('ts parseo: epoch fuera del rango de Int32 → null (fail-fast, no wrap)', async () => {
   const { parseISOToEpoch } = await import('../src/parse/impl/ts.js');
   const enc = new TextEncoder();
-  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:07Z')), 2147483647); // tope exacto, se acepta
-  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:08Z')), null); // 1 s más: desborda
-  assert.equal(parseISOToEpoch(enc.encode('2100-01-01T00:00:00Z')), null); // 4.1e9 > 0x7FFFFFFF
+  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:07Z')), 2147483647);
+  assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:08Z')), null);
+  assert.equal(parseISOToEpoch(enc.encode('2100-01-01T00:00:00Z')), null);
   assert.equal(parseISOToEpoch(enc.encode('9999-12-31T23:59:59Z')), null);
-  // El offset puede empujar el epoch hacia arriba: 03:14:07 en UTC-14 rebasa el tope.
   assert.equal(parseISOToEpoch(enc.encode('2038-01-19T03:14:07-14:00')), null);
-  // Y hacia abajo, aceptando el mismo instante UTC que la aserción de arriba
-  // (local = UTC − 14 h, o sea 2038-01-18T13:14:07 local = 2038-01-19T03:14:07Z).
   assert.equal(parseISOToEpoch(enc.encode('2038-01-18T13:14:07-14:00')), 2147483647);
 });
 
-// Validación estricta del timestamp: dígitos ASCII, separadores, offset
-// completo, rangos de offset y días reales por mes. Nunca devuelve NaN:
-// un offset truncado ("-04") antes pasaba el chequeo `t === null` de parse.js
-// como NaN y corrompía la columna t (Int32Array lo storea como 0).
 test('ts parseo: validación estricta (nunca NaN, días reales, offset completo)', async () => {
   const { parseISOToEpoch } = await import('../src/parse/impl/ts.js');
   const enc = new TextEncoder();
   const t = (s) => parseISOToEpoch(enc.encode(s));
-  // Offset truncado → null (no NaN).
   assert.equal(t('2020-01-02T03:04:05-04'), null);
   assert.equal(t('2020-01-02T03:04:05+02'), null);
   for (const bad of ['2020-01-02T03:04:05-04', '2020-01-02T03:04:05+02', '2020-01-02T03:04:05+']) {
     assert.ok(t(bad) === null, `${bad} debe ser null, nunca NaN`);
   }
-  // No-dígitos y separadores inválidos.
   assert.equal(t('202A-01-02T03:04:05Z'), null);
   assert.equal(t('2020/01/02T03:04:05Z'), null);
   assert.equal(t('2020-01-02X03:04:05Z'), null);
   assert.equal(t('2020-01-02T03-04-05Z'), null);
-  // El espacio como separador fecha/hora se acepta (variante habitual).
   assert.equal(t('2020-01-02 03:04:05Z'), 1577934245);
-  // Offset fuera de rango.
   assert.equal(t('2020-01-02T03:04:05+24:00'), null);
   assert.equal(t('2020-01-02T03:04:05+02:60'), null);
   assert.equal(t('2020-01-02T03:04:05+2X:00'), null);
-  // Días inexistentes (incluye bisiestos).
   assert.equal(t('2024-02-31T00:00:00Z'), null);
   assert.equal(t('2023-02-29T00:00:00Z'), null);
   assert.equal(t('2020-04-31T00:00:00Z'), null);
-  assert.equal(t('2024-02-29T00:00:00Z'), 1709164800); // 2024 bisiesto: válido
-  // Sanos siguen pasando (fracción + offset combinado también).
+  assert.equal(t('2024-02-29T00:00:00Z'), 1709164800);
   assert.equal(t('2020-01-02T03:04:05.123Z'), 1577934245);
   assert.equal(t('1970-01-01T01:00:00.000+01:00'), 0);
 });
@@ -194,24 +178,16 @@ test('interning: duplicados → mismo id; escapes → mismo id', async () => {
   assert.equal(interner.get(0), '');
 });
 
-// fromParts rehidrata desde la caché IndexedDB. count ya se acota contra la
-// longitud de los arrays, pero los RANGOS de bytes no: keys.subarray(start, end)
-// recorta en silencio y una caché corrupta entraría como entidad truncada o vacía
-// en vez de caer en el miss (storage.js:146 devuelve null ante excepción).
+// Validate cached byte ranges because subarray silently truncates invalid ranges.
 test('interning: caché corrupta → RangeError, no entidad truncada', async () => {
   const { Interner } = await import('../src/parse/impl/intern.js');
   const keys = new Uint8Array([65, 66, 67]);
-  // offsets[1] + lengths[1] = 99 > keys.length = 3
   const corrupt = { keys, offsets: new Uint32Array([0, 2]), lengths: new Uint32Array([1, 97]), count: 2 };
   assert.throws(() => Interner.fromParts(corrupt), RangeError);
-  // length que se sale por el mismo motivo, con start válido
   assert.throws(
     () => Interner.fromParts({ keys, offsets: new Uint32Array([0, 0]), lengths: new Uint32Array([1, 4]), count: 2 }),
     RangeError,
   );
-  // Sanity: el caso bien formado NO lanza y rehidrata las claves tal cual.
-  // (fromParts no reserva el id 0 para la cadena vacía: ese caso está en
-  // insert(); aquí las claves vienen tal cual de la caché serializada.)
   const ok = Interner.fromParts({ keys, offsets: new Uint32Array([0, 1]), lengths: new Uint32Array([1, 2]), count: 2 });
   assert.equal(ok.size, 2);
   assert.equal(ok.get(0), 'A');
@@ -222,11 +198,7 @@ test('archivo vacío → EmptyFileError', async () => {
   await assert.rejects(parse(memoryBytes('empty', '[]')), (err) => err.code === 'E_EMPTY');
 });
 
-// Spotify puede agregar campos con objetos/arrays anidados en el futuro: si la
-// clave no está en el ALLOWLIST, el scanner debe saltar el subárbol completo
-// (con contador de profundidad, respetando strings/escapes internos) en vez de
-// fallar con "Se esperaba valor". Incluye llaves dentro de strings y corte
-// a mitad del subárbol (chunkBytes chico) para la invariancia entre chunks.
+// Unknown nested fields must be validated and skipped across chunk boundaries.
 test('clave desconocida con objeto/array anidado → se ignora, el evento pasa', async () => {
   const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": 1000, "master_metadata_track_name": "T", "spotify_track_uri": "spotify:track:1", "futuro": {"a": [1, {"b": "x } y"}], "c": "ho}la", "q": "a\\"b"}, "lista": [1, 2, {"z": "}"}]}]';
   for (const chunkBytes of [262144, 7]) {
@@ -237,9 +209,7 @@ test('clave desconocida con objeto/array anidado → se ignora, el evento pasa',
   }
 });
 
-// Un ms_played negativo (JSON manipulado) antes se storeaba tal cual en
-// Uint32Array: -1 → 4294967295 (~49,7 días en una pista). Ahora se acota a 0
-// con warning BAD_MS y el evento se conserva (cuenta como reproducción).
+// Negative ms_played must not wrap when stored in Uint32.
 test('ms_played negativo o imposible → m=0 + warning BAD_MS', async () => {
   const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": -5, "master_metadata_track_name": "A", "spotify_track_uri": "spotify:track:1"}, {"ts": "2021-01-01T00:01:00Z", "ms_played": 100000000000, "master_metadata_track_name": "B", "spotify_track_uri": "spotify:track:2"}, {"ts": "2021-01-01T00:02:00Z", "ms_played": 1000, "master_metadata_track_name": "C", "spotify_track_uri": "spotify:track:3"}]';
   const ds = await parse(memoryBytes('badms', json));
@@ -250,7 +220,6 @@ test('ms_played negativo o imposible → m=0 + warning BAD_MS', async () => {
   assert.equal(total, 1000);
 });
 
-// Con varias fuentes, el error debe decir QUÉ archivo falló.
 test('ParseError incluye el label del archivo que falló', async () => {
   const json = '[{"ts": "2021-01-01T00:00:00Z", "ms_played": 100,]';
   await assert.rejects(parse(memoryBytes('mi-archivo.json', json)), (err) => {

@@ -9,24 +9,20 @@
   --text: #edf1f4;
   --text-muted: #a3adb8;
   --text-faint: #747f8b;
-  /* Variante legible de faint para texto chico informativo (4.5:1 sobre
-     ambas superficies; #747f8b ≈3.9:1 sobre #1b232c queda para decorativo
-     o texto grande). */
+  /* Meets 4.5:1 for small informational text on both surfaces. */
   --text-faint-high: #9ba7b4;
 
-  /* Acento único del design system. Espejo en ACCENT (src/charts.js): los
-     SVG no leen variables CSS, la paleta vive duplicada ahí. */
+  /* Keep in sync with ACCENT in src/charts.js; SVG cannot read CSS variables. */
   --accent: #1db954;
   --accent-contrast: #0b3d1f;
   --accent-soft: rgba(29, 185, 84, 0.14);
   --accent-border: rgba(29, 185, 84, 0.4);
 
-  /* Rojo de destrucción: solo acciones que borran datos del usuario
-     (5.4:1 sobre el fondo, apto para texto sm). */
+  /* Reserved for destructive actions; contrast ratio 5.4:1 on the page. */
   --danger: #e35d6a;
   --danger-soft: rgba(227, 93, 106, 0.14);
 
-  /* Escala secuencial espejo de HEAT (src/charts.js); mantener sincronizadas. */
+  /* Keep in sync with HEAT in src/charts.js. */
   --heat-0: #1a1e26;
   --heat-1: #123524;
   --heat-2: #14532d;
@@ -37,8 +33,6 @@
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 
-  /* Escala tipográfica (modular, ratio 1.25; 7 tokens, sin tamaños sin uso).
-     h1 y KPI son fluidos (Utopia): fijos por breakpoint para el resto. */
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
   --fs-md: 1rem;
@@ -73,21 +67,18 @@
   box-sizing: border-box;
 }
 
-/* Impedir que display:flex / inline-flex de autor pise el atributo HTML hidden
-   en botones (#btn-cached, #btn-cached-clear) o vistas (#view-app). */
+/* Override display rules that would reveal content marked hidden. */
 [hidden] {
   display: none !important;
 }
 
 html {
   color-scheme: dark;
-  /* El flash gris del tap nativo compite con el feedback propio (:active,
-     estados translúcidos); el doble-tap-zoom no aporta en esta app. */
+  /* Avoid a second tap feedback layer over the custom active state. */
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Elimina el delay de ~300 ms de double-tap-zoom en táctil sobre controles
-   (el viewport ya lo evita, esto lo refuerza en WebViews viejos). */
+/* Avoid the legacy double-tap delay in older WebViews. */
 a, button, select, summary, input, [tabindex] {
   touch-action: manipulation;
 }
@@ -158,8 +149,6 @@ code {
   padding: 0 var(--sp-4);
 }
 
-/* Aire bajo el header (el aviso de privacidad y el banner de caché
-   quedaban pegados al borde superior). */
 main.container {
   flex: 1 0 auto;
   display: flex;
@@ -181,8 +170,6 @@ main.container {
   text-align: center;
 }
 
-/* Fila del brand: título a la izquierda, acciones de app (íconos ghost) a
-   la derecha. La tagline vive fuera, apilada debajo: no compite por ancho. */
 .header-brand {
   display: flex;
   flex-wrap: wrap;
@@ -190,16 +177,13 @@ main.container {
   gap: var(--sp-2) var(--sp-4);
 }
 
-/* Acciones de app (exportar / cargar archivos): íconos ghost en la fila del
-   brand. margin-left:auto las empuja a la derecha; ocultas en inicio. */
 .header-actions {
   display: flex;
   gap: var(--sp-2);
   margin-left: auto;
 }
 
-/* Botón de solo ícono: target táctil 44×44 (WCAG 2.5.5) sin peso visual;
-   el verbo viaja en aria-label + title (tooltip nativo en desktop). */
+/* Icon-only actions need an accessible name and a 44px touch target. */
 .btn-icon {
   background: none;
   border: 1px solid transparent;
@@ -220,8 +204,7 @@ main.container {
   color: var(--text);
 }
 
-/* Ocupado (export construye el zip): sin feedback el usuario re-toca y
-   encola otra descarga idéntica. */
+/* Prevent repeat exports while the ZIP is being built. */
 .btn-icon:disabled {
   opacity: 0.5;
   cursor: default;
@@ -276,16 +259,12 @@ main.container {
   width: 100%;
 }
 
-/* Acota el ancho en la pantalla de carga con margen superior controlado
-   para equilibrar el centro óptico bajo el encabezado. */
 #view-home {
   max-width: 580px;
   margin: var(--sp-2) auto 0;
   padding-bottom: var(--sp-6);
 }
 
-/* Tarjeta protagonista de sesión guardada: botón principal de carga a la
-   izquierda + papelera destructiva agrupada a la derecha. */
 .cache-card {
   display: flex;
   align-items: stretch;
@@ -369,8 +348,6 @@ main.container {
   color: var(--danger);
 }
 
-/* Aviso de privacidad: píldora compacta con candado a la izquierda y
-   texto alineado a la izquierda en dos líneas. */
 .privacy-note {
   margin: var(--sp-4) 0 0;
   padding: var(--sp-3) var(--sp-4);
@@ -478,7 +455,6 @@ main.container {
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-/* Ícono de subida en acento verde: foco único cuando no hay caché. */
 .drop-zone-icon {
   width: 24px;
   height: 24px;
@@ -530,8 +506,7 @@ main.container {
   font-size: var(--fs-sm);
 }
 
-/* Botones: label 14 como el resto de los interactivos (M3 label large)
-   y min-height 44px para cumplir el target táctil WCAG 2.5.5. */
+/* Keep the minimum touch target at 44px. */
 .btn {
   font: inherit;
   font-size: var(--fs-sm);
@@ -625,9 +600,7 @@ main.container {
   background: var(--accent-soft);
 }
 
-/* Variante callada de .btn-link: el descarte de un toast nunca compite con
-   la acción principal (el acento queda reservado para confirmar). El hover
-   lleva la clase doble para ganarle a .btn-link:hover en la cascada. */
+/* The doubled selector overrides .btn-link:hover. */
 .btn-quiet {
   color: var(--text-muted);
 }
@@ -637,8 +610,7 @@ main.container {
   color: var(--text);
 }
 
-/* Variante destructiva de .btn-link: borrar datos guardados destruye
-   trabajo del usuario; el rojo lo señala sin convertirlo en botón sólido. */
+/* Reserve danger color for actions that delete saved data. */
 .btn-danger {
   color: var(--danger);
 }
@@ -667,8 +639,7 @@ main.container {
   min-height: 0;
 }
 
-/* Destaca fallos con el color de peligro del sistema (la barra accent
-   sugería "seleccionado", no "algo falló"). */
+/* Error state uses danger color so it cannot read as a selection. */
 .status.error {
   background: var(--surface-2);
   color: var(--text);
@@ -702,8 +673,7 @@ main.container {
   border: 0;
 }
 
-/* Foco visible global dos tonos (técnica C40: par blanco/negro 21:1, pasa 3:1
-   sobre cualquier fondo del tema; nunca outline:none sin reemplazo). */
+/* Two-tone focus remains visible against every theme surface. */
 :focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
@@ -729,17 +699,13 @@ main.container {
   }
 }
 
-/* Navegación: UNA fila deslizante con las 6 secciones (nada oculto tras
-   botón). El fade derecho señaliza el scroll; el activo entra en vista solo.
-   .is-scrolled (la pone main.js al scrollear) suma el fade izquierdo: en
-   reposo atenuaría la primera sección sin motivo. */
+/* main.js toggles these classes to reveal horizontal scroll affordances. */
 .app-nav {
   display: flex;
   flex-wrap: nowrap;
   gap: var(--sp-2);
   align-items: center;
-  /* Sin padding inferior: el subrayado del activo debe apoyar sobre el
-     borde del contenedor (patrón de tabs, no píldoras flotantes). */
+
   padding: var(--sp-2) 0 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--sp-6);
@@ -771,11 +737,9 @@ main.container {
   text-decoration: none;
   font-size: var(--fs-sm);
   padding: var(--sp-1) var(--sp-3);
-  /* Tabs con subrayado: el acento es una línea bajo el texto activo, no
-     una píldora — el translúcido queda reservado a los seleccionados de
-     los filtros (chips/presets). */
+
   border-bottom: 2px solid transparent;
-  /* Hit-area táctil: 44px de alto (WCAG 2.5.5 / Apple 44pt). */
+
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -788,9 +752,6 @@ main.container {
   color: var(--text);
 }
 
-/* La sección activa SIEMPRE se distingue (antes solo se notaba por hover/
-   focus: al clickear afuera todo quedaba igual de apagado y no se sabía
-   qué vista se estaba viendo). */
 .app-nav a[aria-current="page"] {
   color: var(--text);
   border-bottom-color: var(--accent);
@@ -1001,26 +962,20 @@ main.container {
   border-radius: var(--radius);
   padding: var(--sp-4) var(--sp-6);
   margin-bottom: var(--sp-6);
-  /* Sin overflow: el scroll horizontal vive en .table-scroll, así el
-     título de la card nunca scrollea junto con la tabla. */
+
   min-width: 0;
 }
 
-/* Wrapper de scroll para tablas: solo la tabla scrollea, el h2 queda fijo.
-   Sin tabindex: el scroll sigue al foco de los enlaces internos. */
 .table-scroll {
   overflow-x: auto;
   max-width: 100%;
   scrollbar-gutter: stable;
-  /* F110 (2.4.11): la primera columna es sticky y puede tapar el 100% del
-     elemento con foco al scrollear; el padding de scroll lo deja visible. */
+  /* Keep focused links visible beside the sticky first column (WCAG 2.4.11). */
   scroll-padding-left: 3em;
-  /* Sin padding lateral a propósito: con sangrado, `left` del sticky queda
-     a merced de padding-box vs content-box (huecos o 2da columna tapada
-     según navegador). Sin padding, `left: 0` es exacto siempre. */
+
   margin: 0;
   padding: 0 0 var(--sp-3);
-  /* Sombra de corte: señaliza que hay más contenido a los costados. */
+
   background:
     linear-gradient(to right, var(--surface) 30%, transparent),
     linear-gradient(to left, var(--surface) 30%, transparent) 100% 0;
@@ -1094,12 +1049,10 @@ main.container {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-6);
-  /* Todo bloque trae su propio margen inferior (las cards 24, los kpis 24):
-     sin este, grid-2 → kpis quedaba con 0px de aire (caja pegada). */
+
   margin-bottom: var(--sp-6);
 }
 
-/* El último bloque de la vista no empuja al footer (ya trae su aire). */
 #view-root > :last-child {
   margin-bottom: 0;
 }
@@ -1110,7 +1063,6 @@ main.container {
   transition: opacity 150ms ease;
 }
 
-/* Franja contextual compacta (Etapa 2) */
 .context-bar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -1179,7 +1131,6 @@ main.container {
   margin-bottom: 0;
 }
 
-/* Las tablas viven siempre dentro de .table-scroll. */
 table {
   width: max-content;
   min-width: 100%;
@@ -1209,8 +1160,7 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
-/* Hover de fila solo con puntero real: en táctil el :hover queda pegado
-   tras el toque (sticky hover) y pintaba la fila tocada sin motivo. */
+/* Avoid persistent hover styling after taps on touch screens. */
 @media (hover: hover) {
   tbody tr:hover td {
     background: var(--surface-2);
@@ -1226,7 +1176,6 @@ td a:hover {
   text-decoration: underline;
 }
 
-/* Barras horizontales (hbarChart): pista + relleno proporcional al máximo. */
 .hbar {
   list-style: none;
   margin: 0;
@@ -1278,9 +1227,6 @@ td a:hover {
   display: block;
 }
 
-/* El sparkline de rankings comprime su alto (el SVG se estira al caja):
-   pico menos dramático y fila más densa. El trazo no se deforma porque
-   lleva vector-effect="non-scaling-stroke". */
 .sparkline {
   height: 32px;
 }
@@ -1291,16 +1237,13 @@ td a:hover {
   gap: var(--sp-3);
 }
 
-/* Scroll por componente para grillas 2D (heatmaps, reloj, calendario):
-   actúa la excepción de Reflow 1.4.10 — el scroll vive en el componente,
-   nunca en la página. El piso preserva celdas legibles en 360px. */
+/* Keep two-dimensional chart scrolling inside each chart. */
 .chart-scroll {
   overflow-x: auto;
   max-width: 100%;
   padding-bottom: var(--sp-3);
   scrollbar-gutter: stable;
-  /* Sombra de corte como .table-scroll: señaliza que hay más contenido
-     a los costados cuando la grilla desborda. */
+
   background:
     linear-gradient(to right, var(--surface) 30%, transparent),
     linear-gradient(to left, var(--surface) 30%, transparent) 100% 0;
@@ -1314,8 +1257,6 @@ td a:hover {
   min-width: 480px;
 }
 
-/* bar/line/stacked (viewBox 640): en móvil la card da ~296px y el texto de
-   12px del SVG rinde ~5.5px. El piso de 480px mantiene ≥9px efectivos. */
 .chart-scroll--bar svg {
   min-width: 480px;
 }
@@ -1338,14 +1279,10 @@ td a:hover {
   min-width: 620px;
 }
 
-/* Números tabulares en tablas (los KPIs lo tienen en .kpi dd). */
 .card table {
   font-variant-numeric: tabular-nums;
 }
 
-/* Primera columna fija en scroll horizontal. Fondo opaco + sombra derecha:
-   sin ellos la columna fija tapa a medias la segunda al scrollear.
-   background-clip: los bordes de separate+sticky se pintan mal en Gecko. */
 .table-scroll table th:first-child,
 .table-scroll table td:first-child {
   position: sticky;
@@ -1356,23 +1293,20 @@ td a:hover {
   box-shadow: 1px 0 0 var(--border);
 }
 
-/* Sticky top-left corner (#) in vertically scrollable tables (Top >= 25) must
-   stack above both thead th (z-index: 2) and tbody td:first-child (z-index: 1). */
+/* The corner cell intersects both sticky axes. */
 .table-scroll--tall table thead th:first-child {
   top: 0;
   left: 0;
   z-index: 3;
 }
 
-/* Sincroniza el fondo opaco de la celda sticky al pasar el cursor por la fila. */
 @media (hover: hover) {
   .table-scroll table tbody tr:hover td:first-child {
     background: var(--surface-2);
   }
 }
 
-/* La tabla fallback (a11y/teclado) no fija columnas: es suplementaria del
-   SVG y el sticky era la fuente de los dígitos fantasma al scrollear. */
+/* The accessible fallback table is supplemental to the visual SVG. */
 .table-fallback table th:first-child,
 .table-fallback table td:first-child {
   position: static;
@@ -1386,16 +1320,12 @@ td a:hover {
   background-repeat: no-repeat;
 }
 
-/* El hint de shift+click del calendario no aplica en pantalla táctil. */
 @media (pointer: coarse) {
   .hint-shift {
     display: none;
   }
 }
 
-/* Alineación por semántica de columna (no por posición): texto a la
-   izquierda por defecto; .n numérico comparable a la derecha + tabular;
-   .c para # rank (ordinal corto centrado). El th hereda la de sus datos. */
 .table-scroll table {
   font-variant-numeric: lining-nums tabular-nums;
 }
@@ -1411,11 +1341,6 @@ td a:hover {
   text-align: center;
 }
 
-/* Nombres a 1 línea con ellipsis en tablas (el title del link lleva el
-   nombre completo). Fuera de tablas .cell-name no trunca nada.
-   .cell-link apila título + artista (rankings de canciones/álbumes): el
-   enlace cubre ambas líneas y solo el título hereda el verde de td a,
-   el artista va en gris secundario (sin muro verde). */
 .table-scroll td .cell-name {
   display: block;
   max-width: 44vw;
@@ -1438,7 +1363,6 @@ td a:hover {
   font-size: var(--fs-xs);
 }
 
-/* Fixed 100% layout prevents horizontal overflow in ranking tables across viewports. */
 .table-scroll table.rank-table {
   width: 100%;
   table-layout: fixed;
@@ -1537,7 +1461,7 @@ td a:hover {
 
 .donut-center {
   fill: var(--text);
-  /* En rem con el token (px fijo rompía el resize 200%). */
+  /* rem preserves the target during 200% text resizing. */
   font-size: 1.25rem;
   font-weight: 700;
   text-anchor: middle;
@@ -1571,7 +1495,6 @@ td a:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* Leyenda de la escala secuencial (heatmaps, relojes, calendarios). */
 .heat-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1596,7 +1519,6 @@ td a:hover {
   flex: 0 0 auto;
 }
 
-/* Celdas del calendario en modo selector (data-day las vuelve clicables). */
 .calendar rect[data-day] {
   cursor: pointer;
 }
@@ -1611,7 +1533,7 @@ td a:hover {
   font-size: var(--fs-sm);
 }
 
-/* Hit-area táctil de 44px para abrir/cerrar la tabla accesible de los heatmaps. */
+/* Keep the accessible table toggle at a 44px touch target. */
 .table-fallback summary {
   cursor: pointer;
   color: var(--text-muted);
@@ -1629,7 +1551,6 @@ td a:hover {
   margin-top: var(--sp-2);
 }
 
-/* Sin caja propia (anti-carditis): las píldoras flotan sobre el fondo. */
 .filter-bar {
   margin-bottom: var(--sp-6);
   display: flex;
@@ -1644,8 +1565,7 @@ td a:hover {
   align-items: center;
 }
 
-/* Los flex items no bajan de su min-content por defecto: esto mata el
-   desborde de inputs/selects en 360px. */
+/* Allow filter children to shrink below their min-content width. */
 .filter-row > * {
   min-width: 0;
 }
@@ -1672,9 +1592,6 @@ td a:hover {
   border-color: var(--border-strong);
 }
 
-/* Presets callados: elegir un rango temporal es un ajuste, no una acción —
-   sin caja (la caja queda para data-action). El activo conserva la píldora
-   accent (regla de aria-pressed de abajo, gana por orden de cascada). */
 .filter-bar button[data-preset] {
   background: none;
   border-color: transparent;
@@ -1687,16 +1604,13 @@ td a:hover {
   color: var(--text);
 }
 
-/* Fechas: 2 columnas siempre (condensa el panel de avanzados; en 360px cada
-   input conserva ~160px, suficiente para el picker nativo). */
 .filter-dates {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-2);
 }
 
-/* Caption arriba del control (fechas, año, mes): el label visible evita
-   depender del aria-label para entender el panel. */
+/* Keep field labels visible instead of relying on placeholders. */
 .filter-bar .field {
   min-width: 0;
   display: flex;
@@ -1706,7 +1620,6 @@ td a:hover {
   color: var(--text-muted);
 }
 
-/* Grupos con caption (días, franjas): el caption apila encima de la banda. */
 .filter-row.filter-group {
   flex-direction: column;
   align-items: stretch;
@@ -1752,12 +1665,11 @@ td a:hover {
 
 .filter-bar button[data-preset].active,
 .filter-bar button[aria-pressed="true"] {
-  /* Mismo lenguaje que tabs/nav/chips (translúcido): un seleccionado nunca
-     grita más que una acción; el sólido queda reservado a .btn-primary. */
+
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent);
-  /* Sin negrita: evita que el preset activo reordene el wrap. */
+
 }
 
 .filter-bar select {
@@ -1771,9 +1683,6 @@ td a:hover {
   color: var(--text);
 }
 
-/* Chips conmutables (días/franjas): bandas de una fila. Mismo lenguaje que
-   los presets: inactivo = surface-2 + borde visible (affordance clara en
-   brillo alto), activo = translúcido accent. */
 .chip-grid {
   display: grid;
   gap: var(--sp-1);
@@ -1814,8 +1723,6 @@ td a:hover {
   border-color: var(--accent);
 }
 
-/* Toggles skip/shuffle/offline: grilla de 3 columnas iguales (sin fila
-   desbalanceada); caption arriba, select a ancho completo debajo. */
 .toggle-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1896,9 +1803,7 @@ td a:hover {
   margin: 0;
 }
 
-/* display:flex quita el marker nativo de <details>: el chevron lo reemplaza
-   a la izquierda del texto (convención de disclosure). Fila completa como
-   hit-area táctil; el chevron rota al abrir. */
+/* flex removes the native marker; the custom chevron replaces it. */
 .filter-advanced summary {
   cursor: pointer;
   color: var(--text-muted);
@@ -1922,9 +1827,6 @@ td a:hover {
   color: var(--text);
 }
 
-/* Las filas viven dentro de <details>: el gap de .filter-bar no las alcanza.
-   Ritmo por grupos: 12px tras el summary, 8px dentro del grupo, 16px entre
-   grupos (fechas+período / días+franjas / toggles). */
 .filter-advanced .filter-row {
   margin-top: var(--sp-3);
 }
@@ -1937,10 +1839,6 @@ td a:hover {
   margin-top: var(--sp-4);
 }
 
-/* Controles de rankings: grilla con lugares FIJOS (métrica con scroll
-   interno a la izquierda, Top N fijo a la derecha, buscador a fila completa
-   abajo). Con flex-wrap cualquier cambio de ancho de los tabs —ej. negrita
-   del activo— movía el Top N de lugar al cambiar de métrica. */
 .rank-controls {
   display: flex;
   flex-direction: column;
@@ -2005,7 +1903,6 @@ td a:hover {
   flex: 0 0 auto;
 }
 
-/* Toast para títulos de gráficos en táctil. */
 .toast {
   position: fixed;
   left: 50%;
@@ -2019,7 +1916,7 @@ td a:hover {
   font-size: var(--fs-sm);
   box-shadow: var(--shadow);
   z-index: 50;
-  /* Contenedor centrado, texto a la izquierda (se lee desde el borde). */
+
   text-align: left;
 }
 
@@ -2102,10 +1999,6 @@ details.calendar-year summary:hover {
   color: var(--accent);
 }
 
-/* Tabs de rankings como control segmentado: los segmentos comparten una
-   caja (el activo se eleva con el translúcido accent, mismo lenguaje que
-   chips/presets). Sin wrap: el modelo de flechas APG y el indicador activo
-   se rompen en 2 filas. */
 .tabs {
   display: flex;
   flex-wrap: nowrap;
@@ -2151,11 +2044,9 @@ details.calendar-year summary:hover {
 .tabs button[aria-selected="true"] {
   background: var(--accent-soft);
   color: var(--accent);
-  /* Sin font-weight: la negrita ensancha el tab activo y mueve los
-     controles vecinos (el Top N saltaba al cambiar de métrica). */
+  /* Bold text changes tab width and shifts adjacent segments. */
 }
 
-/* Recibo (Wrapped): estética de ticket monoespaciado en dos columnas. */
 .receipt {
   list-style: none;
   margin: 0 auto;
@@ -2192,7 +2083,6 @@ details.calendar-year summary:hover {
   border-bottom: none;
 }
 
-/* Vacío: bloque centrado, texto a la izquierda. */
 .empty {
   color: var(--text-muted);
   padding: var(--sp-6);
@@ -2206,13 +2096,11 @@ details.calendar-year summary:hover {
     grid-template-columns: 1fr;
   }
 
-  /* En chico el padding lateral de 24px come ~13% del viewport. */
   .card {
     padding: var(--sp-3) var(--sp-4);
   }
 
-  /* Cap más estrecho en móvil: con # + el encabezado REPRODUCCIONES, 44vw
-     desborda el ancho de la card y corta los valores numéricos. */
+  /* Leave room for other columns beside the long play-count heading. */
   .table-scroll td .cell-name,
   .table-scroll td .cell-sub {
     max-width: 34vw;
@@ -2443,8 +2331,6 @@ details.calendar-year summary:hover {
 .table-hint-link:hover {
   text-decoration: underline;
 }
-
-/* Etapa 4: Contrato de gráficos, inspector accesible y calendario táctil */
 
 .chart-card {
   background: var(--surface);

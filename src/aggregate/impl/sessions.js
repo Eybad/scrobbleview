@@ -1,6 +1,5 @@
-// Sessions use estimated UTC intervals: Spotify timestamps mark playback ends.
-// start/end are local display values; duration is elapsed UTC seconds, while
-// ms sums listened time and can exceed duration when playback overlaps.
+// Spotify timestamps mark playback ends; session intervals are UTC estimates.
+// Display labels are local, and listened time may exceed duration on overlap.
 
 import { civilFromDays } from './derive.js';
 import { trackKey } from './groups.js';
@@ -107,8 +106,8 @@ export function createSessionsAcc({ tz, gapMinutes = SESSION_GAP_MINUTES, compac
         const d = Math.floor(s.start / 86400);
         const c = civilFromDays(d);
         const month = c.y * 100 + c.m;
-        const wd = ((d + 3) % 7 + 7) % 7; // lunes=0 (consistente con derive.js)
-        const hr = ((Math.floor(s.start / 3600) % 24) + 24) % 24; // doble módulo (start pre-1970)
+        const wd = ((d + 3) % 7 + 7) % 7; // Monday = 0.
+        const hr = ((Math.floor(s.start / 3600) % 24) + 24) % 24; // Double modulo keeps pre-1970 hours nonnegative.
         byMonth.set(month, (byMonth.get(month) || 0) + 1);
         byWeekday.set(wd, (byWeekday.get(wd) || 0) + 1);
         byBlock.set(Math.floor(hr / 6), (byBlock.get(Math.floor(hr / 6)) || 0) + 1);

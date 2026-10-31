@@ -1,4 +1,3 @@
-// test/views.test.js — contenido y estructura de las vistas (no escaping).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -246,13 +245,13 @@ test('album: canciones, fechas y botón de filtro', async () => {
 });
 
 test('album: el enlace al artista usa la parte alta de ak', async () => {
-  // ak = ar*2^32 + al: el residuo es el id del álbum, NO el artista.
+
   const json = JSON.stringify([
     { ts: '2024-06-01T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'A', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Á1', spotify_track_uri: 'spotify:track:1' },
     { ts: '2024-06-02T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'B', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Á2', spotify_track_uri: 'spotify:track:2' }
   ]);
   const model = await analyze(memoryBytes('ak.json', json), { tz: UTC, now: 1704067200 });
-  const ak2 = 4294967296 + 2; // artista 1 (X), álbum 2 (Á2)
+  const ak2 = 4294967296 + 2;
   const html = renderView('album', model, ak2);
   assert.ok(html.includes('href="#/v1/artist/X"'));
 });
@@ -261,7 +260,6 @@ test('calendar: último año desplegado, anteriores en details', async () => {
   const model = await model2y();
   const html = renderView('calendar', model);
   assert.ok(html.includes('<details class="card calendar-year">'), 'años previos plegados');
-  // El último año (2024) va desplegado fuera de details.
   const beforeDetails = html.split('<details')[0];
   assert.ok(beforeDetails.includes('2024'), 'último año desplegado');
 });
@@ -510,8 +508,6 @@ test('bar/line/stacked dentro de scroll con piso (labels legibles en móvil)', a
   const model = await demoModel();
   const dash = renderView('dashboard', model);
   assert.ok(dash.includes('chart-scroll--bar'), 'wrapper presente en el dashboard');
-  // Misma regla que heat/clock/cal: región focable con nombre (el scroll
-  // horizontal es inalcanzable por teclado sin tabindex).
   assert.ok(dash.includes('class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label='), 'región focable con nombre');
   const monthlyChartStart = dash.indexOf('data-chart-id="dashboard-monthly"');
   const nextChartStart = dash.indexOf('data-chart-id=', monthlyChartStart + 1);

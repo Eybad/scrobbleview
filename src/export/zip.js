@@ -1,10 +1,4 @@
-// src/export/zip.js — contenedor ZIP mínimo (store + deflate-raw), sin deps.
-//
-// Solo lo que Files by Google / Excel necesitan: local headers, central
-// directory y EOCD con tamaños correctos. Sin Zip64 (límite 4 GB por
-// entrada, sobrado para este export) ni data descriptors: los tamaños se
-// conocen tras comprimir cada entrada. El CRC es siempre del dato SIN
-// comprimir (spec ZIP), en el header local y en el central.
+// No Zip64 is supported; CRCs always cover uncompressed entry bytes.
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -20,8 +14,7 @@ export function crc32(bytes) {
   return (crc32Update(0xFFFFFFFF, bytes) ^ 0xFFFFFFFF) >>> 0;
 }
 
-// Variante incremental para streams: el lector de zip acumula el CRC por
-// chunk sin materializar la entrada completa.
+// Keep streaming CRC calculation independent of entry materialization.
 export function crc32Update(crc, bytes) {
   let c = crc;
   for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
@@ -65,7 +58,7 @@ export async function buildZip(entries) {
     let method = 0;
     if (canCompress && bytes.length > 0) {
       const deflated = await deflateRaw(bytes);
-      // Store si deflate no achica (ya comprimido o vacío): el zip no crece.
+      // Store incompressible entries so compression never increases the ZIP.
       if (deflated && deflated.length < bytes.length) {
         payload = deflated;
         method = 8;

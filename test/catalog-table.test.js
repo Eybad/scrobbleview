@@ -32,8 +32,8 @@ test('catalogTableHTML: renders table with sortable headers and aria-sort', () =
   assert.ok(html.includes('<caption class="visually-hidden">Artistas: 1 coincidencia</caption>'));
   assert.ok(html.includes('aria-sort="descending"'));
   assert.ok(html.includes('Daft Punk'));
-  assert.ok(html.includes('25%')); // Share 0.25
-  assert.ok(html.includes('#1')); // Global metric rank
+  assert.ok(html.includes('25%'));
+  assert.ok(html.includes('#1'));
 });
 
 test('catalogTableHTML: disambiguates homonym tracks by artist and provides distinct links', () => {
@@ -70,10 +70,8 @@ test('catalogTableHTML: disambiguates homonym tracks by artist and provides dist
 
   assert.ok(html.includes('Rihanna'));
   assert.ok(html.includes('The Kid LAROI'));
-  // Distinct semantic route links
   assert.ok(html.includes('#/v1/track/Rihanna/Stay'));
   assert.ok(html.includes('#/v1/track/The%20Kid%20LAROI/Stay'));
-  // Global ranks preserved
   assert.ok(html.includes('#5'));
   assert.ok(html.includes('#8'));
 });
@@ -93,8 +91,8 @@ test('paginationControlsHTML: renders accessible pagination with current page an
   const html = paginationControlsHTML(queryResult);
   assert.ok(html.includes('aria-label="Paginación'));
   assert.ok(html.includes('Mostrando 26–50 de 85 resultados'));
-  assert.ok(html.includes('data-page="1"')); // Prev button
-  assert.ok(html.includes('data-page="3"')); // Next button
+  assert.ok(html.includes('data-page="1"'));
+  assert.ok(html.includes('data-page="3"'));
   assert.ok(html.includes('data-page-size'));
   assert.ok(html.includes('value="25" selected'));
 });

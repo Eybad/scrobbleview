@@ -29,33 +29,30 @@ test('rankEntities: assigns deterministic global metric rank and calculates shar
     { id: 4, name: 'Artist D', plays: 5, ms: 50000 }
   ];
 
-  // By plays (desc)
   const rankedByPlays = rankEntities(items, { metric: 'plays', totalMetric: 55 });
   assert.equal(rankedByPlays.length, 4);
-  assert.equal(rankedByPlays[0].item.id, 2); // 20 plays, 100000 ms
+  assert.equal(rankedByPlays[0].item.id, 2);
   assert.equal(rankedByPlays[0].metricRank, 1);
-  assert.equal(rankedByPlays[1].item.id, 3); // 20 plays, 80000 ms (tie broken by ms)
+  assert.equal(rankedByPlays[1].item.id, 3);
   assert.equal(rankedByPlays[1].metricRank, 2);
-  assert.equal(rankedByPlays[2].item.id, 1); // 10 plays, 50000 ms
+  assert.equal(rankedByPlays[2].item.id, 1);
   assert.equal(rankedByPlays[2].metricRank, 3);
-  assert.equal(rankedByPlays[3].item.id, 4); // 5 plays, 50000 ms
+  assert.equal(rankedByPlays[3].item.id, 4);
   assert.equal(rankedByPlays[3].metricRank, 4);
 
-  // Shares based on totalMetric (55)
   assert.equal(rankedByPlays[0].share, 20 / 55);
   assert.equal(rankedByPlays[1].share, 20 / 55);
   assert.equal(rankedByPlays[2].share, 10 / 55);
   assert.equal(rankedByPlays[3].share, 5 / 55);
 
-  // By ms (desc)
   const rankedByMs = rankEntities(items, { metric: 'ms', totalMetric: 280000 });
-  assert.equal(rankedByMs[0].item.id, 2); // 100000 ms
+  assert.equal(rankedByMs[0].item.id, 2);
   assert.equal(rankedByMs[0].metricRank, 1);
-  assert.equal(rankedByMs[1].item.id, 3); // 80000 ms
+  assert.equal(rankedByMs[1].item.id, 3);
   assert.equal(rankedByMs[1].metricRank, 2);
-  assert.equal(rankedByMs[2].item.id, 1); // 50000 ms, 10 plays (tie broken by plays)
+  assert.equal(rankedByMs[2].item.id, 1);
   assert.equal(rankedByMs[2].metricRank, 3);
-  assert.equal(rankedByMs[3].item.id, 4); // 50000 ms, 5 plays
+  assert.equal(rankedByMs[3].item.id, 4);
   assert.equal(rankedByMs[3].metricRank, 4);
 });
 
@@ -77,10 +74,8 @@ test('queryCatalog: pagination, search and stable ordering', () => {
     });
   }
 
-  // Total metric: sum of plays
   const totalPlays = items.reduce((s, x) => s + x.plays, 0);
 
-  // Page 1 with pageSize 25
   const resPage1 = queryCatalog(items, {
     metric: 'plays',
     totalMetric: totalPlays,
@@ -97,13 +92,11 @@ test('queryCatalog: pagination, search and stable ordering', () => {
   assert.equal(resPage1.rows.length, 25);
   assert.equal(resPage1.startRow, 1);
   assert.equal(resPage1.endRow, 25);
-  // Highest plays is i=1 (plays 99)
   assert.equal(resPage1.rows[0].item.id, 1);
   assert.equal(resPage1.rows[0].resultRow, 1);
   assert.equal(resPage1.rows[0].metricRank, 1);
   assert.equal(resPage1.rows[0].share, 99 / totalPlays);
 
-  // Page 2
   const resPage2 = queryCatalog(items, {
     metric: 'plays',
     totalMetric: totalPlays,
@@ -118,7 +111,6 @@ test('queryCatalog: pagination, search and stable ordering', () => {
   assert.equal(resPage2.rows[0].metricRank, 26);
   assert.equal(resPage2.rows[0].item.id, 26);
 
-  // Search filter: query 'Artist Even' (30 items)
   const resSearch = queryCatalog(items, {
     metric: 'plays',
     totalMetric: totalPlays,
@@ -132,13 +124,11 @@ test('queryCatalog: pagination, search and stable ordering', () => {
   assert.equal(resSearch.totalMatches, 30);
   assert.equal(resSearch.totalPages, 2);
   assert.equal(resSearch.rows.length, 25);
-  // First match is i=2 (plays 98, global rank #2)
   assert.equal(resSearch.rows[0].item.id, 2);
-  assert.equal(resSearch.rows[0].resultRow, 1); // 1st result row
-  assert.equal(resSearch.rows[0].metricRank, 2); // Global rank is still 2!
-  assert.equal(resSearch.rows[0].share, 98 / totalPlays); // Share against whole catalog remains unchanged!
+  assert.equal(resSearch.rows[0].resultRow, 1);
+  assert.equal(resSearch.rows[0].metricRank, 2);
+  assert.equal(resSearch.rows[0].share, 98 / totalPlays);
 
-  // Sort by name ascending
   const resSortName = queryCatalog(items, {
     metric: 'plays',
     totalMetric: totalPlays,
@@ -163,7 +153,6 @@ test('queryCatalog: thresholds and eligibility', () => {
     { id: 3, name: 'C', plays: 5, ms: 500, skips: 1, skipKnown: 5, days: { size: 1 }, months: { size: 1 } }
   ];
 
-  // minPlays filter (e.g. for skipRate where minPlays=20)
   const resMinPlays = queryCatalog(items, {
     metric: 'plays',
     totalMetric: 45,
@@ -172,7 +161,6 @@ test('queryCatalog: thresholds and eligibility', () => {
     sortDir: 'desc'
   });
   assert.equal(resMinPlays.totalMatches, 2);
-  // A has 5/10 = 50%, B has 2/30 = 6.67%
   assert.equal(resMinPlays.rows[0].item.id, 1);
   assert.equal(resMinPlays.rows[1].item.id, 2);
 });

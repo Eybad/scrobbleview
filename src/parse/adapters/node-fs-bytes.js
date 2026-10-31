@@ -1,5 +1,3 @@
-// adapters/node-fs-bytes.js — ByteSource desde un archivo (Node, tests/verificación)
-
 import { open } from 'node:fs/promises';
 
 const CHUNK = 262144;

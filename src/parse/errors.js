@@ -1,5 +1,3 @@
-// errors.js — errores del parseo (fail-fast, todo o nada, con localización)
-
 export class ParseError extends Error {
   constructor(message, { byteOffset, field } = {}) {
     super(message);

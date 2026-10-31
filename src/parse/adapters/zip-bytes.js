@@ -1,24 +1,13 @@
-// adapters/zip-bytes.js — ByteSources desde un zip (browser)
-//
-// Expande el zip de Spotify (my_spotify_data.zip, con los JSON dentro de una
-// carpeta) a una fuente por historial. Acceso aleatorio con Blob.slice: cola
-// → EOCD → central directory → entrada por entrada; cada entrada descomprime
-// en streaming (DecompressionStream('deflate-raw'), el mismo piso que el
-// export) y el CRC se acumula por chunk y se verifica al terminar: un dato
-// corrupto aborta el analyze completo, nunca modelo parcial.
-//
-// Sin Zip64 (4 GB / 65535 entradas: los exports de Spotify están muy lejos)
-// ni zips encriptados: fail-fast con código. Los tamaños salen del central
-// directory (confiables aunque el local header use data descriptor).
+// Stream audio-history ZIP entries with CRC validation; reject Zip64 and encryption.
+// Central-directory sizes remain authoritative when local headers use data descriptors.
 
 import { resolveOptions } from '../../defaults.js';
 import { FileError, AbortError } from '../errors.js';
 import { crc32Update } from '../../export/zip.js';
 
-// Historial extendido (Streaming_History_Audio_*.json) y viejo
-// (StreamingHistory0.json), en cualquier carpeta del zip.
+// Match current and legacy Spotify history names in any archive directory.
 const AUDIO_NAME = /^(?:Streaming_History_Audio|StreamingHistory\d*)[^/]*\.json$/i;
-const TAIL_MAX = 65557; // EOCD (22) + comentario (65535) + margen
+const TAIL_MAX = 65557; // EOCD record plus its maximum comment.
 const textDecoder = new TextDecoder();
 
 function basenameOf(name) {
@@ -40,7 +29,7 @@ function findEOCD(tail, blobSize) {
     if (count === 0xFFFF || centralOffset === 0xFFFFFFFF || centralSize === 0xFFFFFFFF) {
       throw new FileError('El zip usa formato Zip64 (más de 4 GB o 65535 entradas), no soportado.', { code: 'E_ZIP64' });
     }
-    // Una firma dentro de datos comprimidos no sirve: el directorio debe caber.
+    // Ignore signatures embedded in compressed data unless the directory fits.
     if (centralOffset + centralSize > blobSize) continue;
     return { count, centralSize, centralOffset };
   }
@@ -72,8 +61,7 @@ function readCentral(bytes, count) {
   return entries;
 }
 
-// Fuente por entrada: stream del slice (store) o del slice descomprimido
-// (deflate). El CRC corre sobre el dato DESCOMPRIMIDO (spec ZIP).
+// CRC validation runs on decompressed bytes, as required by the ZIP format.
 function entrySource(blob, entry, dataStart, budget, signal) {
   function openReader() {
     let stream = blob.slice(dataStart, dataStart + entry.compSize).stream();
@@ -102,8 +90,7 @@ function entrySource(blob, entry, dataStart, budget, signal) {
       const { done, value } = await reader.read();
       if (done) {
         if (size !== entry.size) throw new FileError('El ZIP declara un tamaño de entrada incorrecto.', { code: 'E_ZIP_SIZE' });
-        // >>> 0: el xor en JS es signed 32-bit; sin él un CRC con high bit
-        // set compararía negativo contra el unsigned del directorio.
+        // Normalize the signed JS result before comparing the unsigned ZIP CRC.
         if (((crc ^ 0xFFFFFFFF) >>> 0) !== entry.crc) {
           throw new FileError(`El zip está corrupto: CRC inválido en "${entry.name}" (¿descarga truncada?).`, { code: 'E_ZIP_CRC' });
         }
@@ -117,8 +104,7 @@ function entrySource(blob, entry, dataStart, budget, signal) {
       return { done: false, value };
     },
     async close() {
-      // Cancela el stream si el parseo abortó a mitad de entrada; en un
-      // stream ya terminado es un no-op.
+      // Cancel streams when parsing stops before the entry is exhausted.
       if (reader) await reader.cancel();
     }
   };
@@ -136,8 +122,6 @@ export async function zipSources(blob, options = {}) {
   const entries = readCentral(central, count);
   const matched = entries.filter((e) => AUDIO_NAME.test(basenameOf(e.name)));
   if (matched.length === 0) {
-    // Diagnóstico con lo que sí había: el usuario necesita saber si el zip
-    // es de otro tipo de datos o de otra región del export.
     const shown = entries.slice(0, 10).map((e) => e.name).join(', ') + (entries.length > 10 ? ` (+${entries.length - 10} más)` : '');
     throw new FileError(`El zip no contiene historiales de audio (Streaming_History_Audio_*.json). Entradas: ${shown}`, { code: 'E_ZIP_NO_MATCH' });
   }

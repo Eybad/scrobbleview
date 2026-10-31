@@ -1,11 +1,5 @@
-// impl/groups.js — entidades (artistas/canciones/álbumes)
-//
-// Claves compuestas (port del v2):
-//   track_key = (nombre, artista)  → tk = tr * 2^32 + ar   (tr > 0 siempre)
-//   album_key = (artista, álbum)   → ak = ar * 2^32 + al   (solo si al > 0)
-//   artist    = ar                 → solo si ar > 0 (v2: artist_name truthy)
-// El id 0 de dict = vacío: ar=0 → "(Desconocido)" en el label de la canción,
-// pero el artista "(Desconocido)" NO entra al mapa de artistas (como el v2).
+// Track identity is (title, artist); album identity is (artist, album).
+// Index 0 represents missing strings and is excluded from artist groups.
 
 export function trackKey(tr, ar) {
   return tr * 4294967296 + ar;
@@ -16,9 +10,9 @@ export function albumKey(ar, al) {
 }
 
 export function createGroupsAcc(ds, { albumDetails } = {}) {
-  const artists = new Map(); // ar -> {id, name, plays, ms, skips, days, months, years, firstTs, firstTrack, lastTs, albums, clock}
-  const tracks = new Map(); // tk -> {id: tr, tk, ak, ar, name, artist, plays, ms, skips, days, years, firstTs, lastTs}
-  const albums = new Map(); // ak -> {id: ak, artist, name, plays, ms, firstTs, lastTs, days, tracks}
+  const artists = new Map();
+  const tracks = new Map();
+  const albums = new Map();
 
   function addMonthly(monthly, month, ms) {
     let entry = monthly.get(month);
@@ -42,9 +36,9 @@ export function createGroupsAcc(ds, { albumDetails } = {}) {
             name: ds.dicts.artists.get(ev.ar),
             plays: 0, ms: 0, durationKnown: 0, skips: 0, skipKnown: 0,
             days: new Set(), months: new Set(), years: new Set(),
-            albums: new Set(), // ak de los álbumes del artista
+            albums: new Set(),
             tracks: new Set(),
-            clock: new Int32Array(168), // plays por dow*24+hour (reloj del artista)
+            clock: new Int32Array(168),
             clockMs: new Float64Array(168),
             firstTs: ev.loc, firstUtc: ev.t, firstTrack: '', firstTrackTk: 0,
             lastTs: ev.loc, lastUtc: ev.t
@@ -110,8 +104,8 @@ export function createGroupsAcc(ds, { albumDetails } = {}) {
             name: ds.dicts.albums.get(ev.al),
             plays: 0, ms: 0, durationKnown: 0,
             firstTs: ev.loc, lastTs: ev.loc, firstUtc: ev.t, lastUtc: ev.t,
-            days: new Set(), // días con escucha del álbum
-            tracks: new Set(), // tk de las canciones del álbum
+            days: new Set(),
+            tracks: new Set(),
             trackStats: new Map(),
             monthly: new Map()
           };

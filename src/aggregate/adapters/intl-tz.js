@@ -1,29 +1,13 @@
-// adapters/intl-tz.js — constructor de tabla de transiciones
-//
-// Muestreo periódico + refinamiento por bisección. La bisección pura falla
-// cuando el rango contiene un número PAR de transiciones (p. ej. un dataset de
-// años completos: spring y fall cancelan el offset neto y offset(a) ===
-// offset(b) haría asumir "constante"). El muestreo cada 6h detecta todo cambio
-// (dos muestras consecutivas alrededor de cualquier transición difieren) y la
-// bisección refina cada cambio al segundo exacto. El punto medio de cada
-// ventana cubre el caso teórico de un par de transiciones con neto cero dentro
-// de una ventana (A→B→A, inexistente en tzdb moderno). PRECONDICIÓN REAL: ≤1
-// transición por ventana de 6h (las de DST están separadas por meses), lo que
-// con el mid-check equivale a ≤1 por mitad de 3h; el mid-check es cinturón para
-// el par A→B→A, no para ≥3 transiciones en una ventana. La cola final (b > prevT)
-// cubre el hueco <6h sin mid-check. ~7.300 llamadas Intl para 5 años, una vez
-// por carga; después el lookup es binario (offset-table).
-//
-// Fail-fast: endSec < startSec o rangos fuera de Int32 (1901-2038, el límite
-// del Int32Array de offset-table) lanzan RangeError — nunca tabla corrupta.
-//
+// Six-hour sampling and bisection find offset changes to the exact second.
+// Midpoint checks catch even transition counts that endpoint-only bisection misses.
+// Assumes at most one transition per three-hour half-window; offsets fit Int32.
 // Requires Intl.DateTimeFormat with IANA time zone data.
 
 import { offsetTable } from './offset-table.js';
 
 const DEFAULT_START = Date.UTC(2020, 0, 1) / 1000;
 const DEFAULT_END = Date.UTC(2030, 0, 1) / 1000;
-const STEP = 21600; // 6h
+const STEP = 21600;
 const INT32_MAX = 2147483647;
 const INT32_MIN = -2147483648;
 
@@ -61,8 +45,6 @@ export function intlTz(ianaId, { startSec = DEFAULT_START, endSec = DEFAULT_END 
     return Math.round((asUTC - t * 1000) / 60000);
   }
 
-  // Bisección sobre [lo, hi] con offsetAt(lo) !== offsetAt(hi): encuentra el
-  // primer segundo con el offset nuevo (h - l <= 1 → h es ese segundo).
   function refine(lo, hi) {
     const out = [];
     function bisect(l, h) {
@@ -90,9 +72,7 @@ export function intlTz(ianaId, { startSec = DEFAULT_START, endSec = DEFAULT_END 
         found.push(...refine(prevT, t));
         prevOff = off;
       } else {
-        // off === prevOff puede ocultar un PAR de transiciones con offset neto
-        // cero dentro de la ventana (p. ej. A→B→A). Muestrear el punto medio:
-        // si difiere, hay transiciones internas y se refinan ambas mitades.
+        // Check the midpoint for A→B→A transitions hidden by equal endpoints.
         const mid = Math.floor((prevT + t) / 2);
         if (offsetAt(mid) !== prevOff) {
           found.push(...refine(prevT, mid));
@@ -109,7 +89,7 @@ export function intlTz(ianaId, { startSec = DEFAULT_START, endSec = DEFAULT_END 
     return found;
   }
 
-  // La primera entrada garantiza tabla no vacía (zona sin DST: 0 transiciones).
+  // Keep the table nonempty for zones without DST.
   const transitions = [[startSec, offsetAt(startSec)], ...buildTransitions(startSec, endSec)];
   const dedup = [];
   for (const [t, off] of transitions) {

@@ -149,7 +149,6 @@ export function queryCatalog(items, {
 
   const totalMatches = filtered.length;
 
-  // Criterio de dirección predeterminado si no se especifica
   let effectiveDir = sortDir;
   if (!effectiveDir) {
     if (sortBy === 'name' || sortBy === 'artist' || sortBy === 'rank' || sortBy === 'metric' || sortBy === 'lowSkipRate' || sortBy === 'forgotten') {
@@ -195,7 +194,6 @@ export function queryCatalog(items, {
       if (difference) return difference;
     }
 
-    // Desempates deterministas estables
     if (a.metricRank !== b.metricRank) return a.metricRank - b.metricRank;
     const aId = a.item.id ?? a.item.tk ?? 0;
     const bId = b.item.id ?? b.item.tk ?? 0;

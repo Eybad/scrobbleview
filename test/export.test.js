@@ -1,4 +1,3 @@
-// test/export.test.js — export del modelo: JSON plano + ZIP de CSVs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -99,8 +98,7 @@ test('zip: contenedor con firmas y offsets correctos', async () => {
 
 test('zip: round-trip del contenido comprimido', async () => {
   if (typeof CompressionStream !== 'function' || typeof DecompressionStream !== 'function') return;
-  // Payload repetido: deflate de un string corto agranda (overhead) y caería
-  // al fallback store, que es el comportamiento correcto pero no este test.
+
   const data = new TextEncoder().encode('hola,mundo\n'.repeat(100));
   const zip = await buildZip([{ name: 'a.csv', bytes: data }]);
   const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
@@ -132,8 +130,7 @@ test('export: modelToTables aplana el modelo a tablas relacionales', async () =>
 });
 
 test('export: artist_id de albums es el artista (parte alta de ak)', async () => {
-  // Dos álbumes del mismo artista: el segundo tiene al=2 con ar=1
-  // (ak = 1*2^32 + 2). En el demo ar === al siempre (mismo orden de interning).
+
   const model = await analyze(memoryBytes('ak.json', JSON.stringify([
     { ts: '2024-06-01T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'A', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Á1', spotify_track_uri: 'spotify:track:1' },
     { ts: '2024-06-02T14:00:00Z', ms_played: 60000, master_metadata_track_name: 'B', master_metadata_album_artist_name: 'X', master_metadata_album_album_name: 'Á2', spotify_track_uri: 'spotify:track:2' }

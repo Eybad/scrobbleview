@@ -12,7 +12,6 @@ import {
 } from '../src/compare.js';
 
 test('A18: comparison handles zero base without Infinity/NaN and flags partial/out of range windows', () => {
-  // 1. Zero base delta
   const deltaFromZero = computeMetricDelta(500, 0);
   assert.equal(deltaFromZero.diff, 500);
   assert.equal(deltaFromZero.pctLabel, 'nuevo');
@@ -20,14 +19,12 @@ test('A18: comparison handles zero base without Infinity/NaN and flags partial/o
   assert.ok(!deltaFromZero.pctLabel.includes('Infinity'));
   assert.ok(!deltaFromZero.pctLabel.includes('NaN'));
 
-  // 2. Both zero
   const deltaBothZero = computeMetricDelta(0, 0);
   assert.equal(deltaBothZero.diff, 0);
   assert.equal(deltaBothZero.pctLabel, '0,0%');
   assert.ok(!deltaBothZero.pctLabel.includes('NaN'));
 
-  // 3. Out of range window detection
-  const rangeA = { from: 1704067200, to: 1704153599 }; // 2024-01-01
+  const rangeA = { from: 1704067200, to: 1704153599 };
   const dataRange = { minSec: 1704067200, maxSec: 1735689600 };
   const comp = calculateCompareRange('equal_previous', rangeA, dataRange);
   assert.equal(comp.isOutOfRange, true);
@@ -35,7 +32,6 @@ test('A18: comparison handles zero base without Infinity/NaN and flags partial/o
 });
 
 test('A19: day, week and month series reconcile sums exactly without event loss across periods', () => {
-  // 3 events over 40 days
   const dailyMap = new Map([
     [19725, { plays: 15, ms: 90000 }],
     [19730, { plays: 25, ms: 150000 }],
@@ -45,7 +41,6 @@ test('A19: day, week and month series reconcile sums exactly without event loss 
   const totalPlays = 15 + 25 + 10;
   const totalMs = 90000 + 150000 + 60000;
 
-  // Daily
   const seriesDaily = buildCompareSeries(dailyMap, range, 'daily', false);
   const sumDailyPlays = seriesDaily.reduce((acc, b) => acc + b.value, 0);
   assert.equal(sumDailyPlays, totalPlays);
@@ -54,12 +49,10 @@ test('A19: day, week and month series reconcile sums exactly without event loss 
   const sumDailyMs = seriesDailyMs.reduce((acc, b) => acc + b.value, 0);
   assert.equal(sumDailyMs, totalMs);
 
-  // Weekly
   const seriesWeekly = buildCompareSeries(dailyMap, range, 'weekly', false);
   const sumWeeklyPlays = seriesWeekly.reduce((acc, b) => acc + b.value, 0);
   assert.equal(sumWeeklyPlays, totalPlays);
 
-  // Monthly
   const seriesMonthly = buildCompareSeries(dailyMap, range, 'monthly', true);
   const sumMonthlyMs = seriesMonthly.reduce((acc, b) => acc + b.value, 0);
   assert.equal(sumMonthlyMs, totalMs);

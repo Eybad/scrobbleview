@@ -1,7 +1,4 @@
-// app/state-metric.js — unificación del estado de métrica analítica
-//
-// Métrica por defecto: 'ms' (Tiempo escuchado) según sección 3.3.
-// Prevalencia: URL (query param 'm' o 'metric') > preferencia persistida > default ('ms').
+// Precedence: URL > saved preference > listened time.
 
 export const VALID_METRICS = new Set(['ms', 'plays']);
 export const DEFAULT_METRIC = 'ms';

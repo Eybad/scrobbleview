@@ -66,12 +66,10 @@ test('A10: navigation roundtrip preserves row, page scroll, table scroll, query 
   assert.equal(snapshot.focusSelector, 'a[href="#/v1/artist/Radiohead"]');
   assert.equal(snapshot.tableScrolls[0].left, 180);
 
-  // Simulate navigating to artist detail and scrolling to top
   pageScroll = { x: 0, y: 0 };
   mockTable.scrollLeft = 0;
   mockTable.scrollTop = 0;
 
-  // Simulate Back button popstate: restore snapshot
   const success = restoreHistoryState(snapshot, mockWindow, mockDoc);
   assert.equal(success, true);
   assert.equal(pageScroll.y, 450);
@@ -100,9 +98,7 @@ test('A12: same files in different load orders resolve the same semantic entitie
   const evA = { ts: '2024-01-01T12:00:00Z', ms_played: 60000, master_metadata_album_artist_name: 'Band A', master_metadata_track_name: 'Song A', master_metadata_album_album_name: 'Album A' };
   const evB = { ts: '2024-02-01T12:00:00Z', ms_played: 60000, master_metadata_album_artist_name: 'Band B', master_metadata_track_name: 'Song B', master_metadata_album_album_name: 'Album B' };
 
-  // Load order 1: File A then File B
   const res1 = await client1.request('load', { files: [file('a.json', [evA]), file('b.json', [evB])], timeZone: 'UTC' });
-  // Load order 2: File B then File A
   const res2 = await client2.request('load', { files: [file('b.json', [evB]), file('a.json', [evA])], timeZone: 'UTC' });
 
   const routeBandA = parseRoute('#/v1/artist/Band%20A');
@@ -118,7 +114,6 @@ test('A12: same files in different load orders resolve the same semantic entitie
   assert.equal(resolvedB1.entity.name, 'Band B');
   assert.equal(resolvedB2.entity.name, 'Band B');
 
-  // Verify internal IDs were inverted due to file order, proving semantic resolution's invariance
   assert.notEqual(resolvedA1.id, resolvedA2.id);
   assert.equal(resolvedA1.id, resolvedB2.id);
 });
@@ -154,17 +149,14 @@ test('A14: cancellation of filter or export leaves dataset and analysis confirme
   const { model } = await client.request('load', { files: [file('hist.json', events)], timeZone: 'UTC' });
   assert.equal(model.totals.records, 1);
 
-  // Logical filter cancellation
   const filterPromise = client.request('filter', { state: { ...emptyFilterState(), skip: true } });
   client.cancelUpdate();
   await assert.rejects(filterPromise, (err) => err.code === 'E_ABORT');
 
-  // Logical export cancellation
   const exportPromise = client.request('export', {});
   client.cancelExport();
   await assert.rejects(exportPromise, (err) => err.code === 'E_ABORT');
 
-  // Verify dataset is still loaded in worker
   const activeCheck = await client.request('filter', { state: emptyFilterState() });
-  assert.equal(activeCheck.model, null); // reset to full model without error
+  assert.equal(activeCheck.model, null);
 });

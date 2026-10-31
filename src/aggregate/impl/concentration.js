@@ -1,10 +1,7 @@
-// impl/concentration.js — HHI, Gini, entropía normalizada, efectivos exp(H)
-//
-// Base: ms por entidad (artistas/canciones/álbumes). Fórmulas verificadas:
-//   HHI = Σ p_i²            ∈ [1/N, 1]
-//   Gini (ascendente) = (2·Σ(i+1)·x_i)/(N·Σx_i) − (N+1)/N   [1,1,1]=0, [0,0,1]=0.667
-//   H = −Σ p_i·ln(p_i); normalizada = H/ln(N) (N=1 → 1 por convención)
-//   efectivos = exp(H)      ∈ [1, N]
+// HHI = Σ p_i² ∈ [1/N, 1].
+// Gini = (2·Σ(i+1)·x_i)/(N·Σx_i) − (N+1)/N; equal values yield 0.
+// Entropy = −Σ p_i·ln(p_i); normalized by ln(N), with N=1 defined as 1.
+// Effective count = exp(H) ∈ [1, N].
 
 function stats(values) {
   const n = values.length;

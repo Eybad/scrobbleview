@@ -1,13 +1,4 @@
-// parse.js — parse(src, opts) → Dataset
-//
-// async, I/O. Consume uno o más ByteSource (src | src[]), corre el scanner
-// incremental con re-chunkeo (el parse.js controla el tamaño de chunk que ve el
-// scanner, independiente de cómo el adapter entrega los bytes), y construye el
-// Dataset columnar. Los Interners y columnas se COMPARTEN entre archivos: los
-// ids de dict son consistentes y las columnas concatenan naturalmente.
-//
-// Fail-fast, todo o nada: nunca modelo parcial. Descartes esperados (episodios,
-// eventos sin ts/track) → warnings en meta, nunca silenciosos.
+// Reject malformed input entirely; expected exclusions are reported as warnings.
 
 import { createScanner } from './impl/scan.js';
 import { Interner } from './impl/intern.js';
@@ -51,7 +42,7 @@ export async function parse(src, opts = {}) {
       const uri = decodeJSONString(ev.uri);
       if (uri.startsWith('spotify:episode:')) { warnings.push({ code: 'EPISODE', index: count }); return; }
     }
-    // v2 is_music: bool(uri or track). Sin uri Y sin track → no es música.
+    // Spotify v2 marks music through either the URI or the track field.
     if (!ev.uri && !ev.track) { warnings.push({ code: 'EPISODE', index: count }); return; }
     if (!ev.track) { warnings.push({ code: 'NO_TRACK', index: count }); return; }
 
@@ -64,9 +55,7 @@ export async function parse(src, opts = {}) {
       throw new SchemaError('Demasiados reason_* distintos (máx 255)');
     }
 
-    // ms_played negativo, NaN o imposible (> 24 h): un valor así se storeaba
-    // tal cual en Uint32Array (-1 → 4294967295, ~49,7 días en una pista).
-    // Se acota a 0 con warning BAD_MS y el evento se conserva.
+    // Invalid durations overflow Uint32, so retain the event with a zero duration.
     let m = ev.ms ?? 0;
     if (ev.ms != null && (!(ev.ms >= 0) || ev.ms > 86400000 || !Number.isInteger(ev.ms))) {
       warnings.push({ code: 'BAD_MS', index: count });
@@ -87,8 +76,6 @@ export async function parse(src, opts = {}) {
     if (t < tsMin) tsMin = t;
   }
 
-  // Loop de archivos: scanner fresco por archivo (cada uno es un array JSON
-  // completo), estado compartido (interners/columns/warnings).
   for (const s of sources) {
     sourceMin = Infinity; sourceMax = -Infinity;
     const scanner = createScanner({ onEvent, maxDepth: opts.maxDepth, maxTokenBytes: opts.maxTokenBytes });
@@ -127,8 +114,7 @@ export async function parse(src, opts = {}) {
         sourceRanges.push({ from: sourceMin, to: sourceMax });
       }
     } catch (err) {
-      // Con varias fuentes, el error debe decir QUÉ archivo falló (código y
-      // byteOffset intactos: solo se antepone el label al mensaje).
+      // Preserve error localization while adding the failing source label.
       if (err && (err.code === 'E_PARSE' || err.code === 'E_SCHEMA') && s.label) {
         err.message = `[${s.label}] ${err.message}`;
       }

@@ -1,13 +1,9 @@
-// tz.test.js — puerto TimeZone: intl-tz (bisección), offset-table (lookup), fixed-tz
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { intlTz } from '../src/aggregate/adapters/intl-tz.js';
 import { offsetTable } from '../src/aggregate/adapters/offset-table.js';
 import { fixedTz } from '../src/aggregate/adapters/fixed-tz.js';
 
-// Transiciones verificadas con `date` (TZ=America/New_York):
-// spring-forward 2024-03-10T07:00:00Z = 1710054000 (02:00 EST → 03:00 EDT)
-// fall-back      2024-11-03T06:00:00Z = 1730613600 (02:00 EDT → 01:00 EST)
 const SPRING = 1710054000;
 const FALL = 1730613600;
 
@@ -26,7 +22,6 @@ test('tz: spring-forward NY 2024-03-10 (02:00 EST → 03:00 EDT)', () => {
   const tz = intlTz('America/New_York', { startSec: SPRING - 86400, endSec: SPRING + 86400 });
   assert.equal(tz.offsetMinutes(SPRING - 3600), -300, 'antes: EST');
   assert.equal(tz.offsetMinutes(SPRING + 3600), -240, 'después: EDT');
-  // Ancla el segundo EXACTO de la transición (un refine con off-by-one fallaría).
   assert.equal(tz.offsetMinutes(SPRING - 1), -300, 'un segundo antes: EST');
   assert.equal(tz.offsetMinutes(SPRING), -240, 'en el segundo exacto: EDT');
 });
@@ -49,8 +44,7 @@ test('tz: zona sin DST (Tokyo +540, UTC 0)', () => {
 });
 
 test('tz: rango con par de transiciones (offset neto cero) detecta ambas', () => {
-  // El caso que rompía la bisección pura: un rango que empieza y termina en
-  // EST (spring + fall se cancelan) debe detectar las DOS transiciones.
+
   const tz = intlTz('America/New_York', { startSec: SPRING - 30 * 86400, endSec: FALL + 30 * 86400 });
   assert.equal(tz.offsetMinutes(SPRING - 3600), -300, 'antes de spring: EST');
   assert.equal(tz.offsetMinutes(SPRING + 3600), -240, 'después de spring: EDT');
@@ -60,8 +54,6 @@ test('tz: rango con par de transiciones (offset neto cero) detecta ambas', () =>
 
 test('tz: intl-tz determinista vs Intl directo (muestreo denso)', () => {
   const tz = intlTz('America/New_York', { startSec: SPRING - 30 * 86400, endSec: FALL + 30 * 86400 });
-  // Paso 1h desfasado 30 min de las transiciones (SPRING/FALL son múltiplos de
-  // 3600): un error de colocación sub-horaria no puede esconderse.
   const samples = [];
   for (let t = SPRING - 7 * 86400 + 1800; t <= SPRING + 7 * 86400; t += 3600) samples.push(t);
   for (let t = FALL - 7 * 86400 + 1800; t <= FALL + 7 * 86400; t += 3600) samples.push(t);
@@ -72,17 +64,14 @@ test('tz: intl-tz determinista vs Intl directo (muestreo denso)', () => {
 });
 
 test('tz: rango multi-año con 4 transiciones (regresión del scan incompleto)', () => {
-  // El escaneo recursivo devolvía tabla vacía para NY 2023-01-01 → 2025-01-01
-  // (mid = 2024-01-01, los tres puntos a -300): las 4 transiciones se perdían
-  // en silencio. El muestreo periódico debe detectarlas todas.
   const tz = intlTz('America/New_York', { startSec: 1672531200, endSec: 1735689600 });
   const checks = [
-    [1672531200, -300], // 2023-01-01 EST
-    [1678604400 + 3600, -240], // 2023-03-12 spring → EDT
-    [1699164000 + 3600, -300], // 2023-11-05 fall → EST
-    [1710054000 + 3600, -240], // 2024-03-10 spring → EDT
-    [1730613600 + 3600, -300], // 2024-11-03 fall → EST
-    [1735689600, -300] // 2025-01-01 EST
+    [1672531200, -300],
+    [1678604400 + 3600, -240],
+    [1699164000 + 3600, -300],
+    [1710054000 + 3600, -240],
+    [1730613600 + 3600, -300],
+    [1735689600, -300]
   ];
   for (const [t, off] of checks) {
     assert.equal(tz.offsetMinutes(t), off, `t=${t}`);
@@ -100,11 +89,7 @@ test('tz: rango fuera de Int32 lanza RangeError (protege offset-table)', () => {
 });
 
 test('tz: transición en el borde final del rango (cola b > prevT)', () => {
-  // startSec alineado a la rejilla de 6h y endSec 30 min después de spring: la
-  // última muestra del loop cae ANTES de la transición, así que la única forma
-  // de detectarla es la cola final (intl-tz.js, bloque b > prevT).
-  //   startSec % 21600 === 0  →  última muestra = SPRING - 3600
-  //   endSec = SPRING + 1800 →  offsetAt(endSec) = -240 ≠ prevOff
+
   const end = SPRING + 1800;
   const start = SPRING - 25200;
   assert.equal(start % 21600, 0, 'precondición: start alineado a la rejilla de 6h');

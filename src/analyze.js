@@ -1,15 +1,9 @@
-// analyze.js — fachada: analyze(sources, opts) → StatsModel
-//
-// Caso común: arrastrar archivos → dashboard. Orquesta parse + aggregate sobre
-// el mismo seam que los tests. sources: ByteSource | ByteSource[].
-
 import { parse } from './parse/parse.js';
 import { aggregate } from './aggregate/aggregate.js';
 import { assertDataset } from './parse/dataset.js';
 import { resolveOptions } from './defaults.js';
 
-// Accepting a parsed dataset lets the composition root construct its time zone
-// from the actual range before crossing the same aggregation seam.
+// Accept parsed datasets so the caller can build a time zone from their range.
 export async function analyze(input, options = {}) {
   const opts = resolveOptions(options);
   if (!opts.tz || typeof opts.tz.offsetMinutes !== 'function') {

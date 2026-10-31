@@ -1,9 +1,3 @@
-// Pure HTML views for sections and entity details.
-//
-// ctx supplies the effective range, metrics, table limits and ranking state.
-// Navegación entre vistas por hash (#/artist/123, #/track/…, #/album/…).
-// Los gráficos son componentes SVG puros de src/charts.js.
-
 import {
   barChart, lineChart, heatmap, heatmapTable, hbarChart, sparkline,
   calendarGrid, listeningClock, stackedBar, heatLegend, NO_DATA,
@@ -54,9 +48,7 @@ function resolveLimit(ctx, key, fallback = 10) {
   return Number.isFinite(val) && val > 0 ? val : fallback;
 }
 
-// `value` llega como HTML seguro (formatters numéricos o entityLink()):
-// todo string de dato debe ser escapado por el llamador ANTES de entrar
-// acá. `label` y `sub` se escapan en esta función.
+// Escape user strings before interpolation; `value` is trusted HTML.
 function kpis(items, layout = '') {
   return `<dl class="kpis${layout ? ` ${layout}` : ''}">${items.map((it) => {
     if (it.heading) return `<div class="kpi-group-heading" role="presentation"><span>${esc(it.heading)}</span></div>`;
@@ -84,9 +76,7 @@ function monthLabel(mi) {
   return `${MONTHS_SHORT[m - 1]} ${y}`;
 }
 
-// Códigos de reason_start/reason_end de Spotify → etiquetas cortas en español
-// (los gráficos de razones no deben desbordar). Los códigos sin mapeo quedan
-// crudos: preferible a inventar una traducción dudosa.
+// Keep unknown Spotify reason codes verbatim instead of guessing translations.
 const REASON_LABELS = new Map([
   ['trackdone', 'Fin de pista (trackdone)'],
   ['fwdbtn', 'Botón siguiente (fwdbtn)'],
@@ -103,16 +93,13 @@ const REASON_LABELS = new Map([
 ]);
 const reasonLabel = (code) => REASON_LABELS.get(code) ?? code;
 
-// Umbral de los KPIs (minMs/skipThresholdMs vienen de meta y son
-// configurables): "+30 s", "+1,5 s" o "+500 ms" según el valor.
 function thresholdLabel(ms) {
   if (ms < 1000) return `${ms} ms`;
   const s = ms / 1000;
   return Number.isInteger(s) ? `${s} s` : `${s.toFixed(1).replace('.', ',')} s`;
 }
 
-// Fallback de tabla para los relojes (hora × día): teclado/lector de pantalla
-// no puede leer valores desde el SVG (el heatmap del dashboard ya lo tiene).
+// The table fallback exposes SVG clock values to keyboard and screen-reader users.
 function clockTable(cells, byMs = false) {
   return heatmapTable({
     cells: cells.map((c) => ({ x: c.hour, y: c.dow, value: c.value })),
@@ -123,8 +110,6 @@ function clockTable(cells, byMs = false) {
   });
 }
 
-// Fallback del calendario: 12 meses × 31 días del mes. Los días sin entrada
-// quedan como celda vacía (heatmapTable no encuentra el par x-y).
 function calendarTable(days, year, byMs = true) {
   const byMonthDay = new Map(days.map((d) => {
     const [, m, dd] = d.date.split('-').map(Number);
@@ -146,15 +131,7 @@ function calendarTable(days, year, byMs = true) {
   });
 }
 
-// `rows` es HTML YA escapado por el llamador: las celdas reciben markup (enlaces
-// de entidad, <span> de color), por eso no se escapan aquí. Todo valor de dato
-// debe pasar por esc() o entityLink() ANTES de entrar en `rows`.
-// El scroll horizontal vive en .table-scroll (solo la tabla scrollea; el h2 de
-// la card queda fijo). Sin tabindex: el scroll sigue al foco de los enlaces.
-// `rowAttrs(r, i)` emite atributos por <tr> (ej. la barra proporcional).
-// `caption` es para lectores de pantalla (visually-hidden): el h2 de la card
-// no viaja con la tabla al scrollear, así que la tabla sin caption queda
-// anónima fuera de contexto (WCAG H51/H63).
+// Escape data before adding markup to rows; captions keep tables named on scroll.
 function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '', scrollCls = '', emptyNotice = '') {
   const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
   const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
@@ -166,9 +143,6 @@ function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, captio
 }
 
 function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valueLabel = 'Reproducciones', caption = '', spark = null, tall = false }) {
-  // Con `sub` (ej. artista de un álbum) el nombre se apila en 2 líneas:
-  // título como enlace, sub en gris secundario. El title del enlace lleva
-  // el nombre completo "título — sub".
   const cell = (r) => {
     const full = r.sub ? `${r.name} — ${r.sub}` : r.name;
     const inner = r.sub
@@ -178,8 +152,6 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
       ? `<a class="cell-link" href="${esc(link(r))}" title="${esc(full)}">${inner}</a>`
       : `<span class="cell-link" title="${esc(full)}">${inner}</span>`;
   };
-  // Barra proporcional al máximo visible (rows[0] tras el orden desc): el
-  // largo compara de un vistazo sin leer los números.
   const max = rows.length > 0 ? rows[0].value : 0;
   const headers = spark ? ['#', 'Nombre', 'Tendencia', valueLabel] : ['#', 'Nombre', valueLabel];
   const colCls = spark ? ['c', '', 'col-trend', 'n col-metric'] : ['c', '', 'n col-metric'];
@@ -207,8 +179,7 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
   }, caption, tall ? 'table-scroll--tall' : '');
 }
 
-// El title revela el nombre truncado por ellipsis (en táctil no hay tooltip:
-// el enlace navega a la ficha, donde están los detalles).
+// The link title exposes truncated text when hover tooltips are unavailable.
 function entityLinks(model, query = '') {
   function entity(type, id) {
     const group = type === 'artist' ? model.artists : type === 'track' ? model.tracks : model.albums;
@@ -257,10 +228,7 @@ function nextMonth(mi) {
   return m === 12 ? (y + 1) * 100 + 1 : mi + 1;
 }
 
-// Los SVG de barra/línea/apiladas escalan su texto con el ancho de la card:
-// en móvil (viewBox 640 → ~296px) los labels de 12px rinden ~5.5px. El piso
-// de 480px mantiene ≥9px efectivos (mismo patrón que heat/clock/cal). Región
-// focable con nombre: el scroll horizontal es inalcanzable por teclado sin él.
+// Keep chart labels legible on mobile and provide keyboard access to horizontal scroll.
 function scrollChart(svg, label) {
   return svg ? `<div class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label="${esc(label)}">${svg}</div>` : '';
 }
@@ -318,9 +286,7 @@ function contractedClockChart({ id, title, cells, format, byMs, base, svg }) {
   return renderChartWithContract(contract, chart);
 }
 
-// Rellena los meses huecos entre el primero y el último (índices YYYYMM):
-// sin esto, lineChart espaciaba los puntos por posición del dato y la línea
-// mentía (dos puntos consecutivos en el eje aunque distaran un año).
+// Preserve elapsed time on the x-axis when months have no activity.
 function fillMonths(keys) {
   if (keys.length === 0) return [];
   const out = [];
@@ -352,7 +318,7 @@ function albumSeries(model, monthly, metric) {
   }));
 }
 
-// Album series use their own attribution, including songs shared by releases.
+// Album series keep their own attribution for tracks shared by releases.
 function rowSeries(model, tab, metric, id) {
   if (tab === 'albums') {
     const al = model.albums.byId.get(id);
@@ -369,15 +335,13 @@ function pctOf(part, total) {
   return total > 0 ? fmtPct(part / total) : '—';
 }
 
-// Sub de KPI comparado contra el período anterior de igual largo. Sin datos
-// previos no hay división: se anuncia vacío en vez de inventar un %.
 function deltaSub(now, before) {
   if (before <= 0) return 'anterior sin datos';
   const pct = Math.round(((now - before) / before) * 100);
   return `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs período anterior`;
 }
 
-// Entrada de mayor valor de un Map (first-wins en empates).
+// Resolve ties by keeping the first maximum.
 function maxEntry(map, getVal) {
   let best = null;
   for (const entry of map.entries()) if (!best || getVal(entry[1]) > getVal(best[1])) best = entry;
@@ -428,9 +392,6 @@ function recordsGridHTML(model, ctx = {}) {
   return `<div class="records-grid">${tiles.map((t) => `<div class="record-item"><span class="record-label">${esc(t.label)}</span><span class="record-value">${t.val}</span><span class="record-sub">${t.meta}</span></div>`).join('')}</div>`;
 }
 
-// Arquetipo de oyente: etiqueta derivada de skip rate, concentración (HHI),
-// repeticiones en sesión y franja dominante. Umbrales acotados a mano:
-// skip ≥ 35% = explora y descarta; HHI ≥ 0.08 ≈ artista top con ~28% del tiempo.
 export function listenerArchetype(model) {
   const t = model.totals;
   if (!t || t.records === 0) return null;
@@ -448,9 +409,6 @@ export function listenerArchetype(model) {
   };
 }
 
-// Tarjeta de rankings con controles (pestaña, métrica, top N, buscador).
-// Pura: main.js la re-renderiza solo dentro de #rank-card ante cambios de
-// estos controles, sin tocar el resto de la vista (no se pierde el foco).
 export function rankCardHTML(model, opts = {}) {
   const tab = opts.tab ?? 'artists';
   const metric = opts.metric ?? 'plays';
@@ -472,7 +430,7 @@ export function rankCardHTML(model, opts = {}) {
 
   let rows;
   if (query) {
-    // Con búsqueda se recorre el catálogo completo (no solo el top 50).
+    // Search spans the full catalog, not just the displayed ranking.
     const pool = tab === 'artists' ? [...model.artists.byId.values()]
       : tab === 'tracks' ? [...model.tracks.byId.values()]
       : [...model.albums.byId.values()];
@@ -484,9 +442,7 @@ export function rankCardHTML(model, opts = {}) {
     rows = source.map(rowOf).slice(0, topN);
   }
 
-  // Patrón APG de tabs: roving tabindex (solo el activo entra en el orden de
-  // tabulación) + panel etiquetado por el tab activo. Las flechas las cablea
-  // main.js (activación automática: la selección sigue al foco).
+  // Automatic tab activation follows focus, with one tab stop per tablist.
   const tabBtn = (id, label) => `<button type="button" role="tab" id="rank-tab-${id}" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}" class="${tab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`;
   const metricBtn = (id, label) => `<button type="button" aria-pressed="${metric === id}" class="${metric === id ? 'active' : ''}" data-metric="${id}">${label}</button>`;
   const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
@@ -555,9 +511,7 @@ export function footerMetaText(model) {
   return parts.join(' · ');
 }
 
-// Estado vacío POR FILTROS (distinto del vacío de datos): la vista no tiene
-// nada que mostrar hasta aflojar el filtro. El botón lo maneja la delegación
-// de data-action="clear" en main.js (los chips usan el mismo camino).
+// Distinguish empty data from results hidden by active filters.
 export function emptyFiltersHTML() {
   return `<section class="card"><h2>Sin resultados</h2>
     <p class="empty">Ningún resultado coincide con los filtros activos.</p>
@@ -991,7 +945,7 @@ export function albumView(model, ak, ctx = {}) {
   const valFmt = byMs ? fmtMs : fmtNum;
   const valLabel = byMs ? 'Tiempo' : 'Reproducciones';
   const totalMs = model.totals.ms;
-  // ak = ar*2^32 + al: la parte alta es el artista (el residuo es el id del álbum).
+  // Composite album keys store the artist id in the high 32 bits.
   const ar = Math.floor(ak / 4294967296);
   const tracksLimit = resolveLimit(ctx, 'album-tracks', 25);
   const songRows = [...al.trackStats.values()]
@@ -2010,7 +1964,6 @@ export function wrappedView(model, id, ctx) {
   const period = ctx?.range ? rangeChipLabel(ctx.range) : `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`;
   const title = onlyYear != null ? `Tu ${onlyYear} en resumen` : 'Tu período en resumen';
 
-  // Evolución del artista top: ms por mes.
   const sprint = topArtist
     ? monthlySeries(evoByMs ? model.monthlyArtistMs : model.monthlyArtistPlays, topArtist.id)
     : [];
@@ -2023,8 +1976,7 @@ export function wrappedView(model, id, ctx) {
     })
     : '';
 
-  // Concentración legible: los efectivos redondeados como valor principal y
-  // el HHI en porcentaje como dato secundario (el crudo 0.083 no dice nada).
+  // Show effective artists prominently; raw HHI values are hard to interpret.
   const eff = c.knownEntities ? Math.max(1, Math.round(c.effective)) : 0;
   const effNoun = eff === 1 ? 'artista base' : 'artistas base';
   const hhiPct = c.knownEntities ? `${(c.hhi * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %` : '—';
@@ -2111,8 +2063,6 @@ export function wrappedView(model, id, ctx) {
     </div>`;
 }
 
-// Resumen en texto plano (para portapapeles / copia manual). Sin HTML: se
-// asigna con textContent, así que no necesita escaping.
 export function receiptText(model, ctx = {}) {
   const t = model.totals;
   const evoByMs = (ctx?.metric ?? 'ms') === 'ms';

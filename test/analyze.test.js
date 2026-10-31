@@ -1,6 +1,3 @@
-// analyze.test.js — e2e de la fachada con fixtures sintéticos
-//
-// La demo reusa estos fixtures (mismo tipo de datos que el parser consume).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +20,6 @@ test('e2e: analyze sobre un archivo sintético produce un modelo consistente', a
   assert.equal(m.sessionsStats.count, m.sessions.length);
   assert.ok(m.tables.artists.byPlays.length > 0);
   assert.deepEqual(m.meta.sources, ['sintetico.json']);
-  // Consistencia: la suma de ms por canción = total.
   let sum = 0;
   for (const t of m.tracks.byId.values()) sum += t.ms;
   assert.equal(sum, m.totals.ms);
@@ -68,8 +64,7 @@ test('minMs override: playsSignificant cuenta todo con minMs=0', async () => {
 
 test('determinismo: analyze dos veces → mismo modelo', async () => {
   const src = () => memoryBytes('s.json', syntheticJSON(300, 4));
-  // now fijo: sin él, generatedAt usa Date.now() y dos llamadas pueden cruzar
-  // el límite de segundo bajo carga (test flaky).
+
   const a = await analyze(src(), { tz: UTC, now: 1704067200 });
   const b = await analyze(src(), { tz: UTC, now: 1704067200 });
   assert.deepStrictEqual(a, b);

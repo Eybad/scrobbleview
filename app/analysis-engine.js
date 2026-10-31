@@ -1,4 +1,3 @@
-// Composition root shared by the browser worker and its Node integration tests.
 import { analyze } from '../src/analyze.js';
 import { parse } from '../src/parse/parse.js';
 import { derive, selectDerived } from '../src/aggregate/impl/derive.js';

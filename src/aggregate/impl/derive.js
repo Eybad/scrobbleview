@@ -1,7 +1,5 @@
-// Derived columns follow UTC chronology. localOrder indexes these columns by
-// wall-clock time for range searches, which need a separate order during DST.
+// Keep UTC chronology separate from localOrder so DST range searches stay correct.
 
-// Días desde epoch → fecha civil (inverso del algoritmo de Hinnant).
 export function civilFromDays(z) {
   z += 719468;
   const era = Math.floor(z / 146097);
@@ -15,9 +13,6 @@ export function civilFromDays(z) {
   return { y: m <= 2 ? y + 1 : y, m, d };
 }
 
-// cols: t (epoch s UTC), loc (epoch s local), hour (0-23), dow (0-6, lunes=0),
-// ymd (y*10000+m*100+d), day (días desde epoch local), isSkipped (0/1), ms.
-// order: permutación posición-sorteada → índice original (para leer ds.* en orden).
 export function derive(ds, tz) {
   const n = ds.meta.count;
   const order = new Uint32Array(n);
@@ -39,9 +34,9 @@ export function derive(ds, tz) {
     const l = abs + tz.offsetMinutes(abs) * 60;
     t[k] = abs;
     loc[k] = l;
-    hour[k] = ((Math.floor(l / 3600) % 24) + 24) % 24; // doble módulo: el local puede ser < 0 (pre-1970) y el % simple da negativo → 254 en Uint8Array
+    hour[k] = ((Math.floor(l / 3600) % 24) + 24) % 24; // Double modulo keeps pre-1970 hours nonnegative.
     const d = Math.floor(l / 86400);
-    dow[k] = ((d + 3) % 7 + 7) % 7; // lunes=0 (1970-01-01, jueves → 3)
+    dow[k] = ((d + 3) % 7 + 7) % 7; // Monday = 0.
     day[k] = d;
     const c = civilFromDays(d);
     ymd[k] = c.y * 10000 + c.m * 100 + c.d;
@@ -58,7 +53,6 @@ export function derive(ds, tz) {
   return { t, loc, hour, dow, ymd, day, isSkipped, ms, order, localOrder, positions, utcPositions };
 }
 
-// Select already-derived rows without another time-zone lookup or UTC sort.
 export function selectDerived(derived, indices) {
   const positions = Uint32Array.from(indices, (index) => derived.positions[index]);
   positions.sort();

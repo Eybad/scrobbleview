@@ -51,12 +51,10 @@ test('A10: captureHistoryState and restoreHistoryState preserve scroll and focus
   assert.equal(captured.focusSelector, '[data-metric="plays"]');
   assert.equal(captured.tableScrolls[0].left, 120);
 
-  // Clear mock state
   scrollCoords = { x: 0, y: 0 };
   mockTable.scrollLeft = 0;
   mockTable.scrollTop = 0;
 
-  // Restore
   const restored = restoreHistoryState(captured, mockWindow, mockDoc);
   assert.equal(restored, true);
   assert.equal(scrollCoords.x, 50);
@@ -68,13 +66,11 @@ test('A10: captureHistoryState and restoreHistoryState preserve scroll and focus
 test('contextBarHTML: formats active period, filter pill, and metric switch', () => {
   const model = { meta: { firstTs: 1704067200, lastTs: 1706745600 }, yearly: new Map([[2024, {}]]) };
 
-  // All history
   const htmlAll = contextBarHTML({ state: emptyFilterState(), model, metric: 'ms' });
   assert.ok(htmlAll.includes('Todo el historial'));
   assert.ok(htmlAll.includes('data-metric="ms"'));
   assert.ok(htmlAll.includes('aria-pressed="true"'));
 
-  // Range
   const stateRange = { ...emptyFilterState(), range: { from: 1704067200, to: 1706745600 } };
   const htmlRange = contextBarHTML({ state: stateRange, model, metric: 'plays' });
   assert.ok(htmlRange.includes('2024-01-01 – 2024-02-01'));

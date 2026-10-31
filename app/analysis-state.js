@@ -14,8 +14,7 @@ function copyContext(context) {
   return context ? { ...context, state: copyState(context.state) } : null;
 }
 
-// A response can replace visible statistics only while its requested state is
-// still current. Reusing a result also avoids recalculation for table controls.
+// Discard stale responses and reuse the model for presentation-only changes.
 export function createAnalysisState(client) {
   let revision = 0, full = null, current = null, prev = null, appliedKey = null, albumDetail = null, detail = null, detailKey = null;
   let confirmedContext = null, pendingContext = null, failedContext = null;

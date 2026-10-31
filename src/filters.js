@@ -1,22 +1,3 @@
-// filters.js — lógica pura de filtros sobre el Dataset
-//
-// applyFilters(ds, state, tz, derived?) → { indices, counts }: índices de filas
-// que cumplen el estado de filtro (rango + cruzados). Si se pasa `derived`
-// (resultado de derive(ds, tz) ya calculado), se usa tal cual en vez de
-// re-ejecutar derive + order.sort() en cada cambio de filtro. El derived
-// pertenece a ese (ds, tz): si no corresponde, el resultado no corresponde.
-// filterDataset(ds, indices)
-// → Dataset subconjunto (mismos dicts, columnas recortadas) listo para
-// re-agregar: las vistas renderizan un StatsModel filtrado con el MISMO código
-// que el modelo completo. Nunca se re-parsea.
-//
-// El estado de filtro es un objeto plano (serializable a URL si se quiere):
-//   range: { from: loc, to: loc } | null   (null = todo; loc = epoch local)
-//   years: Set<year> | null, months: Set<yyyymm> | null
-//   hours: Set<hour> | null, dows: Set<dow> | null
-//   artistId: ar | null, trackId: tk (tr*2^32+ar) | null, albumId: ak | null
-//   skip/shuffle/offline: boolean | 'unknown' | null (null = sin filtro)
-
 import { derive, civilFromDays } from './aggregate/impl/derive.js';
 
 function matchesFlag(flags, filter, bit, unknownBit) {
@@ -144,8 +125,7 @@ export function applyFilters(ds, state, tz, derived = null, { collectIndices = t
   };
 }
 
-// Subconjunto del Dataset: mismas columnas y dicts, count recortado.
-// El subconjunto conserva el orden de los índices recibidos.
+// Preserve the supplied index order in the filtered dataset.
 export function filterDataset(ds, indices) {
   const n = indices.length;
   const t = new Int32Array(n);

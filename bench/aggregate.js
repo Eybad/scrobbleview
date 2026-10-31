@@ -1,4 +1,3 @@
-// Synthetic benchmark; each invocation is a separate process.
 import { performance } from 'node:perf_hooks';
 import { createColumns } from '../src/parse/impl/columns.js';
 import { Interner } from '../src/parse/impl/intern.js';

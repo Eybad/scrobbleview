@@ -103,7 +103,7 @@ test('equal timestamps are not returns and filters do not hide later observation
   });
 });
 test('A23: historical first appearances and comebacks computed on original timeline survive filtering', () => {
-  const D0 = 1704067200; // 2024-01-01 00:00:00 UTC
+  const D0 = 1704067200;
   const DAY = 86400;
 
   const events = [
@@ -178,14 +178,14 @@ test('A24: 30/90 day retention accounts for insufficient follow-up without divis
 
 test('Monthly longitudinal metrics track concentration and known denominators without NaN', () => {
   const UTC = fixedTz('UTC', 0);
-  const D0 = 1704067200; // 2024-01-01
+  const D0 = 1704067200;
   const DAY = 86400;
 
   const events = [
-    { t: D0, m: 60000, track: 'A', artist: 'X', flags: 2 }, // Jan: skipped (flag 2)
-    { t: D0 + DAY, m: 60000, track: 'B', artist: 'X', flags: 1 }, // Jan: shuffle (flag 1)
-    { t: D0 + 35 * DAY, m: 60000, track: 'C', artist: 'Y', flags: 0 }, // Feb: neither
-    { t: D0 + 36 * DAY, m: 60000, track: 'D', artist: 'Y', flags: 32 } // Feb: skipped unknown (bit 32)
+    { t: D0, m: 60000, track: 'A', artist: 'X', flags: 2 },
+    { t: D0 + DAY, m: 60000, track: 'B', artist: 'X', flags: 1 },
+    { t: D0 + 35 * DAY, m: 60000, track: 'C', artist: 'Y', flags: 0 },
+    { t: D0 + 36 * DAY, m: 60000, track: 'D', artist: 'Y', flags: 32 }
   ];
   const ds = buildDataset(events);
   const monthly = computeMonthlyLongitudinal(ds, UTC);

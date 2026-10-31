@@ -1,8 +1,4 @@
-// app/history-state.js — Captura y restauración de posición, scroll y foco (Etapa 2)
-//
-// history.state guarda exclusivamente datos serializables efímeros:
-// { returnState: { scrollX, scrollY, focusSelector, tableScrolls } }
-// No guarda elementos DOM ni eventos completos.
+// Navigation snapshots store serializable view state, never DOM nodes.
 
 export function buildElementSelector(el) {
   if (!el || typeof el.getAttribute !== 'function') return null;

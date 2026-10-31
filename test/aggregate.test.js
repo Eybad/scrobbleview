@@ -1,5 +1,3 @@
-// aggregate.test.js — StatsModel: totales, determinismo, entidades, temporal,
-// sesiones, behavior, concentración, transiciones, streak, DST.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +7,6 @@ import { offsetTable } from '../src/aggregate/adapters/offset-table.js';
 import { buildDataset } from './fakes/dataset.js';
 
 const UTC = fixedTz('utc', 0);
-// 2024-01-01T00:00:00Z
 const D0 = 1704067200;
 
 test('totales: records, ms, flags, completitud, mediana, buckets', () => {
@@ -28,10 +25,10 @@ test('totales: records, ms, flags, completitud, mediana, buckets', () => {
   assert.equal(m.totals.episodes, 0);
   assert.equal(m.totals.completed, 1);
   assert.equal(m.totals.interrupted, 3);
-  assert.equal(m.totals.medianMs, 32500); // [0, 5000, 60000, 120000]
+  assert.equal(m.totals.medianMs, 32500);
   assert.equal(m.totals.avgMs, 46250);
-  assert.equal(m.totals.playsSignificant, 2); // ms >= 30000
-  assert.equal(m.totals.playsSkipped, 2); // ms < 10000
+  assert.equal(m.totals.playsSignificant, 2);
+  assert.equal(m.totals.playsSkipped, 2);
   assert.deepEqual(m.totals.msDist.map((x) => x.count), [2, 0, 0, 2, 0, 0]);
   assert.deepEqual(m.totals.msDist.map((x) => x.label), ['<10 s', '10–<30 s', '30–<60 s', '1–<3 min', '3–<5 min', '≥5 min']);
 });
@@ -51,8 +48,7 @@ test('determinismo: fixedTz vs offset-table producen el mismo modelo', () => {
     { t: D0 + 90000, m: 5000, track: 'C', artist: 'Z', reasonEnd: 'logout' }
   ];
   const ds = buildDataset(events);
-  // now fijo: sin él, generatedAt usa Date.now() y dos llamadas pueden cruzar
-  // el límite de segundo bajo carga (test flaky; mismo caso que analyze.test.js).
+
   const a = aggregate(ds, { tz: fixedTz('tz', -240), now: 1704067200 });
   const b = aggregate(ds, { tz: offsetTable('tz', [[0, -240]]), now: 1704067200 });
   assert.deepStrictEqual(a, b);
@@ -68,7 +64,7 @@ test('concentración: 1 artista → HHI 1, efectivos 1; N iguales → 1/N, gini 
   const m1 = aggregate(ds1, { tz: UTC });
   assert.equal(m1.concentration.artists.hhi, 1);
   assert.equal(m1.concentration.artists.effective, 1);
-  assert.equal(m1.concentration.artists.entropy, 1); // convención n=1
+  assert.equal(m1.concentration.artists.entropy, 1);
 
   const ds3 = buildDataset([
     { t: D0, m: 100000, track: 'A', artist: 'X' },
@@ -132,7 +128,7 @@ test('sesiones: gap <= 30 min → 1 sesión; gap > 30 min → 2', () => {
 
   const ds2 = buildDataset([
     { t: D0, track: 'A', artist: 'X' },
-    { t: D0 + 1980, track: 'B', artist: 'Y' } // 33 min
+    { t: D0 + 1980, track: 'B', artist: 'Y' }
   ]);
   const m2 = aggregate(ds2, { tz: UTC });
   assert.equal(m2.sessions.length, 2);
@@ -192,8 +188,8 @@ test('sessions localize their estimated starts using the offset at that instant'
   ]), { tz });
   const session = model.sessions[0];
   assert.equal(session.startUtc, 1730610600);
-  assert.equal(session.start, 1730596200); // 01:10 EDT
-  assert.equal(session.end, 1730596200); // 01:10 EST
+  assert.equal(session.start, 1730596200);
+  assert.equal(session.end, 1730596200);
   assert.equal(session.duration, 3600);
   assert.equal(model.sessionsStats.startHour.get(1), 1);
 
@@ -205,10 +201,9 @@ test('sessions localize their estimated starts using the offset at that instant'
 });
 
 test('sesiones: byWeekday usa lunes=0 (2024-01-01 lunes, 2024-01-07 domingo)', () => {
-  // Ancla la convención de sessions.js:69 (misma fórmula que derive.js:52).
   const ds = buildDataset([
-    { t: D0, track: 'A', artist: 'X' }, // 2024-01-01 lunes
-    { t: D0 + 6 * 86400, track: 'B', artist: 'Y' } // 2024-01-07 domingo
+    { t: D0, track: 'A', artist: 'X' },
+    { t: D0 + 6 * 86400, track: 'B', artist: 'Y' }
   ]);
   const m = aggregate(ds, { tz: UTC });
   assert.equal(m.sessionsStats.byWeekday.get(0), 1, 'lunes');
@@ -239,7 +234,7 @@ test('streak: días 1,2,3,5 → racha 3 (19723→19725)', () => {
     { t: D0, track: 'A', artist: 'X' },
     { t: D0 + 86400, track: 'B', artist: 'Y' },
     { t: D0 + 172800, track: 'C', artist: 'Z' },
-    { t: D0 + 345600, track: 'D', artist: 'W' } // salta el día 4
+    { t: D0 + 345600, track: 'D', artist: 'W' }
   ]);
   const m = aggregate(ds, { tz: UTC });
   assert.equal(m.streak.len, 3);
@@ -263,8 +258,8 @@ test('binge: A,A,B,A → max_run A=2, B=1; tabla binge top A', () => {
 
 test('monthly_discovery: primera vez en enero (new), repetición en febrero (rep)', () => {
   const ds = buildDataset([
-    { t: D0, track: 'A', artist: 'X' }, // 2024-01-01
-    { t: D0 + 31 * 86400, track: 'A', artist: 'X' } // 2024-02-01
+    { t: D0, track: 'A', artist: 'X' },
+    { t: D0 + 31 * 86400, track: 'A', artist: 'X' }
   ]);
   const m = aggregate(ds, { tz: UTC });
   const jan = m.monthlyDiscovery.get(202401);
@@ -316,16 +311,14 @@ test('meta: firstTs/lastTs locales, tzId, records', () => {
 });
 
 test('DST fall-back keeps UTC chronology and local range bounds separate', () => {
-  // America/New_York 2024-11-03 06:00 UTC: EDT(-240) → EST(-300).
   const tz = offsetTable('ny', [[0, -240], [1730613600, -300]]);
   const ds = buildDataset([
-    { t: 1730613540, track: 'A', artist: 'X' }, // 05:59 UTC → 01:59 EDT
-    { t: 1730613660, track: 'B', artist: 'Y' } // 06:01 UTC → 01:01 EST
+    { t: 1730613540, track: 'A', artist: 'X' },
+    { t: 1730613660, track: 'B', artist: 'Y' }
   ]);
   const m = aggregate(ds, { tz });
   assert.deepEqual([...m.cols.t], [1730613540, 1730613660]);
   assert.deepEqual([...m.cols.loc], [1730599140, 1730595660]);
-  // Local bounds still cover both occurrences of the repeated hour.
   assert.equal(m.meta.firstTs, 1730595660);
   assert.equal(m.meta.lastTs, 1730599140);
   assert.equal(m.sessions.length, 1);
@@ -357,7 +350,6 @@ test('DST changes preserve real session gaps, transitions and consecutive track 
 
 test('tables: tops por plays y ms, skip rate con mínimo, constancia, longevidad', () => {
   const events = [];
-  // 3 artistas: X (3 plays, 300s), Y (2 plays, 200s), Z (1 play, 100s)
   for (let i = 0; i < 3; i++) events.push({ t: D0 + i * 60, m: 100000, track: `A${i}`, artist: 'X' });
   for (let i = 0; i < 2; i++) events.push({ t: D0 + 1000 + i * 60, m: 100000, track: `B${i}`, artist: 'Y' });
   events.push({ t: D0 + 2000, m: 100000, track: 'C', artist: 'Z' });
@@ -366,35 +358,30 @@ test('tables: tops por plays y ms, skip rate con mínimo, constancia, longevidad
   assert.equal(m.tables.artists.byPlays[0].plays, 3);
   assert.equal(m.tables.artists.byMs[0].name, 'X');
   assert.equal(m.tables.tracks.byPlays.length, 6);
-  assert.equal(m.tables.albums.byPlays.length, 0); // sin álbumes
-  assert.equal(m.tables.constancy.length, 0); // 1 mes activo < 6
+  assert.equal(m.tables.albums.byPlays.length, 0);
+  assert.equal(m.tables.constancy.length, 0);
   assert.equal(m.tables.longevity[0].name, 'X');
 });
 
-// Un local anterior a 1970 (p. ej. 1970-01-01T00:00:00Z en UTC-4 → local
-// negativo) daba hora negativa; al storear en Uint8Array se convertía en
-// 252 y temporal.js lanzaba TypeError en hour[252]. Con doble módulo da 20.
+// Pre-1970 local dates must remain valid Uint8 hour indexes.
 test('hora local pre-1970 (offset negativo) → hora 20, sin TypeError', () => {
   const ds = buildDataset([{ t: 0, m: 1000, track: 'A', artist: 'X' }]);
   const m = aggregate(ds, { tz: fixedTz('w4', -240) });
   assert.equal(m.cols.hour[0], 20);
   assert.equal(m.hour[20].plays, 1);
-  assert.equal(m.sessionsStats.startHour.get(19), 1); // Estimated start: 19:59:59, end: 20:00.
-  assert.equal(m.sessionsStats.byBlock.get(3), 1); // 20h → franja Noche
+  assert.equal(m.sessionsStats.startHour.get(19), 1);
+  assert.equal(m.sessionsStats.byBlock.get(3), 1);
 });
 
-// La constancia es meses_activos / meses_del_intervalo. El intervalo se
-// calculaba restando índices YYYYMM (202403 − 202310 + 1 = 94 en vez de 6),
-// subestimando el coverage de toda carrera multianual. Con meses absolutos
-// (y*12+m-1), 6 meses activos en oct-2023→mar-2024 dan coverage 1.
+// Absolute month indices keep coverage correct across year boundaries.
 test('constancia interanual: oct-2023→mar-2024 activo da coverage 1', () => {
   const ds = buildDataset([
-    { t: 1697371200, m: 1000, track: 'A', artist: 'X' }, // oct-2023
-    { t: 1700049600, m: 1000, track: 'B', artist: 'X' }, // nov-2023
-    { t: 1702641600, m: 1000, track: 'C', artist: 'X' }, // dic-2023
-    { t: 1705320000, m: 1000, track: 'D', artist: 'X' }, // ene-2024
-    { t: 1707998400, m: 1000, track: 'E', artist: 'X' }, // feb-2024
-    { t: 1710504000, m: 1000, track: 'F', artist: 'X' } // mar-2024
+    { t: 1697371200, m: 1000, track: 'A', artist: 'X' },
+    { t: 1700049600, m: 1000, track: 'B', artist: 'X' },
+    { t: 1702641600, m: 1000, track: 'C', artist: 'X' },
+    { t: 1705320000, m: 1000, track: 'D', artist: 'X' },
+    { t: 1707998400, m: 1000, track: 'E', artist: 'X' },
+    { t: 1710504000, m: 1000, track: 'F', artist: 'X' }
   ]);
   const m = aggregate(ds, { tz: UTC });
   assert.equal(m.tables.constancy.length, 1);
@@ -402,10 +389,7 @@ test('constancia interanual: oct-2023→mar-2024 activo da coverage 1', () => {
   assert.equal(m.tables.constancy[0].coverage, 1);
 });
 
-// Los álbumes guardan firstTs/lastTs/days/tracks (la ficha del álbum los
-// necesita); cada track guarda su ak (enlace canción→álbum, 0 si no hay
-// álbum); cada artista guarda sus ak (álbumes del artista) y su reloj
-// día×hora (listeningClock por artista, índice dow*24+hour como dayHour).
+// Preserve the per-entity album, track, and artist clock relationships.
 test('album tracks retain their own totals and monthly history across shared titles', () => {
   const model = aggregate(buildDataset([
     { t: D0, m: 180000, track: 'Shared', artist: 'X', album: 'A' },
@@ -434,7 +418,7 @@ test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clo
     { t: D0 + 86400, m: 1000, track: 'A2', artist: 'X', album: 'L' },
     { t: D0 + 2 * 86400, m: 1000, track: 'B1', artist: 'X', album: 'M' },
     { t: D0 + 3 * 86400, m: 1000, track: 'A1', artist: 'Y', album: 'L' },
-    { t: D0 + 4 * 86400, m: 1000, track: 'S', artist: 'X' } // sin álbum
+    { t: D0 + 4 * 86400, m: 1000, track: 'S', artist: 'X' }
   ]);
   const m = aggregate(ds, { tz: UTC });
   const album = (artist, name) => [...m.albums.byId.values()].find((a) => a.artist === artist && a.name === name);
@@ -448,17 +432,16 @@ test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clo
   assert.equal(xl.firstTs, D0);
   assert.equal(xl.lastTs, D0 + 86400);
   assert.equal(album('X', 'M').tracks.size, 1);
-  assert.notEqual(album('Y', 'L').id, xl.id); // mismo nombre, otro artista → otro ak
+  assert.notEqual(album('Y', 'L').id, xl.id);
 
   assert.equal(track('X', 'A1').ak, xl.id);
   assert.equal(track('X', 'A1').months.size, 1);
   assert.ok(track('X', 'A1').months.has(202401));
-  assert.equal(track('X', 'S').ak, 0); // sin álbum
+  assert.equal(track('X', 'S').ak, 0);
 
   const x = artist('X');
-  assert.equal(x.albums.size, 2); // L y M
+  assert.equal(x.albums.size, 2);
   assert.ok(x.albums.has(xl.id));
-  // D0 = lunes 2024-01-01 00:00Z → idx 0, 24, 48 (mar/mié 00:00), resto 0.
   assert.equal(x.clock[0], 1);
   assert.equal(x.clock[24], 1);
   assert.equal(x.clock[48], 1);
@@ -467,21 +450,19 @@ test('groups: álbumes con tracks/fechas, tracks con ak, artistas con albums+clo
   assert.equal(sum, x.plays);
 });
 
-// Cada entrada de yearly desglosa sus 4 franjas horarias: el stackedBar anual
-// debe alimentarse del año, no del acumulado global (que supera el 100% del
-// total del año cuando el historial abarca más de uno).
+// Yearly distributions must use each year's totals, not global totals.
 test('yearly desglosa franjas horarias por año (blocks)', () => {
   const ds = buildDataset([
-    { t: 1685584800, m: 1000, track: 'A', artist: 'X' }, // 2023, 02:00 → madrugada
-    { t: 1685584900, m: 2500, track: 'B', artist: 'Y' }, // 2023, 02:00 → madrugada
-    { t: 1717250400, m: 4000, track: 'C', artist: 'Z' } // 2024, 14:00 → tarde
+    { t: 1685584800, m: 1000, track: 'A', artist: 'X' },
+    { t: 1685584900, m: 2500, track: 'B', artist: 'Y' },
+    { t: 1717250400, m: 4000, track: 'C', artist: 'Z' }
   ]);
   const m = aggregate(ds, { tz: UTC });
   assert.deepEqual([...m.yearly.get(2023).blocks], [2, 0, 0, 0]);
   assert.deepEqual([...m.yearly.get(2023).blocksMs], [3500, 0, 0, 0]);
   assert.deepEqual([...m.yearly.get(2024).blocks], [0, 0, 1, 0]);
   assert.deepEqual([...m.yearly.get(2024).blocksMs], [0, 0, 4000, 0]);
-  assert.equal(m.blocks[0].plays, 2); // el global sigue intacto
+  assert.equal(m.blocks[0].plays, 2);
 });
 
 test('tables: cap 100, lowSkipRate, oneHitWonders, deepCatalog, forgotten, and artist clockMs/tracks', () => {

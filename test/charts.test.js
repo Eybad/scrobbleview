@@ -1,4 +1,3 @@
-// test/charts.test.js — comportamiento visual (no escaping: ver xss.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeScale, barChart, lineChart, stackedBar, HEAT, fmtNum, fmtMs, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
@@ -68,16 +67,16 @@ test('makeScale: discreta de 6 niveles, nivel 0 solo para v<=0', () => {
   const scale = makeScale(100);
   assert.equal(HEAT.length, 6);
   assert.equal(scale(0), HEAT[0]);
-  assert.equal(scale(-5), HEAT[0]); // v<=0 → nivel 0
-  assert.equal(scale(100), HEAT[5]); // máximo → último nivel
-  assert.equal(scale(1000), HEAT[5]); // saturación por encima del máximo
-  assert.notEqual(scale(50), HEAT[0]); // v>0 nunca cae al nivel 0
-  assert.equal(scale(10), scale(11)); // cuantizada: cercanos comparten color
+  assert.equal(scale(-5), HEAT[0]);
+  assert.equal(scale(100), HEAT[5]);
+  assert.equal(scale(1000), HEAT[5]);
+  assert.notEqual(scale(50), HEAT[0]);
+  assert.equal(scale(10), scale(11));
 });
 
 test('makeScale: unificada con el design system (verdes, acento default)', () => {
   const scale = makeScale(100);
-  assert.notEqual(scale(100), '#4cc9f0'); // ya no celeste
+  assert.notEqual(scale(100), '#4cc9f0');
   assert.ok(HEAT.includes(scale(50)), 'todo valor cae en la paleta del design system');
   assert.ok(HEAT.includes(scale(1)), 'valores chicos también usan la paleta');
 });
@@ -121,7 +120,6 @@ test('stackedBar: segmentLabels en titles + leyenda', () => {
   assert.ok(html.includes('Madrugada'), 'segmento en title/leyenda');
   assert.ok(html.includes('Ma\u00f1ana'), 'segmento con tilde intacto');
   assert.ok(html.includes('<ul class="legend">'), 'leyenda debajo');
-  // Sin segmentLabels sigue funcionando como antes.
   const plain = stackedBar({ series: [{ label: '2024', values: [2, 1], total: 3 }] });
   assert.ok(!plain.includes('<ul class="legend">'), 'sin labels no hay leyenda');
 });
@@ -162,9 +160,6 @@ test('lineChart: aria resumido (rango, máximo y último, sin enumerar puntos)',
 });
 
 test('calendarGrid: días fuera del rango de datos se distinguen de cero', () => {
-  // 2024-06-15 = día 19889; el rango cubre el 15 y el 16. El 15 tiene datos
-  // (satura la escala), el 16 está dentro del rango sin datos (nivel 0) y el
-  // resto del año está fuera del rango (sin datos, color propio).
   const days = [{ date: '2024-06-15', value: 5000 }];
   const html = calendarGrid({
     days, year: 2024,

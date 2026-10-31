@@ -1,14 +1,3 @@
-// app/routes.js — Semantic versioned routes and state separation (Etapa 2)
-//
-// Rutas semánticas v1:
-// - #/v1/dashboard, #/v1/hours, #/v1/habits, #/v1/sessions, #/v1/discovery, #/v1/yearly, #/v1/calendar, #/v1/wrapped
-// - #/v1/calendar/:year
-// - #/v1/artist/:artist
-// - #/v1/track/:artist/:title
-// - #/v1/album/:artist/:title
-//
-// Manejo de rutas legadas (#/artist/:id, #/track/:tk, #/album/:id) y recuperación de no encontrados.
-
 export function encodeRouteSegment(str) {
   const value = String(str ?? '');
   let encoded = '';
