@@ -3332,11 +3332,11 @@ main.container {
 }
 
 .context-bar {
-  margin-bottom: var(--sp-6);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  margin-bottom: var(--sp-4);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .context-bar-inner {
@@ -3369,6 +3369,10 @@ main.container {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
+}
+
+.context-controls {
+  margin-left: auto;
 }
 
 .context-controls .metric-switch > .btn {
@@ -3674,15 +3678,18 @@ td {
   }
 
   .context-bar-inner {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    align-items: center;
     gap: var(--sp-2);
   }
 
   .context-controls .metric-switch {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
+    display: inline-flex;
+    width: fit-content;
+  }
+
+  .context-controls {
+    margin-left: 0;
   }
 
   .context-controls .metric-switch > .btn {
@@ -3740,7 +3747,7 @@ td {
   }
 
   .context-bar {
-    padding-inline: var(--sp-2);
+    padding-inline: 0;
   }
 
   .context-pill {

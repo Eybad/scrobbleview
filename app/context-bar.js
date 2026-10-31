@@ -22,6 +22,7 @@ export function formatPeriodLabel(state, model) {
 export function contextBarHTML({ state, model, metric }) {
   if (!model) return '';
   const period = formatPeriodLabel(state, model);
+  const hasExplicitPeriod = Boolean(state.range || state.years?.size);
   const advCount = advancedFilterCount(state, model.meta.lastTs ?? 0);
   const entityCount = (state.artistId ? 1 : 0) + (state.trackId ? 1 : 0) + (state.albumId ? 1 : 0);
   const totalFilters = advCount + entityCount;
@@ -31,7 +32,7 @@ export function contextBarHTML({ state, model, metric }) {
   return `<aside class="context-bar" aria-label="Contexto de análisis y métrica">
     <div class="context-bar-inner">
       <div class="context-summary">
-        <span class="context-pill context-period" title="Período activo">${esc(period)}</span>
+        <span class="context-pill context-period" title="Período activo"${hasExplicitPeriod ? '' : ' hidden'}>${esc(period)}</span>
         ${totalFilters > 0 ? `<button type="button" class="context-pill context-filter-btn" data-action="focus-filters" aria-label="Filtros activos: ${filterLabel}">${totalFilters} filtro${totalFilters > 1 ? 's' : ''}</button>` : ''}
       </div>
       <div class="context-controls">
