@@ -967,9 +967,15 @@ function render() {
     };
     syncNavFade();
     nav.addEventListener('scroll', syncNavFade, { passive: true });
-    // La sección activa entra en vista solo si no se ve (nearest = sin
-    // movimiento cuando ya está visible; nunca scrollea la página).
-    nav.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const activeLink = nav.querySelector('a[aria-current="page"]');
+    if (activeLink) {
+      const navRect = nav.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      const visibleLeft = navRect.left + nav.clientLeft;
+      const visibleRight = visibleLeft + nav.clientWidth;
+      if (linkRect.left < visibleLeft) nav.scrollLeft -= visibleLeft - linkRect.left;
+      else if (linkRect.right > visibleRight) nav.scrollLeft += linkRect.right - visibleRight;
+    }
   }
   // Header actions y footer solo en la vista app: en inicio el footer repite
   // el aviso de privacidad y las acciones no aplican. La tagline también se
@@ -1011,7 +1017,7 @@ async function applyAndRenderView(focusSelector = null) {
   announceFilters();
   syncHash();
   wireView();
-  if (focusSelector) (appRoot.querySelector(focusSelector) ?? appRoot.querySelector('#filter-chips'))?.focus();
+  if (focusSelector) (appRoot.querySelector(focusSelector) ?? appRoot.querySelector('#filter-chips'))?.focus({ preventScroll: true });
 }
 
 // Sincroniza los controles de la barra con el estado (sin re-renderizarla).
@@ -1178,7 +1184,7 @@ function updateRankCard(focusSel = null) {
   wireRankCard();
   syncTallTables(card);
   // El re-render destruye el control activado: devolverle el foco (teclado).
-  if (focusSel) card.querySelector(focusSel)?.focus();
+  if (focusSel) card.querySelector(focusSel)?.focus({ preventScroll: true });
 }
 
 function wireRankCard() {
@@ -1197,8 +1203,8 @@ function wireRankCard() {
       try { localStorage.setItem(METRIC_STORAGE_KEY, activeMetric); } catch (_) {}
       syncHash();
       render();
-      const newBtn = appRoot.querySelector(`[data-metric="${activeMetric}"]`);
-      if (newBtn) newBtn.focus();
+      const newBtn = document.getElementById('rank-card')?.querySelector(`[data-metric="${activeMetric}"]`);
+      if (newBtn) newBtn.focus({ preventScroll: true });
     });
   });
   const sel = card.querySelector('[data-topn]');
@@ -2070,7 +2076,7 @@ appRoot.addEventListener('click', (e) => {
     analysisState.updatePresentation({ hash: location.hash, metric: activeMetric });
     render();
     const newBtn = appRoot.querySelector(`.context-bar [data-metric="${activeMetric}"]`);
-    if (newBtn) newBtn.focus();
+    if (newBtn) newBtn.focus({ preventScroll: true });
     return;
   }
   const focusBtn = e.target.closest?.('[data-action="focus-filters"]');
