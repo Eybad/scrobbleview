@@ -57,8 +57,8 @@ function resolveLimit(ctx, key, fallback = 10) {
 // `value` llega como HTML seguro (formatters numéricos o entityLink()):
 // todo string de dato debe ser escapado por el llamador ANTES de entrar
 // acá. `label` y `sub` se escapan en esta función.
-function kpis(items) {
-  return `<dl class="kpis">${items.map((it) => {
+function kpis(items, layout = '') {
+  return `<dl class="kpis${layout ? ` ${layout}` : ''}">${items.map((it) => {
     if (it.heading) return `<div class="kpi-group-heading" role="presentation"><span>${esc(it.heading)}</span></div>`;
     return `
     <div class="kpi${it.text ? ' kpi-text' : ''}"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`;
@@ -845,7 +845,7 @@ export function artistView(model, ar, ctx = {}) {
       { label: 'Primera canción', value: firstTr ? entityLink('track', a.firstTrackTk, firstTr.name) : '—', text: true },
       { label: 'Primera escucha', value: fmtLocal(a.firstTs) },
       { label: 'Última escucha', value: fmtLocal(a.lastTs) }
-    ])}
+    ], 'kpis--entity')}
     <div class="grid-2">
       ${evolution}
       ${cardWithLimit('Tus canciones de este artista', 'artist-tracks', tracksLimit, rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk })), {
@@ -975,7 +975,7 @@ export function trackView(model, tk, ctx = {}) {
       { label: 'Primera escucha', value: fmtLocal(tr.firstTs) },
       ...(ctx.detail ? [{ label: 'Primera aparición histórica', value: fmtLocal(ctx.detail.firstLocal) }] : []),
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
-    ])}
+    ], 'kpis--entity')}
     <div class="grid-2">
       ${evolution}
       ${albumsCard}
