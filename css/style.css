@@ -1033,7 +1033,7 @@ main.container {
   max-height: 40rem;
   padding-bottom: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
   scroll-padding-top: 2.5rem;
 }
 
