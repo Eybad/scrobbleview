@@ -3724,6 +3724,16 @@ td {
   }
 }
 
+@media (max-width: 400px) {
+  .chip-grid-7 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .chip-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 360px) {
   .compare-range {
     grid-template-columns: minmax(0, 1fr);
