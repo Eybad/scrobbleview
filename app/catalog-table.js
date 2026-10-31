@@ -202,13 +202,13 @@ export function catalogTableHTML(queryResult, {
             <span class="cell-name">${esc(it.name)}</span>
             <span class="cell-sub">${esc(it.artist)}</span>
           </a>
-          <button type="button" class="btn-name-expand" data-expand-name aria-label="Expandir nombre" title="Expandir nombre">▶</button>
+          <button type="button" class="btn-name-expand" data-expand-name aria-label="Expandir nombre" aria-expanded="false" title="Expandir nombre"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m5.5 3 4.5 5-4.5 5"/></svg></button>
         </span>`
       : `<span class="cell-entity">
           <a class="cell-link" href="${esc(linkHref)}" title="${esc(it.name)}">
             <span class="cell-name">${esc(it.name)}</span>
           </a>
-          <button type="button" class="btn-name-expand" data-expand-name aria-label="Expandir nombre" title="Expandir nombre">▶</button>
+          <button type="button" class="btn-name-expand" data-expand-name aria-label="Expandir nombre" aria-expanded="false" title="Expandir nombre"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m5.5 3 4.5 5-4.5 5"/></svg></button>
         </span>`;
 
     const cells = activeCols.map((col) => {

@@ -1411,8 +1411,12 @@ function wireExploreView() {
       const cell = btn.closest('.col-name');
       const nameSpan = cell?.querySelector('.cell-name');
       if (nameSpan) {
-        nameSpan.classList.toggle('is-expanded');
-        btn.textContent = nameSpan.classList.contains('is-expanded') ? '▼' : '▶';
+        const isExpanded = nameSpan.classList.toggle('is-expanded');
+        const label = isExpanded ? 'Contraer nombre' : 'Expandir nombre';
+        btn.classList.toggle('is-expanded', isExpanded);
+        btn.setAttribute('aria-expanded', String(isExpanded));
+        btn.setAttribute('aria-label', label);
+        btn.title = label;
       }
     });
   });

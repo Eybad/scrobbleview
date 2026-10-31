@@ -2278,23 +2278,40 @@ details.calendar-year summary:hover {
 
 .btn-name-expand {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  line-height: 1;
-  padding: 2px 5px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
   cursor: pointer;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-name-expand svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s ease;
+}
+
+.btn-name-expand.is-expanded svg {
+  transform: rotate(90deg);
 }
 
 @media (hover: hover) {
   .btn-name-expand:hover {
+    background: var(--surface-2);
     color: var(--text);
-    border-color: var(--border-strong);
   }
 }
 
