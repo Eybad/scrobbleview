@@ -1168,6 +1168,12 @@ main.container {
   }
 }
 
+@media (max-width: 352px) {
+  .context-controls .metric-switch > button {
+    padding-inline: var(--sp-3);
+  }
+}
+
 .grid-2 .card {
   margin-bottom: 0;
 }
