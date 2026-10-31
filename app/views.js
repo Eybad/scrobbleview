@@ -669,7 +669,7 @@ export function dashboard(model, ctx = {}) {
 
   return `
     <header class="view-header view-header--compact">
-      <h1 class="visually-hidden">Resumen</h1>
+      <h1>Resumen</h1>
       <p class="view-meta view-range">${esc(range)}</p>
     </header>
     ${kpis([

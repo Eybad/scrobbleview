@@ -1628,21 +1628,27 @@ function wireView() {
   const [currentViewName] = parseHash();
   if (viewHeaderH1 && SECTION_NAMES[currentViewName] && !appRoot.querySelector('[data-action="toggle-fav"]')) {
     const isFav = favorites.has(currentViewName);
+    const headingRow = document.createElement('div');
+    headingRow.className = 'view-heading';
+    viewHeaderH1.before(headingRow);
+    headingRow.append(viewHeaderH1);
+
     const favBtn = document.createElement('button');
     favBtn.type = 'button';
     favBtn.className = `btn-fav ${isFav ? 'is-fav' : ''}`;
     favBtn.dataset.action = 'toggle-fav';
     favBtn.dataset.favView = currentViewName;
     favBtn.setAttribute('aria-label', isFav ? 'Quitar de favoritos' : 'Agregar a favoritos');
+    favBtn.setAttribute('aria-pressed', String(isFav));
     favBtn.title = isFav ? 'Quitar de favoritos' : 'Agregar a favoritos';
-    favBtn.textContent = isFav ? '★' : '☆';
+    favBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.75h12v17l-6-4-6 4z"/></svg>';
     favBtn.addEventListener('click', () => {
       if (favorites.has(currentViewName)) favorites.delete(currentViewName);
       else favorites.add(currentViewName);
       saveStoredFavorites(favorites);
       render();
     });
-    viewHeaderH1.appendChild(favBtn);
+    headingRow.append(favBtn);
   }
 
   document.querySelectorAll('[data-action="reset-preferences"]').forEach((btn) => {

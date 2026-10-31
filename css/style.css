@@ -3031,19 +3031,44 @@ details.calendar-year summary:hover {
 }
 
 .btn-fav {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--fs-lg);
   cursor: pointer;
-  padding: 0 var(--sp-2);
-  line-height: 1;
-  vertical-align: middle;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.btn-fav:hover,
+.btn-fav svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn-fav:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
 .btn-fav.is-fav {
-  color: #f1c40f;
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.btn-fav.is-fav svg {
+  fill: currentColor;
 }
 
 html {
@@ -3437,6 +3462,19 @@ textarea:focus-visible {
 
 .view-header h1 {
   letter-spacing: -0.035em;
+}
+
+.view-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  margin-bottom: var(--sp-1);
+}
+
+.view-heading h1 {
+  min-width: 0;
+  margin: 0;
 }
 
 .view-meta {
