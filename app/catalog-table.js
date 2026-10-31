@@ -61,21 +61,25 @@ export function paginationControlsHTML(queryResult) {
   const prevDisabled = page <= 1;
   const nextDisabled = page >= totalPages;
 
+  const pageActions = pageSize === 'all' ? '' : `
+    <button type="button" class="btn btn-sm btn-page" data-page="${page - 1}" data-page-action="previous" ${prevDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página anterior">← Anterior</button>
+    <span class="pagination-current">Página ${page} de ${totalPages}</span>
+    <button type="button" class="btn btn-sm btn-page" data-page="${page + 1}" data-page-action="next" ${nextDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página siguiente">Siguiente →</button>`;
+
   return `
     <nav class="pagination" aria-label="Paginación de resultados">
       <div class="pagination-info" aria-live="polite">
         Mostrando ${startRow}–${endRow} de ${totalMatches} ${totalMatches === 1 ? 'resultado' : 'resultados'}
       </div>
       <div class="pagination-actions">
-        <button type="button" class="btn btn-sm btn-page" data-page="${page - 1}" data-page-action="previous" ${prevDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página anterior">← Anterior</button>
-        <span class="pagination-current">Página ${page} de ${totalPages}</span>
-        <button type="button" class="btn btn-sm btn-page" data-page="${page + 1}" data-page-action="next" ${nextDisabled ? 'disabled aria-disabled="true"' : ''} aria-label="Página siguiente">Siguiente →</button>
+        ${pageActions}
         <label class="pagination-size-label">
           <span>Filas:</span>
-          <select class="pagination-select" data-page-size aria-label="Filas por página">
+          <select class="pagination-select" data-page-size name="pageSize" aria-label="Filas por página">
             <option value="25" ${pageSize === 25 ? 'selected' : ''}>25</option>
             <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
             <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+            <option value="all" ${pageSize === 'all' ? 'selected' : ''}>Todas</option>
           </select>
         </label>
       </div>
@@ -178,9 +182,11 @@ export function catalogTableHTML(queryResult, {
     </th>`;
   }).join('');
 
-  const maxVal = rows.length > 0
-    ? Math.max(...rows.map((r) => metric === 'ms' ? (r.item.ms ?? 0) : (r.item.plays ?? 0)))
-    : 0;
+  let maxVal = 0;
+  for (const row of rows) {
+    const value = metric === 'ms' ? (row.item.ms ?? 0) : (row.item.plays ?? 0);
+    if (value > maxVal) maxVal = value;
+  }
 
   const bodyRows = rows.map((r) => {
     const it = r.item;

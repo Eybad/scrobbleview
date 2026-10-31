@@ -757,7 +757,7 @@ function buildViewContext(viewName) {
       sortBy: p.get('sort') || 'metric',
       sortDir: p.get('dir') || null,
       page: Number(p.get('page')) || 1,
-      pageSize: Number(p.get('pageSize')) || 25,
+      pageSize: p.get('pageSize') === 'all' ? 'all' : Number(p.get('pageSize')) || 25,
       minPlays: p.get('minPlays') != null ? Number(p.get('minPlays')) : null,
       minMonths: p.get('minMonths') != null ? Number(p.get('minMonths')) : null,
       density: storedDensity || 'comfortable',
@@ -1373,7 +1373,7 @@ function wireExploreView() {
   const pageSizeSelect = card.querySelector('[data-page-size]');
   if (pageSizeSelect) {
     pageSizeSelect.addEventListener('change', () => {
-      const size = Number(pageSizeSelect.value);
+      const size = pageSizeSelect.value;
       updateExploreQuery((p) => {
         p.set('pageSize', String(size));
         p.delete('page');

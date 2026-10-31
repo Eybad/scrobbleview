@@ -14,7 +14,9 @@ export function describeCatalogQuery(model, ctx = {}) {
   let sortBy = SORTS.has(state.sortBy) ? state.sortBy : 'metric';
   if ((sortBy === 'dominance' || sortBy === 'deepCatalog') && tab !== 'artists') sortBy = 'metric';
   const sortDir = ['asc', 'desc'].includes(state.sortDir) ? state.sortDir : null;
-  const pageSize = [25, 50, 100].includes(Number(state.pageSize)) ? Number(state.pageSize) : 25;
+  const pageSize = state.pageSize === 'all'
+    ? 'all'
+    : [25, 50, 100].includes(Number(state.pageSize)) ? Number(state.pageSize) : 25;
   const threshold = boundedInteger(state.minPlays, 1, 10000);
   const minMonths = boundedInteger(state.minMonths, 1, 120, sortBy === 'constancy' ? 6 : null);
   const isSkipRate = sortBy === 'skipRate' || sortBy === 'lowSkipRate';

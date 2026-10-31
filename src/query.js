@@ -202,9 +202,10 @@ export function queryCatalog(items, {
     return aId < bId ? -1 : aId > bId ? 1 : 0;
   });
 
-  const validPageSize = Math.max(1, Number(pageSize) || 25);
+  const allRows = pageSize === 'all';
+  const validPageSize = allRows ? Math.max(1, totalMatches) : Math.max(1, Number(pageSize) || 25);
   const totalPages = Math.max(1, Math.ceil(totalMatches / validPageSize));
-  const validPage = Math.max(1, Math.min(Number(page) || 1, totalPages));
+  const validPage = allRows ? 1 : Math.max(1, Math.min(Number(page) || 1, totalPages));
 
   const start = totalMatches === 0 ? 0 : (validPage - 1) * validPageSize;
   const end = Math.min(start + validPageSize, totalMatches);
@@ -224,7 +225,7 @@ export function queryCatalog(items, {
     totalItems,
     totalMatches,
     page: validPage,
-    pageSize: validPageSize,
+    pageSize: allRows ? 'all' : validPageSize,
     effectiveDir,
     totalPages,
     startRow: totalMatches === 0 ? 0 : start + 1,
