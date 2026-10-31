@@ -27,6 +27,7 @@ const footerMeta = document.getElementById('footer-meta');
 const tagline = document.querySelector('.tagline');
 
 const LIMITS_STORAGE_KEY = 'scrobbleview:tableLimits';
+const PROCESSING_INDICATOR_DELAY_MS = 180;
 const VALID_LIMITS = new Set([10, 25, 50, 100]);
 const LONGITUDINAL_THRESHOLDS = new Set([30, 90, 180]);
 const LONGITUDINAL_PAGE_SIZES = new Set([25, 50, 100]);
@@ -310,7 +311,7 @@ const jobs = new Map();
 let nextJob = 0, processingError = null, processingErrorType = null;
 
 function updateProcessing() {
-  const job = [...jobs.values()].at(-1);
+  const job = [...jobs.values()].filter((item) => item.visible).at(-1);
   processing.hidden = !job && !processingError;
   processingStatus.setAttribute('role', processingError && !job ? 'alert' : 'status');
   processingStatus.textContent = job ? `${job.label}… ${Math.round(job.fraction * 100)}%` : processingError ?? '';
@@ -324,11 +325,28 @@ function beginProcessing(label, type = 'general') {
   const id = ++nextJob;
   processingError = null;
   processingErrorType = null;
-  jobs.set(id, { label, fraction: 0, type });
+  const job = { label, fraction: 0, type, visible: false, timer: 0 };
+  jobs.set(id, job);
+  job.timer = setTimeout(() => {
+    const activeJob = jobs.get(id);
+    if (!activeJob) return;
+    activeJob.visible = true;
+    updateProcessing();
+  }, PROCESSING_INDICATOR_DELAY_MS);
   updateProcessing();
   return {
-    progress(fraction, nextLabel) { if (jobs.has(id)) { jobs.set(id, { fraction, label: nextLabel, type }); updateProcessing(); } },
-    finish() { jobs.delete(id); updateProcessing(); }
+    progress(fraction, nextLabel) {
+      const activeJob = jobs.get(id);
+      if (!activeJob) return;
+      activeJob.fraction = fraction;
+      activeJob.label = nextLabel;
+      if (activeJob.visible) updateProcessing();
+    },
+    finish() {
+      clearTimeout(job.timer);
+      jobs.delete(id);
+      updateProcessing();
+    }
   };
 }
 
@@ -1864,6 +1882,7 @@ cancelProcessing.addEventListener('click', () => {
     longitudinalRevision++;
     const confirmed = analysisState.cancelUpdate();
     restoreConfirmedContext(confirmed);
+    clearTimeout(activeJob.timer);
     jobs.delete(activeJobId);
     processingError = 'Actualización cancelada. Podés reintentarla.';
     processingErrorType = 'filter';
@@ -1873,6 +1892,7 @@ cancelProcessing.addEventListener('click', () => {
   }
   if (activeJob?.type === 'export') {
     analysisClient.cancelExport();
+    clearTimeout(activeJob.timer);
     jobs.delete(activeJobId);
     processingError = null;
     processingErrorType = null;
@@ -1883,6 +1903,7 @@ cancelProcessing.addEventListener('click', () => {
   analysisClient.cancel();
   model = null; current = null; currentPrev = null; currentDetail = null; detailContext = null; cacheOffer = null;
   appRoot.replaceChildren();
+  for (const job of jobs.values()) clearTimeout(job.timer);
   jobs.clear(); processingError = null; processingErrorType = null;
   appRoot.setAttribute('aria-busy', 'false');
   appRoot.classList.remove('app--updating');
