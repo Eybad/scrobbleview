@@ -1979,34 +1979,30 @@ td a:hover {
   color: var(--text);
 }
 
-/* Toast del guardado local como bottom sheet: anclado a la base de la
-   pantalla (un elemento flotante a media altura parece descolocado). La
-   oferta persiste hasta responder, el resto se apaga solo (main.js). */
 .cache-toast {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  margin: 0 auto;
-  max-width: min(100%, 560px);
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-bottom: none;
-  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%;
+  margin: var(--sp-3) auto var(--sp-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: var(--sp-3) var(--sp-4);
-  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
-  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.45);
-  z-index: 50;
   text-align: left;
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
 }
 
 .cache-toast p {
+  flex: 1 1 auto;
   margin: 0;
   color: var(--text-muted);
   font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.cache-actions {
+  flex: 0 0 auto;
 }
 
 /* Toast para títulos de gráficos en táctil. */
@@ -3624,16 +3620,6 @@ td {
   background: var(--surface);
 }
 
-.cache-toast {
-  left: auto;
-  right: var(--sp-4);
-  bottom: var(--sp-4);
-  width: min(420px, calc(100% - 2rem));
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-}
-
 .site-footer {
   margin-top: var(--sp-8);
   background: var(--surface);
@@ -3718,11 +3704,13 @@ td {
   }
 
   .cache-toast {
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    border-radius: var(--radius) var(--radius) 0 0;
-    border-bottom: 0;
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .cache-actions {
+    justify-content: flex-end;
   }
 }
 

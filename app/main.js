@@ -684,13 +684,13 @@ cacheToast.className = 'cache-toast';
 cacheToast.setAttribute('role', 'status');
 cacheToast.setAttribute('aria-atomic', 'true');
 cacheToast.hidden = true;
-document.body.appendChild(cacheToast);
+document.getElementById('cache-toast-mount').appendChild(cacheToast);
 let cacheTimer = 0;
 
 function updateCacheToast() {
   clearTimeout(cacheTimer);
   if (cacheOffer === 'save') {
-    cacheToast.innerHTML = `<p>¿Guardar en este dispositivo? Se escribe tu historial completo (fechas, artistas, canciones) en claro en el disco, hasta que lo borres.</p>
+    cacheToast.innerHTML = `<p>El historial completo se guarda sin cifrar en este dispositivo hasta que lo borres.</p>
       <div class="cache-actions">
         <button type="button" class="btn btn-primary" data-cache="save">Guardar</button>
         <button type="button" class="btn btn-link btn-quiet" data-cache="dismiss">No por ahora</button>
