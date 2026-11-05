@@ -1,5 +1,5 @@
 import {
-  barChart, lineChart, heatmap, heatmapTable, hbarChart, sparkline,
+  barChart, lineChart, heatmap, heatmapTable, sparkline,
   calendarGrid, listeningClock, stackedBar, heatLegend, NO_DATA,
   esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
 } from '../src/charts.js';
@@ -12,6 +12,7 @@ import { compareView } from './compare-view.js';
 import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 import { describeCatalogQuery } from './catalog-query.js';
 import { createChartContract, renderChartWithContract } from '../src/chart-contract.js';
+import { scrollChart, contractedLineChart, contractedBarChart, contractedClockChart } from './chart-view.js';
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
@@ -97,17 +98,6 @@ function thresholdLabel(ms) {
   if (ms < 1000) return `${ms} ms`;
   const s = ms / 1000;
   return Number.isInteger(s) ? `${s} s` : `${s.toFixed(1).replace('.', ',')} s`;
-}
-
-// The table fallback exposes SVG clock values to keyboard and screen-reader users.
-function clockTable(cells, byMs = false) {
-  return heatmapTable({
-    cells: cells.map((c) => ({ x: c.hour, y: c.dow, value: c.value })),
-    xLabels: Array.from({ length: 24 }, (_, h) => `${h}`),
-    yLabels: DOW_SHORT,
-    cellText: (c) => (byMs ? fmtMs(c.value) : fmtNum(c.value)),
-    caption: byMs ? 'Tiempo escuchado por hora y día' : 'Reproducciones por hora y día'
-  });
 }
 
 function calendarTable(days, year, byMs = true) {
@@ -226,64 +216,6 @@ function nextMonth(mi) {
   const y = Math.floor(mi / 100);
   const m = mi % 100;
   return m === 12 ? (y + 1) * 100 + 1 : mi + 1;
-}
-
-// Keep chart labels legible on mobile and provide keyboard access to horizontal scroll.
-function scrollChart(svg, label) {
-  return svg ? `<div class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label="${esc(label)}">${svg}</div>` : '';
-}
-
-function contractedLineChart({ id, title, points, format, unit, base }) {
-  const range = points.length ? `${points[0].label} → ${points[points.length - 1].label}` : '';
-  const contract = createChartContract({
-    id,
-    title,
-    unit,
-    base,
-    range,
-    data: points.map((point) => ({ label: point.label, date: point.date, value: point.y })),
-    format,
-    showShare: false,
-    chartType: 'line'
-  });
-  return renderChartWithContract(contract, scrollChart(lineChart({ points, format }), title));
-}
-
-function contractedBarChart({ id, title, data, format = fmtNum, unit, base, orientation = 'vertical', showValue = true }) {
-  const contract = createChartContract({
-    id,
-    title,
-    unit,
-    base,
-    data,
-    format,
-    chartType: orientation === 'horizontal' ? 'list' : 'bar',
-    showShare: orientation === 'horizontal'
-  });
-  const chart = orientation === 'horizontal'
-    ? hbarChart({ rows: data, format })
-    : scrollChart(barChart({ data, format, showValue }), title);
-  return renderChartWithContract(contract, chart);
-}
-
-function contractedClockChart({ id, title, cells, format, byMs, base, svg }) {
-  const contract = createChartContract({
-    id,
-    title,
-    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
-    base,
-    data: cells.map((cell) => ({
-      label: `${DOW_LONG[cell.dow]} ${cell.hour}:00`,
-      value: cell.value,
-      extra: { x: cell.hour, y: cell.dow }
-    })),
-    format,
-    showShare: false,
-    chartType: 'grid',
-    fallbackTable: clockTable(cells, byMs)
-  });
-  const chart = `<div class="chart-scroll chart-scroll--clock" tabindex="0" role="region" aria-label="${esc(title)}">${svg}</div>${heatLegend()}`;
-  return renderChartWithContract(contract, chart);
 }
 
 // Preserve elapsed time on the x-axis when months have no activity.
