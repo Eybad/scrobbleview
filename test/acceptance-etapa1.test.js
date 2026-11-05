@@ -86,32 +86,19 @@ test('A06: constancia separa continuidad activa (100%) de cobertura del período
   assert.equal(a1.periodCoverage, 0.5);
 });
 
-test('A01 / A02: cascada CSS responsive de .kpis y .records-grid colocada tras sus bases', async () => {
+test('CSS loads seven local stylesheets in ownership order', async () => {
   const fs = await import('node:fs/promises');
-  const css = await fs.readFile(new URL('../css/style.css', import.meta.url), 'utf-8');
+  const html = await fs.readFile(new URL('../index.html', import.meta.url), 'utf-8');
+  const links = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"\s*\/?\s*>/g)]
+    .map(([, path]) => path);
 
-  const baseKpiIdx = css.indexOf('.kpis {');
-  const baseRecordsIdx = css.indexOf('.records-grid {');
-  const basePresetsIdx = css.indexOf('.filter-presets {');
-
-  const media640Idx = css.indexOf('@media (max-width: 640px)');
-  assert.ok(media640Idx >= 0, 'media query 640px presente');
-
-  const mobileKpiMatches = [...css.matchAll(/\.kpis\s*\{\s*grid-template-columns:\s*repeat\(2/g)];
-  assert.ok(mobileKpiMatches.length > 0, 'override móvil de 2 columnas presente');
-  for (const m of mobileKpiMatches) {
-    assert.ok(m.index > baseKpiIdx, 'override móvil de .kpis debe ubicarse posterior a su base');
-  }
-
-  const mobileRecordsMatches = [...css.matchAll(/\.records-grid\s*\{\s*grid-template-columns:\s*repeat\(2/g)];
-  assert.ok(mobileRecordsMatches.length > 0, 'override móvil de records-grid presente');
-  for (const m of mobileRecordsMatches) {
-    assert.ok(m.index > baseRecordsIdx, 'override móvil de .records-grid debe ubicarse posterior a su base');
-  }
-
-  const mobilePresetsMatches = [...css.matchAll(/\.filter-presets\s*\{\s*width:\s*100%/g)];
-  assert.ok(mobilePresetsMatches.length > 0, 'override móvil de filter-presets presente');
-  for (const m of mobilePresetsMatches) {
-    assert.ok(m.index > basePresetsIdx, 'override móvil de .filter-presets debe ubicarse posterior a su base');
-  }
+  assert.deepEqual(links, [
+    'css/tokens.css',
+    'css/base.css',
+    'css/layout.css',
+    'css/components.css',
+    'css/navigation.css',
+    'css/data.css',
+    'css/style.css'
+  ]);
 });

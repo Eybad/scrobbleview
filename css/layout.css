@@ -1,0 +1,289 @@
+.container {
+  max-width: var(--container-max);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--sp-4);
+}
+
+
+main.container {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--sp-6);
+}
+
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--sp-4) 0;
+}
+
+
+.site-header--home .header-brand {
+  justify-content: center;
+}
+
+
+.site-header--home .tagline {
+  text-align: center;
+}
+
+
+.header-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+}
+
+
+.header-actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+
+.brand {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+
+.brand::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  flex: 0 0 auto;
+}
+
+
+.tagline {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  color: var(--text-faint-high);
+  font-size: var(--fs-sm);
+  padding: var(--sp-6) 0;
+  margin-top: var(--sp-12);
+}
+
+
+.site-footer p {
+  margin: 0;
+}
+
+
+.site-footer .footer-meta {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: var(--sp-1);
+}
+
+
+.view {
+  width: 100%;
+}
+
+
+#view-home {
+  max-width: 580px;
+  margin: var(--sp-2) auto 0;
+  padding-bottom: var(--sp-6);
+}
+
+
+.view-header {
+  margin-bottom: var(--sp-6);
+}
+
+
+.view-header--compact {
+  margin-bottom: var(--sp-3);
+}
+
+
+.view-header h1 {
+  font-size: var(--fs-h1);
+  line-height: 1.2;
+  margin-bottom: var(--sp-1);
+  overflow-wrap: break-word;
+}
+
+
+.view-meta {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+
+.view-range {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-6);
+
+  margin-bottom: var(--sp-6);
+}
+
+
+#view-root > :last-child {
+  margin-bottom: 0;
+}
+
+
+.app--updating #view-root {
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+
+.grid-2 .card {
+  margin-bottom: 0;
+}
+
+
+@media (max-width: 720px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.footer-actions {
+  margin-bottom: var(--sp-2);
+}
+
+
+.site-header {
+  background: var(--surface);
+  border-bottom-color: var(--border);
+  padding-block: var(--sp-3);
+}
+
+
+.site-header--home .header-brand,
+.site-header--home .tagline {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+
+.brand {
+  font-size: var(--fs-lg);
+  letter-spacing: -0.035em;
+}
+
+
+.brand::before {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--accent);
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--surface), 0 0 0 3px var(--accent-soft);
+}
+
+
+.tagline {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+}
+
+
+main.container {
+  padding-top: var(--sp-4);
+}
+
+
+#view-home {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-block: clamp(2rem, 7vh, 5rem) var(--sp-8);
+}
+
+
+.view-header {
+  margin-bottom: var(--sp-4);
+}
+
+
+.view-header h1 {
+  letter-spacing: -0.035em;
+}
+
+
+.view-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  margin-bottom: var(--sp-1);
+}
+
+
+.view-heading h1 {
+  min-width: 0;
+  margin: 0;
+}
+
+
+.view-meta {
+  max-width: 78ch;
+  line-height: 1.55;
+}
+
+
+.grid-2 {
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+
+.site-footer {
+  margin-top: var(--sp-8);
+  background: var(--surface);
+}
+
+
+@media (max-width: 760px) {
+  #view-home {
+    padding-top: var(--sp-8);
+  }
+
+
+  .grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

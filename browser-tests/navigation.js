@@ -169,6 +169,40 @@ function nextFrame() {
   });
 }
 
+function waitForWindowScroll(targetWindow, targetY) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 5000;
+    function check() {
+      if (Math.abs(targetWindow.scrollY - targetY) < 1) {
+        resolve();
+      } else if (Date.now() >= deadline) {
+        reject(new Error(`El scroll no llegó a ${targetY}px`));
+      } else {
+        targetWindow.requestAnimationFrame(check);
+      }
+    }
+    check();
+  });
+}
+
+async function submitExportAndWaitForDownload(targetWindow, label) {
+  const anchorPrototype = targetWindow.HTMLAnchorElement.prototype;
+  const originalClick = anchorPrototype.click;
+  let downloads = 0;
+  anchorPrototype.click = function () {
+    if (this.download) downloads++;
+    return originalClick.call(this);
+  };
+  try {
+    element('#btn-confirm-export').click();
+    await waitFor(() => downloads > 0, label);
+    await waitFor(() => element('#processing').hidden, `${label}: finalizar procesamiento`);
+  } finally {
+    anchorPrototype.click = originalClick;
+  }
+  return downloads;
+}
+
 function accessibleName(node) {
   return node.getAttribute('aria-label')
     || node.getAttribute('title')
@@ -176,6 +210,10 @@ function accessibleName(node) {
     || node.textContent.trim()
     || node.value?.trim()
     || '';
+}
+
+function collectCssRules(rules) {
+  return [...rules].flatMap(rule => rule.cssRules?.length ? collectCssRules(rule.cssRules) : [rule]);
 }
 
 async function run() {
@@ -190,6 +228,19 @@ async function run() {
   });
   const appWindow = frame.contentWindow;
   const appDocument = frame.contentDocument;
+  const expectedStylesheets = ['tokens', 'base', 'layout', 'components', 'navigation', 'data', 'style']
+    .map(name => `css/${name}.css`);
+  const stylesheetPaths = [...appDocument.querySelectorAll('link[rel="stylesheet"]')]
+    .map(link => new URL(link.href).pathname.slice(new URL(appWindow.location.href).pathname.lastIndexOf('/') + 1));
+  assert(stylesheetPaths.join('|') === expectedStylesheets.join('|'), 'La aplicación debe cargar las siete hojas locales en orden de ownership');
+  assert([...appDocument.styleSheets].length === expectedStylesheets.length, 'Las siete hojas deben estar cargadas antes del primer render');
+  assert([...appDocument.styleSheets].every(sheet => sheet.cssRules.length > 0), 'Cada hoja local debe parsearse sin errores');
+  const homePrivacy = element('.privacy-note');
+  assert(homePrivacy.getClientRects().length > 0 && homePrivacy.textContent.includes('nunca se suben'), 'El aviso de privacidad permanece visible en el inicio');
+  assert(appWindow.getComputedStyle(homePrivacy).textAlign === 'left', 'El aviso conserva su lectura alineada');
+  assert(appWindow.getComputedStyle(element('.drop-zone-badge')).backgroundColor === 'rgba(29, 185, 84, 0.12)', 'El badge de carga conserva su fondo discreto');
+  assert(appWindow.getComputedStyle(element('.drop-zone-icon')).color === 'rgb(29, 185, 84)', 'El icono de carga conserva el acento verde');
+  assert(appWindow.getComputedStyle(element('.drop-zone-files')).borderTopWidth === '0px', 'La zona de carga no agrega un separador interno');
   const syntheticEvents = ['2024-01-10', '2024-02-10', '2024-02-11'].map(date => ({
     ts: `${date}T12:00:00Z`, ms_played: 180000,
     master_metadata_track_name: 'Synthetic track',
@@ -212,6 +263,48 @@ async function run() {
   input.dispatchEvent(new appWindow.Event('change', { bubbles: true }));
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
   assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
+  const tabButton = element('.tabs button');
+  const tabButtonStyle = appWindow.getComputedStyle(tabButton);
+  assert(tabButtonStyle.flexGrow === '1' && tabButtonStyle.flexBasis === '0px' && tabButtonStyle.justifyContent === 'center', 'Las pestañas distribuyen y centran sus botones');
+  const tableScroll = element('.table-scroll');
+  assert(appWindow.getComputedStyle(tableScroll).paddingBottom === '12px', 'La tabla reserva espacio para su barra de desplazamiento');
+  const stickyHeader = element('.table-scroll table th:first-child');
+  assert(appWindow.getComputedStyle(stickyHeader).position === 'sticky' && appWindow.getComputedStyle(stickyHeader).zIndex === '1', 'La columna inicial conserva su fijación y capa');
+  const rankTable = element('.table-scroll table.rank-table');
+  assert(appWindow.getComputedStyle(rankTable).tableLayout === 'fixed', 'La tabla de ranking conserva el layout fijo');
+  const cssRules = [...appDocument.styleSheets].flatMap(sheet => collectCssRules(sheet.cssRules));
+  const finePointerHoverRules = cssRules.filter(rule => rule.parentRule?.conditionText?.includes('(hover: hover)')
+    && rule.parentRule.conditionText.includes('(pointer: fine)'));
+  const rowHoverRule = finePointerHoverRules.find(rule => rule.selectorText === 'tbody tr:hover td');
+  const stickyHoverRule = finePointerHoverRules.find(rule => rule.selectorText === '.table-scroll table tbody tr:hover td:first-child');
+  assert(rowHoverRule?.style.getPropertyValue('background-color') === 'var(--surface-2)', 'El hover de filas cambia solo el color de fondo');
+  assert(stickyHoverRule?.style.getPropertyValue('background-color') === 'var(--surface-2)', 'El hover conserva el color de la primera celda fija');
+  assert(finePointerHoverRules.every(rule => !rule.style.getPropertyValue('background')), 'El hover no reemplaza fondos compuestos');
+  assert(typeof appWindow.matchMedia('(hover: hover) and (pointer: fine)').matches === 'boolean', 'El estado hover debe depender de las capacidades reales del puntero');
+  const coarseHintRule = cssRules.find(rule => rule.selectorText === '.hint-shift' && rule.parentRule?.conditionText === '(pointer: coarse)');
+  assert(coarseHintRule?.style.display === 'none', 'El hint de Shift se oculta en dispositivos táctiles');
+  const viewRangeStyle = appWindow.getComputedStyle(element('.view-range'));
+  const recordStyle = appWindow.getComputedStyle(element('.record-item'));
+  assert(viewRangeStyle.borderLeftColor === viewRangeStyle.borderColor, 'El rango no agrega un borde lateral de acento');
+  assert(recordStyle.borderLeftColor === recordStyle.borderColor, 'Los récords conservan un borde uniforme');
+  const tableFixture = appDocument.createElement('div');
+  tableFixture.className = 'table-scroll table-scroll--tall';
+  tableFixture.innerHTML = '<table><thead><tr><th scope="col">#</th><th scope="col">Nombre</th></tr></thead><tbody><tr><td>1</td><td>Fila</td></tr></tbody></table>';
+  appDocument.body.append(tableFixture);
+  assert(appWindow.getComputedStyle(tableFixture.querySelector('thead th:first-child')).zIndex === '3', 'La intersección de encabezado y columna fija conserva su capa superior');
+  tableFixture.remove();
+  const shareFixture = appDocument.createElement('div');
+  shareFixture.className = 'table-scroll';
+  shareFixture.innerHTML = '<table><tbody><tr style="--bar-w: 50%"><td class="col-share">50%</td></tr></tbody></table>';
+  appDocument.body.append(shareFixture);
+  assert(appWindow.getComputedStyle(shareFixture.querySelector('.col-share')).backgroundImage.includes('linear-gradient'), 'La barra de cuota conserva su gradiente al aplicar el hover de fila');
+  shareFixture.remove();
+  navLink('Resumen del período').click();
+  await waitFor(() => Boolean(element('.hero-archetype')), 'abrir el resumen del período para verificar su tarjeta');
+  const heroStyle = appWindow.getComputedStyle(element('.hero-archetype'));
+  assert(heroStyle.borderLeftColor === heroStyle.borderColor, 'El resumen del período conserva un borde uniforme');
+  navLink('Resumen').click();
+  await waitFor(() => viewHeading() === 'Resumen', 'volver al Resumen después de verificar estilos');
   const cachePrompt = element('#cache-toast [data-cache="save"]');
   assert(cachePrompt, 'La carga debe pedir consentimiento antes de escribir IndexedDB');
   cachePrompt.click();
@@ -382,6 +475,7 @@ async function run() {
   const expectedTableScroll = sourceTableScroll.scrollLeft;
   assert(expectedTableScroll > 0, 'La tabla real debe desplazarse horizontalmente antes de navegar');
   appWindow.scrollTo(0, 250);
+  await waitForWindowScroll(appWindow, 250);
   const expectedPageScroll = appWindow.scrollY;
   assert(expectedPageScroll === 250, 'La página del navegador debe tener una posición de scroll restaurable');
   homonymLinks[0].click();
@@ -446,17 +540,13 @@ async function run() {
   const selectionScope = element('[name="export-scope"][value="selection"]');
   assert(!selectionScope.disabled && element('#export-selection-desc').textContent.includes('4 reproducciones'), 'La exportación debe conservar la selección analítica confirmada');
   selectionScope.click();
-  element('#btn-confirm-export').click();
-  await waitFor(() => !element('#processing').hidden, 'iniciar ZIP de selección');
-  await waitFor(() => element('#processing').hidden, 'finalizar ZIP de selección');
+  assert(await submitExportAndWaitForDownload(appWindow, 'generar ZIP de selección') === 1, 'La selección debe iniciar una descarga');
   await new Promise(resolve => setTimeout(resolve, 1100));
 
   element('[data-action="export"]').click();
   await waitFor(() => element('#dialog-export').open, 'abrir exportación completa');
   assert(element('[name="export-scope"][value="all"]').checked, 'La exportación completa debe ser el alcance predeterminado');
-  element('#btn-confirm-export').click();
-  await waitFor(() => !element('#processing').hidden, 'iniciar ZIP completo');
-  await waitFor(() => element('#processing').hidden, 'finalizar ZIP completo');
+  assert(await submitExportAndWaitForDownload(appWindow, 'generar ZIP completo') === 1, 'El historial completo debe iniciar una descarga');
 
   element('[data-preset="all"]').click();
   await waitFor(() => kpiValue('Reproducciones') === '8', 'limpiar selección antes de exportar la tabla');
@@ -493,19 +583,34 @@ async function run() {
   await waitFor(() => element('#dialog-export').open, 'abrir opciones para cancelar la exportación activa');
   element('[name="export-scope"][value="table"]').click();
   let lateDownloadAttempts = 0;
+  let delayedExport = null;
+  const workerPrototype = appWindow.Worker.prototype;
+  const originalPostMessage = workerPrototype.postMessage;
   const originalAnchorClick = appWindow.HTMLAnchorElement.prototype.click;
+  workerPrototype.postMessage = function (...args) {
+    if (args[0]?.type === 'export') {
+      delayedExport = { worker: this, args };
+      return;
+    }
+    return originalPostMessage.apply(this, args);
+  };
   appWindow.HTMLAnchorElement.prototype.click = function () {
     if (this.download) lateDownloadAttempts++;
     return originalAnchorClick.call(this);
   };
   try {
     element('#btn-confirm-export').click();
-    assert(!element('#processing').hidden, 'La exportación debe estar activa antes de cancelarla');
+    await waitFor(() => delayedExport !== null, 'enviar exportación al Worker');
+    await waitFor(() => !element('#processing').hidden, 'mostrar exportación activa antes de cancelarla');
     element('#cancel-processing').click();
     await waitFor(() => element('#processing').hidden, 'cancelar una exportación activa');
+    assert(delayedExport, 'La exportación cancelada debe haber quedado pendiente en el Worker');
+    workerPrototype.postMessage = originalPostMessage;
+    delayedExport.worker.postMessage(...delayedExport.args);
     await new Promise(resolve => setTimeout(resolve, 1000));
     assert(lateDownloadAttempts === 0, 'Una exportación cancelada no debe iniciar una descarga tardía');
   } finally {
+    workerPrototype.postMessage = originalPostMessage;
     appWindow.HTMLAnchorElement.prototype.click = originalAnchorClick;
   }
 

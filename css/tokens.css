@@ -1,0 +1,62 @@
+:root {
+  --bg: #0b0f14;
+  --surface: #141a21;
+  --surface-2: #1b232c;
+  --surface-hover: #242e39;
+  --border: #293440;
+  --border-strong: #3a4856;
+
+  --text: #edf1f4;
+  --text-muted: #a3adb8;
+  --text-faint: #747f8b;
+  /* Meets 4.5:1 for small informational text on both surfaces. */
+  --text-faint-high: #9ba7b4;
+
+  /* Keep in sync with ACCENT in src/charts.js; SVG cannot read CSS variables. */
+  --accent: #1db954;
+  --accent-contrast: #0b3d1f;
+  --accent-soft: rgba(29, 185, 84, 0.14);
+  --accent-border: rgba(29, 185, 84, 0.4);
+
+  /* Reserved for destructive actions; contrast ratio 5.4:1 on the page. */
+  --danger: #e35d6a;
+  --danger-soft: rgba(227, 93, 106, 0.14);
+
+  /* Keep in sync with HEAT in src/charts.js. */
+  --heat-0: #1a1e26;
+  --heat-1: #123524;
+  --heat-2: #14532d;
+  --heat-3: #15803d;
+  --heat-4: #22c55e;
+  --heat-5: #4ade80;
+
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+  --fs-h1: clamp(1.75rem, 1.35rem + 1vw, 2.25rem);
+  --fs-kpi: clamp(1.35rem, 1.15rem + 0.65vw, 1.65rem);
+
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.25rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+  --sp-12: 3rem;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+
+  --container-max: 1240px;
+
+  --surface-1: var(--surface);
+  --radius-md: var(--radius);
+  --radius-pill: 999px;
+}

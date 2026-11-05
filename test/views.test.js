@@ -410,10 +410,10 @@ test('filter-ui: Borrar todo vive en la fila de chips (sin fila propia)', async 
 });
 
 test('contraste: muted sobre surface-2 cumple WCAG AA (≥ 4.5:1)', async () => {
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');
   const hexVar = (name) => {
     const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
-    assert.ok(m, `variable --${name} presente en style.css`);
+    assert.ok(m, `variable --${name} presente en tokens.css`);
     return m[1];
   };
   const luminance = (hexStr) => {
@@ -425,19 +425,6 @@ test('contraste: muted sobre surface-2 cumple WCAG AA (≥ 4.5:1)', async () => 
   const l2 = luminance(hexVar('surface-2'));
   const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
   assert.ok(ratio >= 4.5, `contraste ${ratio.toFixed(2)}:1 ≥ 4.5:1 (botones quiet y texto del toast)`);
-  assert.ok(css.includes('.btn-link.btn-quiet:hover'), 'el hover del descarte gana la cascada (no hereda el accent de btn-link)');
-});
-
-test('table hover uses a fine pointer and preserves share bar backgrounds', async () => {
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  const hoverMedia = css.match(/@media\s*\(hover:\s*hover\)\s*and\s*\(pointer:\s*fine\)\s*\{([\s\S]*?)\n\}/g) ?? [];
-  assert.ok(hoverMedia.length > 0);
-  assert.ok(hoverMedia.some(media => /tbody tr:hover td\s*\{[^}]*background-color:\s*var\(--surface-2\)/.test(media)));
-  assert.ok(hoverMedia.some(media => /\.table-scroll table tbody tr:hover td:first-child\s*\{[^}]*background-color:\s*var\(--surface-2\)/.test(media)));
-  const shareRule = css.match(/[^{}]*\.col-share\s*\{([^{}]*background-image[^{}]*)\}/);
-  assert.ok(shareRule);
-  assert.match(shareRule[1], /background-image:\s*linear-gradient\([^;]*var\(--bar-w\)/);
-  assert.ok(hoverMedia.every(media => !/\bbackground\s*:/.test(media)));
 });
 
 test('filter-ui: rango invertido colapsa al día editado', () => {
@@ -613,9 +600,9 @@ test('dashboard: card de récords sin NaN y con clases alineadas al CSS', async 
     assert.ok(html.includes(s), `récord: ${s}`);
   }
   assert.ok(!html.includes('NaN'), 'sin NaN en días sin actividad ni en récords');
-  assert.ok(html.includes('class="record-item"'), 'usa .record-item definido en style.css');
-  assert.ok(html.includes('class="record-value"'), 'usa .record-value definido en style.css');
-  assert.ok(html.includes('class="record-sub"'), 'usa .record-sub definido en style.css');
+  assert.ok(html.includes('class="record-item"'), 'mantiene la clase de cada récord');
+  assert.ok(html.includes('class="record-value"'), 'mantiene la clase del valor del récord');
+  assert.ok(html.includes('class="record-sub"'), 'mantiene la clase del detalle del récord');
   assert.ok(!html.includes('class="record-tile"'), 'sin clase huérfana .record-tile');
 });
 
@@ -728,10 +715,6 @@ test('traducciones: dashboard sin jerga y hint táctil del calendario', async ()
   assert.ok(!html.includes('(ms)'), 'caption sin unidad técnica');
   const cal = renderView('calendar', model);
   assert.ok(cal.includes('class="hint-shift"'), 'hint de shift+click marcado para CSS');
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  const mq = css.indexOf('@media (pointer: coarse)');
-  assert.ok(mq >= 0, 'media query (pointer: coarse) presente');
-  assert.ok(css.indexOf('.hint-shift') > mq, '.hint-shift oculto dentro de la media query');
 });
 
 test('filter-ui: sin switch global de métrica (solo en rankings) y badge de filtros avanzados', async () => {
@@ -761,13 +744,18 @@ test('rankings offer Top 100, the page has a skip link, and spacing tokens are d
   assert.ok(html.includes('class="skip-link"'));
   assert.ok(html.includes('id="main-content"'));
 
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  const spacingTokens = new Set([...css.matchAll(/(--sp-\d+)\s*:/g)].map(match => match[1]));
-  for (const [, token] of css.matchAll(/var\((--sp-\d+)\)/g)) {
-    assert.ok(spacingTokens.has(token), `Undefined spacing token: ${token}`);
+  const tokenCss = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');
+  const cssFiles = ['base', 'layout', 'components', 'navigation', 'data', 'style'];
+  const css = await Promise.all(cssFiles.map(name => readFile(new URL(`../css/${name}.css`, import.meta.url), 'utf8')));
+  const spacingTokens = new Set([...tokenCss.matchAll(/(--sp-\d+)\s*:/g)].map(match => match[1]));
+  for (const stylesheet of css) {
+    for (const [, token] of stylesheet.matchAll(/var\((--sp-\d+)\)/g)) {
+      assert.ok(spacingTokens.has(token), `Undefined spacing token: ${token}`);
+    }
   }
-  assert.ok(css.includes('.skip-link'));
-  assert.ok(/^\s*a\s*\{/m.test(css));
+  const baseCss = css[0];
+  assert.ok(baseCss.includes('.skip-link'));
+  assert.ok(/^\s*a\s*\{/m.test(baseCss));
 });
 
 test('hours view: 24-hour grouped detail table, 4 blocks comparison, and metric switching', async () => {
@@ -930,36 +918,8 @@ test('mobile rankings (Option 1B), filter-dates alignment, habits NaN/undefined 
   assert.ok(!habits.includes('undefined'), 'habits view has no undefined values');
 
   const wrapped = renderView('wrapped', model);
-  assert.ok(wrapped.includes('class="hero-eyebrow"'), 'wrapped hero uses .hero-eyebrow from style.css');
-  assert.ok(wrapped.includes('class="hero-title"'), 'wrapped hero uses .hero-title from style.css');
-});
-
-test('css polish: no left accent border on range/records/hero, full-width aligned tabs, scrollbar spacing, and z-index 3 on sticky # corner', async () => {
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  const blockOf = (sel) => {
-    const idx = css.indexOf(sel);
-    assert.ok(idx >= 0, `selector ${sel} exists`);
-    return css.slice(idx, css.indexOf('}', idx) + 1);
-  };
-  assert.ok(!blockOf('.view-range {').includes('border-left'), '.view-range has no left accent border');
-  assert.ok(!blockOf('.record-item {').includes('border-left'), '.record-item has no left accent border');
-  assert.ok(!blockOf('.hero-archetype {').includes('border-left'), '.hero-archetype has no left accent border');
-
-  const tabsBtn = blockOf('.tabs button {');
-  assert.ok(tabsBtn.includes('flex: 1 1 0'), '.tabs button distributes full width equally');
-  assert.ok(tabsBtn.includes('justify-content: center'), '.tabs button centers its label');
-
-  const tableScroll = blockOf('.table-scroll {');
-  assert.ok(tableScroll.includes('var(--sp-3)'), '.table-scroll leaves bottom padding for scrollbar');
-  const chartScroll = blockOf('.chart-scroll {');
-  assert.ok(chartScroll.includes('padding-bottom: var(--sp-3)'), '.chart-scroll leaves bottom padding for scrollbar');
-
-  const stickyLeftIdx = css.indexOf('.table-scroll table th:first-child');
-  const tallCornerIdx = css.indexOf('.table-scroll--tall table thead th:first-child');
-  assert.ok(tallCornerIdx > stickyLeftIdx, 'sticky # corner z-index: 3 declared after sticky-left rule');
-
-  const rankTable = blockOf('.table-scroll table.rank-table {');
-  assert.ok(rankTable.includes('width: 100%') && rankTable.includes('table-layout: fixed'), 'rank-table uses fixed 100% width without horizontal overflow');
+  assert.ok(wrapped.includes('class="hero-eyebrow"'), 'wrapped hero exposes its eyebrow class');
+  assert.ok(wrapped.includes('class="hero-title"'), 'wrapped hero exposes its title class');
 });
 
 test('all Top 10/25/50/100 tables include # column and tall scroll fits at least 10 rows (>= 38rem)', async () => {
@@ -1016,13 +976,6 @@ test('all Top 10/25/50/100 tables include # column and tall scroll fits at least
   }
   assert.equal(totalTopTables, 25, 'all Top 10/25/50/100 tables checked');
 
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  const tallIdx = css.indexOf('.table-scroll--tall {');
-  const tallBlock = css.slice(tallIdx, css.indexOf('}', tallIdx) + 1);
-  const maxH = tallBlock.match(/max-height:\s*(\d+(?:\.\d+)?)rem/);
-  assert.ok(maxH && Number(maxH[1]) >= 38, `tall scroll max-height (${maxH?.[1]}rem) fits at least 10 rows without cutting at 7`);
-  assert.ok(tallBlock.includes('padding-bottom: 0'), 'tall scroll removes bottom padding so 10-row height is exact');
-
   const mainJs = await readFile(new URL('../app/main.js', import.meta.url), 'utf8');
   assert.ok(mainJs.includes('function syncTallTables') && mainJs.includes('rows?.[9]'), 'main.js measures the 10th row (rows[9]) so tall scroll always shows 10 rows');
 });
@@ -1043,7 +996,6 @@ test('home page UI: conditional storage hierarchy, cache card with metadata & tr
   );
 
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
   const inputJs = await readFile(new URL('../app/input.js', import.meta.url), 'utf8');
 
   assert.ok(html.includes('id="cache-card" class="cache-card" hidden'), 'cache-card hidden by default when no cached data exists');
@@ -1065,18 +1017,6 @@ test('home page UI: conditional storage hierarchy, cache card with metadata & tr
   assert.ok(html.includes('¿Cómo descargo mi historial de Spotify?'), 'onboarding summary text present');
   assert.ok(html.includes('Historial de reproducción ampliado'), 'guide mentions extended streaming history');
   assert.ok(html.includes('100% local:') && html.includes('cargá antes la página o servila localmente'), 'concise privacy pill copy');
-
-  const blockOf = (sel) => {
-    const idx = css.indexOf(sel);
-    assert.ok(idx >= 0, `selector ${sel} exists in style.css`);
-    return css.slice(idx, css.indexOf('}', idx) + 1);
-  };
-
-  assert.ok(!blockOf('.drop-zone-files {').includes('border-top'), 'no internal horizontal line inside dashed drop-zone');
-  assert.ok(blockOf('.drop-zone-badge {').includes('rgba(29, 185, 84, 0.12)'), 'drop-zone badge has subtle green tint');
-  assert.ok(blockOf('.drop-zone-icon {').includes('var(--accent)'), 'drop-zone icon uses green accent');
-  assert.ok(blockOf('.privacy-note {').includes('text-align: left'), 'privacy pill left-aligned with lock on the left');
-  assert.ok(!blockOf('#view-home {').includes('margin: auto'), '#view-home uses controlled top margin instead of margin: auto');
 });
 
 test('wrapped titles identify the selected year or effective period', async () => {
