@@ -133,41 +133,13 @@ export function calendarInspectorHTML({ year = null, byMs = true } = {}) {
   </section>`;
 }
 
-export function calendarMonthViewHTML({
-  year,
-  month,
-  daysMap,
-  colorScale,
-  byMs = true,
-  dataRange = null,
-  selectedDate = null
-}) {
+function calendarMonthData({ year, month, daysMap, colorScale, byMs = true, dataRange = null }) {
   const m = Math.max(1, Math.min(12, month));
   const valFmt = byMs ? fmtMs : fmtNum;
   const firstDate = new Date(Date.UTC(year, m - 1, 1));
   const firstDow = (firstDate.getUTCDay() + 6) % 7;
   const daysInMonth = new Date(Date.UTC(year, m, 0)).getUTCDate();
-  const hasSelectedDateInMonth = selectedDate?.slice(0, 7) === `${year}-${String(m).padStart(2, '0')}`;
-
-  const prevMonthYear = m === 1 ? year - 1 : year;
-  const prevMonth = m === 1 ? 12 : m - 1;
-  const nextMonthYear = m === 12 ? year + 1 : year;
-  const nextMonth = m === 12 ? 1 : m + 1;
-
-  let headersHtml = '';
-  for (const dow of DOW_SHORT) {
-    headersHtml += `<th scope="col" class="cal-month-head-col">${esc(dow)}</th>`;
-  }
-
-  let cellsHtml = '';
-  let dayOfWeek = firstDow;
-
-  if (firstDow > 0) {
-    cellsHtml += `<td colspan="${firstDow}" class="cal-month-empty" role="presentation" aria-hidden="true"></td>`;
-  }
-
-  const dailyList = [];
-
+  const days = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const epochDay = Math.floor(Date.UTC(year, m - 1, d) / 86400000);
@@ -177,28 +149,96 @@ export function calendarMonthViewHTML({
     const val = record ? (byMs ? (record.ms ?? record.value ?? 0) : (record.plays ?? record.value ?? 0)) : 0;
     const fill = outOfData ? NO_DATA : colorScale(val);
     const valLabel = outOfData ? 'sin datos' : (val > 0 ? valFmt(val) : 'sin actividad');
-
-    dailyList.push({ iso, val, valLabel });
-
-    cellsHtml += `<td class="cal-month-day-cell" role="gridcell" aria-selected="${iso === selectedDate}">
-      <button type="button" class="cal-month-cell${iso === selectedDate ? ' is-selected' : ''}${outOfData ? ' cal-month-cell--no-data' : ''}" data-day="${epochDay}" data-date="${iso}" data-val="${val}" data-label="${esc(valLabel)}" tabindex="${iso === selectedDate || (!hasSelectedDateInMonth && d === 1) ? '0' : '-1'}" style="background-color: ${fill}" aria-label="${iso}: ${esc(valLabel)}">
-        <span class="cal-month-cell__day">${d}</span>
-      </button>
-    </td>`;
-
-    dayOfWeek = (dayOfWeek + 1) % 7;
-    if (dayOfWeek === 0 && d < daysInMonth) {
-      cellsHtml += '</tr><tr>';
-    }
+    days.push({
+      iso,
+      day: d,
+      epochDay,
+      weekday: DOW_SHORT[(epochDay + 3) % 7],
+      val,
+      valLabel,
+      fill,
+      outOfData
+    });
   }
+  return { month: m, firstDow, days, daysInMonth };
+}
 
+function calendarDayButton(day, selected, tabStop, listLayout) {
+  return `<button type="button" class="cal-month-cell${listLayout ? ' calendar-month__list-button' : ''}${selected ? ' is-selected' : ''}${day.outOfData ? ' cal-month-cell--no-data' : ''}" data-day="${day.epochDay}" data-date="${day.iso}" data-val="${day.val}" data-label="${esc(day.valLabel)}" tabindex="${tabStop ? '0' : '-1'}" style="background-color: ${day.fill}" aria-label="${day.iso}: ${esc(day.valLabel)}"${listLayout ? ` aria-pressed="${selected}"` : ''}>
+    ${listLayout ? `<span class="calendar-month__list-weekday">${esc(day.weekday)}</span>` : ''}
+    <span class="cal-month-cell__day">${day.day}</span>
+    ${listLayout ? `<span class="calendar-month__list-value">${esc(day.valLabel)}</span>` : ''}
+  </button>`;
+}
+
+function calendarGridHTML({ year, month, firstDow, days, selectedDate }) {
+  let headersHtml = '';
+  for (const dow of DOW_SHORT) {
+    headersHtml += `<th scope="col" class="cal-month-head-col">${esc(dow)}</th>`;
+  }
+  let cellsHtml = firstDow > 0
+    ? `<td colspan="${firstDow}" class="cal-month-empty" role="presentation" aria-hidden="true"></td>`
+    : '';
+  let dayOfWeek = firstDow;
+  const hasSelectedDateInMonth = selectedDate?.slice(0, 7) === `${year}-${String(month).padStart(2, '0')}`;
+  for (const day of days) {
+    const selected = day.iso === selectedDate;
+    const isTabStop = selected || (!hasSelectedDateInMonth && day.day === 1);
+    cellsHtml += `<td class="cal-month-day-cell" role="gridcell" aria-selected="${selected}">
+      ${calendarDayButton(day, selected, isTabStop, false)}
+    </td>`;
+    dayOfWeek = (dayOfWeek + 1) % 7;
+    if (dayOfWeek === 0 && day.day < days.length) cellsHtml += '</tr><tr>';
+  }
   if (dayOfWeek > 0) {
     cellsHtml += `<td colspan="${7 - dayOfWeek}" class="cal-month-empty" role="presentation" aria-hidden="true"></td>`;
   }
+  return `<table class="calendar-month__table" role="grid" aria-label="Días de ${esc(MONTHS_LONG[month - 1])} ${year}">
+    <thead><tr>${headersHtml}</tr></thead>
+    <tbody><tr>${cellsHtml}</tr></tbody>
+  </table>`;
+}
 
-  const listRows = dailyList.map((item) => `<tr>
-    <th scope="row">${esc(item.iso)}</th>
-    <td class="n">${esc(item.valLabel)}</td>
+function calendarListHTML(days, selectedDate) {
+  const hasSelectedDateInMonth = selectedDate?.slice(0, 7) === days[0]?.iso.slice(0, 7);
+  const rows = days.map((day) => {
+    const selected = day.iso === selectedDate;
+    const isTabStop = selected || (!hasSelectedDateInMonth && day.day === 1);
+    return `<li>${calendarDayButton(day, selected, isTabStop, true)}</li>`;
+  }).join('');
+  return `<p class="calendar-month__layout-note">Vista en lista para este ancho</p>
+    <ul class="calendar-month__list" aria-label="Días del mes">${rows}</ul>`;
+}
+
+export function calendarMonthDaysHTML({ year, selectedDate = null, layout = 'grid', ...options }) {
+  const { month, firstDow, days } = calendarMonthData({ year, ...options });
+  if (layout === 'list') return calendarListHTML(days, selectedDate);
+  return calendarGridHTML({ year, month, firstDow, days, selectedDate });
+}
+
+export function calendarMonthViewHTML(options) {
+  const {
+    year,
+    month,
+    daysMap,
+    colorScale,
+    byMs = true,
+    dataRange = null,
+    selectedDate = null,
+    layout = 'grid'
+  } = options;
+  const monthData = calendarMonthData({ year, month, daysMap, colorScale, byMs, dataRange });
+  const m = monthData.month;
+  const daysHtml = layout === 'list'
+    ? calendarListHTML(monthData.days, selectedDate)
+    : calendarGridHTML({ year, month: m, firstDow: monthData.firstDow, days: monthData.days, selectedDate });
+  const prevMonthYear = m === 1 ? year - 1 : year;
+  const prevMonth = m === 1 ? 12 : m - 1;
+  const nextMonthYear = m === 12 ? year + 1 : year;
+  const nextMonth = m === 12 ? 1 : m + 1;
+  const listRows = monthData.days.map((day) => `<tr>
+    <th scope="row">${esc(day.iso)}</th>
+    <td class="n">${esc(day.valLabel)}</td>
   </tr>`).join('');
 
   return `<section class="calendar-month card" role="region" aria-label="Vista mensual interactiva de ${esc(MONTHS_LONG[m - 1])} ${year}">
@@ -209,16 +249,7 @@ export function calendarMonthViewHTML({
         <button type="button" class="btn-step" data-cal-nav="next-month" data-cal-year="${nextMonthYear}" data-cal-month="${nextMonth}" aria-label="Mes siguiente (a ${esc(MONTHS_LONG[nextMonth - 1])})">›</button>
       </div>
     </div>
-    <div class="calendar-month__grid-wrap">
-      <table class="calendar-month__table" role="grid" aria-label="Días de ${esc(MONTHS_LONG[m - 1])} ${year}">
-        <thead>
-          <tr>${headersHtml}</tr>
-        </thead>
-        <tbody>
-          <tr>${cellsHtml}</tr>
-        </tbody>
-      </table>
-    </div>
+    <div class="calendar-month__grid-wrap" data-layout="${layout === 'list' ? 'list' : 'grid'}">${daysHtml}</div>
     <details class="table-fallback">
       <summary>Ver lista diaria de ${esc(MONTHS_LONG[m - 1])}</summary>
       <div class="table-scroll">

@@ -1073,6 +1073,50 @@ details.calendar-year summary:hover {
 }
 
 
+.calendar-month__layout-note {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+
+.calendar-month__list {
+  display: grid;
+  gap: var(--sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+
+.calendar-month__list li {
+  min-width: 0;
+}
+
+
+.calendar-month__list .calendar-month__list-button {
+  display: grid;
+  grid-template-columns: 3rem 2rem minmax(0, 1fr);
+  justify-content: stretch;
+  min-width: 0;
+  min-height: 44px;
+  padding-inline: var(--sp-2);
+  text-align: left;
+}
+
+
+.calendar-month__list-weekday {
+  color: var(--text-muted);
+}
+
+
+.calendar-month__list-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+
 .calendar-month__table {
   width: 100%;
   border-collapse: separate;

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildCalendarMonthOptions,
   calendarInspectorHTML,
+  calendarMonthDaysHTML,
   calendarMonthViewHTML,
   calendarScaleToggleHTML
 } from '../app/calendar-ui.js';
@@ -73,6 +74,32 @@ test('calendarMonthViewHTML: renders month navigation and comfortable cell touch
   assert.ok(html.includes('class="cal-month-cell"'));
   assert.ok(html.includes('data-day='));
   assert.ok(html.includes('2024-05-15'));
+});
+
+test('calendarMonthDaysHTML: renders one roving-focus tree for grid or narrow list', () => {
+  const options = {
+    year: 2024,
+    month: 2,
+    daysMap: new Map([['2024-02-10', { value: 5, ms: 500, plays: 5 }]]),
+    colorScale: makeScale(5),
+    dataRange: null,
+    selectedDate: '2024-02-10'
+  };
+  const grid = calendarMonthDaysHTML(options);
+  const list = calendarMonthDaysHTML({ ...options, layout: 'list' });
+
+  assert.match(grid, /<table class="calendar-month__table" role="grid"/);
+  assert.equal((grid.match(/tabindex="0"/g) ?? []).length, 1);
+  assert.match(list, /Vista en lista para este ancho/);
+  assert.match(list, /<ul class="calendar-month__list"/);
+  assert.match(list, /calendar-month__list-weekday/);
+  assert.match(list, /aria-pressed="true"/);
+  assert.equal((list.match(/tabindex="0"/g) ?? []).length, 1);
+  assert.equal((list.match(/data-day="/g) ?? []).length, 29);
+
+  const fullListView = calendarMonthViewHTML({ ...options, layout: 'list' });
+  assert.equal((fullListView.match(/data-day="/g) ?? []).length, 29);
+  assert.match(fullListView, /class="calendar-month__grid-wrap" data-layout="list"/);
 });
 
 test('calendarMonthViewHTML: distingue el período sin datos con patrón', () => {

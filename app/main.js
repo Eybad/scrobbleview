@@ -14,11 +14,12 @@ import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } fro
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { resetPresentationPreferences } from './presentation-preferences.js';
 import { contextBarHTML } from './context-bar.js';
-import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGridTargetDate } from './calendar-ui.js';
+import { parseCalendarState, parseCalendarSelection, calendarQuery } from './calendar-ui.js';
 import { parseCompareState, compareQuery, compareDateRange, compareDateAt, compareEntityKey, normalizeCompareEntities } from './compare-state.js';
 import { buildViewContext as createViewContext, discoveryQuery, LONGITUDINAL_PAGE_SIZES, LONGITUDINAL_THRESHOLDS, parseDiscoveryState } from './view-context.js';
 import { mountExplore } from './explore-controller.js';
 import { mountChartInteractions } from './chart-interactions.js';
+import { mountCalendar } from './calendar-controller.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -90,7 +91,8 @@ let advState = null;
 let popReturnState = null;
 let exploreController = null;
 let chartInteractions = null;
-let calAnchor = null;
+let calendarController = null;
+let calendarViewContext = null;
 
 // Keep the toast outside #app-root so it survives view renders.
 const toast = document.createElement('div');
@@ -112,64 +114,6 @@ document.body.appendChild(liveRegion);
 
 function announce(text) {
   liveRegion.textContent = text;
-}
-
-function restoreCalendarInspector() {
-  const dateOutput = appRoot.querySelector('#cal-selected-date');
-  if (!dateOutput) return;
-  const fromInput = appRoot.querySelector('#cal-range-from');
-  const toInput = appRoot.querySelector('#cal-range-to');
-  if (fromInput) fromInput.value = state.calRangeFrom ?? '';
-  if (toInput) toInput.value = state.calRangeTo ?? '';
-  const iso = state.calDate;
-  if (!iso) {
-    calAnchor = null;
-    syncCalendarGridSelection(null);
-    return;
-  }
-  const day = Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86400000);
-  calAnchor = day;
-  dateOutput.textContent = iso;
-  const matchingCells = [...appRoot.querySelectorAll('[data-day]')].filter((cell) => Number(cell.dataset.day) === day);
-  const title = matchingCells[0]?.dataset.label || matchingCells[0]?.querySelector('title')?.textContent;
-  const record = current.daily?.get(day);
-  const firstDay = current.meta.firstTs == null ? null : Math.floor(current.meta.firstTs / 86400);
-  const lastDay = current.meta.lastTs == null ? null : Math.floor(current.meta.lastTs / 86400);
-  const isOutOfData = firstDay == null || day < firstDay || day > lastDay;
-  const value = record?.[activeMetric === 'ms' ? 'ms' : 'plays'] ?? 0;
-  const label = title || (isOutOfData ? 'sin datos' : (value > 0 ? (activeMetric === 'ms' ? fmtMs(value) : fmtNum(value)) : 'sin actividad'));
-  const valueOutput = appRoot.querySelector('#cal-selected-value');
-  if (valueOutput) valueOutput.textContent = `· ${label}`;
-  appRoot.querySelector('#btn-cal-filter-day')?.removeAttribute('disabled');
-  appRoot.querySelector('#btn-cal-set-start')?.removeAttribute('disabled');
-  appRoot.querySelector('#btn-cal-set-end')?.removeAttribute('disabled');
-  const detailLink = appRoot.querySelector('#cal-day-detail');
-  if (detailLink) {
-    const params = new URLSearchParams(portableFilterParams(state, model).replace(/^\?/, ''));
-    params.set('m', activeMetric);
-    const query = calendarQuery(`?${params}`, state.calMonth, state.normalizeYears, {
-      date: state.calDate,
-      rangeFrom: state.calRangeFrom,
-      rangeTo: state.calRangeTo
-    });
-    detailLink.href = formatSemanticRoute('day', iso, query);
-    detailLink.hidden = false;
-  }
-  appRoot.querySelectorAll('[data-day].is-selected').forEach((cell) => cell.classList.remove('is-selected'));
-  matchingCells.forEach((cell) => cell.classList.add('is-selected'));
-  syncCalendarGridSelection(iso);
-}
-
-function syncCalendarGridSelection(selectedDate) {
-  const cells = [...appRoot.querySelectorAll('.calendar-month__table [data-date]')];
-  const selectedCell = cells.find((cell) => cell.dataset.date === selectedDate);
-  const tabStop = selectedCell ?? cells[0];
-  for (const cell of cells) {
-    const selected = cell === selectedCell;
-    cell.tabIndex = cell === tabStop ? 0 : -1;
-    cell.parentElement?.setAttribute('aria-selected', String(selected));
-    cell.classList.toggle('is-selected', selected);
-  }
 }
 
 function announceFilters() {
@@ -245,6 +189,8 @@ async function initializeAnalysis(result) {
   exploreController = null;
   chartInteractions?.dispose();
   chartInteractions = null;
+  calendarController?.dispose();
+  calendarController = null;
   compareResult = null;
   compareResultKey = null;
   compareStatus = 'idle';
@@ -722,6 +668,7 @@ function render() {
   const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);
+  calendarViewContext = name === 'calendar' ? viewCtx : null;
   if (name === 'compare') prepareComparison(viewCtx);
   else comparePending = null;
   let viewContent;
@@ -741,7 +688,7 @@ function render() {
   const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
   appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
   chartInteractions?.refresh();
-  restoreCalendarInspector();
+  calendarController?.refresh();
   updateCacheToast();
   announceFilters();
   const nav = appRoot.querySelector('.app-nav');
@@ -787,10 +734,11 @@ async function applyAndRenderView(focusSelector = null) {
   if (root) {
     const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
     const viewCtx = buildViewContext(name);
+    calendarViewContext = name === 'calendar' ? viewCtx : null;
     if (name === 'compare') prepareComparison(viewCtx);
     root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
     chartInteractions?.refresh();
-    restoreCalendarInspector();
+    calendarController?.refresh();
   }
   updateFilterDynamics();
   announceFilters();
@@ -1285,6 +1233,103 @@ function mountExploreController() {
   });
 }
 
+function dispatchCalendarAction(action) {
+  if (action.type === 'select-day') {
+    const [year, month] = action.date.split('-').map(Number);
+    const previousDate = state.calDate;
+    state.calMonth = { year, month };
+    state.calDate = action.date;
+    if (action.shiftKey && previousDate) {
+      const anchor = Math.floor(Date.parse(`${previousDate}T00:00:00Z`) / 86400000);
+      const [from, to] = anchor <= action.day ? [anchor, action.day] : [action.day, anchor];
+      state.calRangeFrom = new Date(from * 86400000).toISOString().slice(0, 10);
+      state.calRangeTo = new Date(to * 86400000).toISOString().slice(0, 10);
+      state.range = { from: from * 86400, to: to * 86400 + 86399 };
+      applyAndRenderView();
+      return;
+    }
+    state.calRangeFrom = action.rangeFrom || action.date;
+    state.calRangeTo = action.rangeTo || action.date;
+    syncHash();
+    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
+    return;
+  }
+
+  if (action.type === 'filter-day') {
+    const day = Math.floor(Date.parse(`${action.date}T00:00:00Z`) / 86400000);
+    state.range = { from: day * 86400, to: day * 86400 + 86399 };
+    applyAndRenderView('#btn-cal-filter-day');
+    return;
+  }
+
+  if (action.type === 'set-range-bound' || action.type === 'change-range') {
+    state[action.field] = action.type === 'set-range-bound' ? action.date : action.value || null;
+    syncHash();
+    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
+    return;
+  }
+
+  if (action.type === 'apply-range' && action.from && action.to) {
+    state.calRangeFrom = action.from;
+    state.calRangeTo = action.to;
+    const fromDay = Math.floor(Date.parse(`${action.from}T00:00:00Z`) / 86400000);
+    const toDay = Math.floor(Date.parse(`${action.to}T00:00:00Z`) / 86400000);
+    if (!Number.isFinite(fromDay) || !Number.isFinite(toDay)) return;
+    state.range = { from: Math.min(fromDay, toDay) * 86400, to: Math.max(fromDay, toDay) * 86400 + 86399 };
+    applyAndRenderView('#btn-cal-apply-range');
+    return;
+  }
+
+  if (action.type === 'navigate-month') {
+    state.calMonth = { year: action.year, month: action.month };
+    const [view, year] = parseHash();
+    const filters = portableFilterParams(state, model);
+    const query = calendarQuery(`${filters || '?'}${filters ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears, {
+      date: state.calDate,
+      rangeFrom: state.calRangeFrom,
+      rangeTo: state.calRangeTo
+    });
+    pendingCalendarFocus = action.navigation;
+    location.hash = formatSemanticRoute('calendar', view === 'calendar' && year != null ? state.calMonth.year : null, query);
+    return;
+  }
+
+  if (action.type === 'navigate-date') {
+    const [year, month] = action.date.split('-').map(Number);
+    state.calDate = action.date;
+    state.calMonth = { year, month };
+    pendingCalendarDate = action.date;
+    const [view, routeYear] = parseHash();
+    const filters = portableFilterParams(state, model);
+    const query = calendarQuery(`${filters || '?'}${filters ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears, {
+      date: state.calDate,
+      rangeFrom: state.calRangeFrom,
+      rangeTo: state.calRangeTo
+    });
+    location.hash = formatSemanticRoute('calendar', view === 'calendar' && routeYear != null ? year : null, query);
+    return;
+  }
+
+  if (action.type === 'toggle-scale') {
+    state.normalizeYears = action.normalizeYears;
+    syncHash();
+    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
+    render();
+    appRoot.querySelector('[data-action="toggle-cal-scale"]')?.focus({ preventScroll: true });
+  }
+}
+
+function mountCalendarController() {
+  calendarController?.dispose();
+  calendarController = mountCalendar(appRoot, {
+    readState() {
+      const [, , , route] = parseHash();
+      return { route, state, context: calendarViewContext, model: current };
+    },
+    dispatch: dispatchCalendarAction
+  });
+}
+
 headerActions?.querySelectorAll('[data-action="export"]').forEach((button) => {
   button.addEventListener('click', (event) => exportUI.start({ trigger: event.currentTarget }));
 });
@@ -1300,6 +1345,7 @@ const inputApi = setupInput({
     if (!location.hash) location.hash = '#/dashboard';
     mountExploreController();
     chartInteractions = mountChartInteractions(appRoot, { announce });
+    mountCalendarController();
     render();
   },
   onError() {
@@ -1403,7 +1449,7 @@ window.addEventListener('hashchange', async () => {
     pendingCalendarFocus = null;
     pendingCalendarDate = null;
   } else if (pendingCalendarDate) {
-    appRoot.querySelector(`.calendar-month__table [data-date="${pendingCalendarDate}"]`)?.focus({ preventScroll: true });
+    appRoot.querySelector(`.calendar-month__grid-wrap [data-date="${pendingCalendarDate}"]`)?.focus({ preventScroll: true });
     pendingCalendarDate = null;
   } else if (pendingCalendarFocus) {
     appRoot.querySelector(`[data-cal-nav="${pendingCalendarFocus}"]`)?.focus({ preventScroll: true });
@@ -1533,138 +1579,6 @@ appRoot.addEventListener('click', (e) => {
 });
 
 appRoot.addEventListener('click', (e) => {
-  const dayEl = e.target.closest?.('[data-day]');
-  if (dayEl && appRoot.contains(dayEl)) {
-    const day = Number(dayEl.dataset.day);
-    if (Number.isFinite(day)) {
-      const iso = dayEl.dataset.date || new Date(day * 86400000).toISOString().slice(0, 10);
-      const [selectedYear, selectedMonth] = iso.split('-').map(Number);
-      state.calMonth = { year: selectedYear, month: selectedMonth };
-      if (e.shiftKey && calAnchor != null) {
-        const [a, b] = calAnchor <= day ? [calAnchor, day] : [day, calAnchor];
-        state.calDate = iso;
-        state.calRangeFrom = new Date(a * 86400000).toISOString().slice(0, 10);
-        state.calRangeTo = new Date(b * 86400000).toISOString().slice(0, 10);
-        state.range = { from: a * 86400, to: b * 86400 + 86399 };
-        calAnchor = day;
-        applyAndRenderView();
-        return;
-      }
-      calAnchor = day;
-      state.calDate = iso;
-      const valLabel = dayEl.dataset.label || dayEl.querySelector?.('title')?.textContent || dayEl.getAttribute?.('aria-label') || '';
-
-      const selDate = appRoot.querySelector('#cal-selected-date');
-      const selVal = appRoot.querySelector('#cal-selected-value');
-      const btnFilter = appRoot.querySelector('#btn-cal-filter-day');
-      const detailLink = appRoot.querySelector('#cal-day-detail');
-      const btnStart = appRoot.querySelector('#btn-cal-set-start');
-      const btnEnd = appRoot.querySelector('#btn-cal-set-end');
-      const fromInput = appRoot.querySelector('#cal-range-from');
-      const toInput = appRoot.querySelector('#cal-range-to');
-
-      if (selDate) selDate.textContent = iso;
-      if (selVal) selVal.textContent = valLabel ? `· ${valLabel}` : '';
-      if (btnFilter) btnFilter.disabled = false;
-      if (btnStart) btnStart.disabled = false;
-      if (btnEnd) btnEnd.disabled = false;
-      if (fromInput && !fromInput.value) fromInput.value = iso;
-      if (toInput && fromInput?.value && !toInput.value) toInput.value = iso;
-      state.calRangeFrom = fromInput?.value || null;
-      state.calRangeTo = toInput?.value || null;
-      if (detailLink) {
-        const params = new URLSearchParams(portableFilterParams(state, model).replace(/^\?/, ''));
-        params.set('m', activeMetric);
-        const query = calendarQuery(`?${params}`, state.calMonth, state.normalizeYears, {
-          date: state.calDate,
-          rangeFrom: state.calRangeFrom,
-          rangeTo: state.calRangeTo
-        });
-        detailLink.href = formatSemanticRoute('day', iso, query);
-        detailLink.hidden = false;
-      }
-
-      appRoot.querySelectorAll('[data-day].is-selected').forEach((cell) => cell.classList.remove('is-selected'));
-      dayEl.classList.add('is-selected');
-      syncCalendarGridSelection(iso);
-      syncHash();
-      analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
-    }
-  }
-
-  const calAction = e.target.closest?.('[data-cal-action]');
-  if (calAction && appRoot.contains(calAction)) {
-    const act = calAction.dataset.calAction;
-    if (act === 'filter-day' && calAnchor != null) {
-      state.range = { from: calAnchor * 86400, to: calAnchor * 86400 + 86399 };
-      applyAndRenderView('#btn-cal-filter-day');
-      return;
-    }
-    if (act === 'set-start' && calAnchor != null) {
-      const fromInput = appRoot.querySelector('#cal-range-from');
-      if (fromInput) {
-        fromInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
-        state.calRangeFrom = fromInput.value;
-        syncHash();
-        analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
-      }
-      return;
-    }
-    if (act === 'set-end' && calAnchor != null) {
-      const toInput = appRoot.querySelector('#cal-range-to');
-      if (toInput) {
-        toInput.value = new Date(calAnchor * 86400000).toISOString().slice(0, 10);
-        state.calRangeTo = toInput.value;
-        syncHash();
-        analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
-      }
-      return;
-    }
-    if (act === 'apply-range') {
-      const fromInput = appRoot.querySelector('#cal-range-from');
-      const toInput = appRoot.querySelector('#cal-range-to');
-      if (fromInput?.value && toInput?.value) {
-        state.calRangeFrom = fromInput.value;
-        state.calRangeTo = toInput.value;
-        const fromDay = Math.floor(Date.parse(`${fromInput.value}T00:00:00Z`) / 86400000);
-        const toDay = Math.floor(Date.parse(`${toInput.value}T00:00:00Z`) / 86400000);
-        if (Number.isFinite(fromDay) && Number.isFinite(toDay)) {
-          state.range = { from: Math.min(fromDay, toDay) * 86400, to: Math.max(fromDay, toDay) * 86400 + 86399 };
-          applyAndRenderView('#btn-cal-apply-range');
-          return;
-        }
-      }
-    }
-  }
-
-  const calNav = e.target.closest?.('[data-cal-nav]');
-  if (calNav && appRoot.contains(calNav)) {
-    state.calMonth = {
-      year: Number(calNav.dataset.calYear),
-      month: Number(calNav.dataset.calMonth)
-    };
-    const [view, year] = parseHash();
-    const fParams = portableFilterParams(state, model);
-    const query = calendarQuery(`${fParams || '?'}${fParams ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears, {
-      date: state.calDate,
-      rangeFrom: state.calRangeFrom,
-      rangeTo: state.calRangeTo
-    });
-    pendingCalendarFocus = calNav.dataset.calNav;
-    location.hash = formatSemanticRoute('calendar', view === 'calendar' && year != null ? state.calMonth.year : null, query);
-    return;
-  }
-
-  const scaleToggle = e.target.closest?.('[data-action="toggle-cal-scale"]');
-  if (scaleToggle && appRoot.contains(scaleToggle)) {
-    state.normalizeYears = scaleToggle.dataset.normalize === 'true';
-    syncHash();
-    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
-    render();
-    appRoot.querySelector('[data-action="toggle-cal-scale"]')?.focus({ preventScroll: true });
-    return;
-  }
-
   const compPresetBtn = e.target.closest?.('[data-compare-preset]');
   if (compPresetBtn && appRoot.contains(compPresetBtn)) {
     state.comparePreset = compPresetBtn.dataset.comparePreset;
@@ -1708,45 +1622,6 @@ appRoot.addEventListener('click', (e) => {
     return;
   }
 
-});
-
-appRoot.addEventListener('keydown', (e) => {
-  const calendarCell = e.target.closest?.('.calendar-month__table [data-date]');
-  if (calendarCell && appRoot.contains(calendarCell)) {
-    const targetDate = calendarGridTargetDate(calendarCell.dataset.date, e.key);
-    if (targetDate) {
-      e.preventDefault();
-      if (targetDate === calendarCell.dataset.date) return;
-      const target = appRoot.querySelector(`.calendar-month__table [data-date="${targetDate}"]`);
-      if (target) {
-        target.focus({ preventScroll: true });
-        target.click();
-        return;
-      }
-      const [year, month] = targetDate.split('-').map(Number);
-      state.calDate = targetDate;
-      state.calMonth = { year, month };
-      pendingCalendarDate = targetDate;
-      const [view, routeYear] = parseHash();
-      const filters = portableFilterParams(state, model);
-      const query = calendarQuery(`${filters || '?'}${filters ? '&' : ''}${serializeMetricParam(activeMetric)}`, state.calMonth, state.normalizeYears, {
-        date: state.calDate,
-        rangeFrom: state.calRangeFrom,
-        rangeTo: state.calRangeTo
-      });
-      location.hash = formatSemanticRoute('calendar', view === 'calendar' && routeYear != null ? year : null, query);
-      return;
-    }
-  }
-});
-
-appRoot.addEventListener('change', (e) => {
-  const input = e.target;
-  if (input.id === 'cal-range-from') state.calRangeFrom = input.value || null;
-  else if (input.id === 'cal-range-to') state.calRangeTo = input.value || null;
-  else return;
-  syncHash();
-  analysisState.updatePresentation({ hash: location.hash, metric: activeMetric, state });
 });
 
 window.addEventListener('resize', () => {
