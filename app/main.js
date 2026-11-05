@@ -17,6 +17,7 @@ import { contextBarHTML } from './context-bar.js';
 import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGridTargetDate } from './calendar-ui.js';
 import { parseCompareState, compareQuery, compareDateRange, compareDateAt, compareEntityKey, normalizeCompareEntities } from './compare-state.js';
 import { buildViewContext as createViewContext, discoveryQuery, LONGITUDINAL_PAGE_SIZES, LONGITUDINAL_THRESHOLDS, parseDiscoveryState } from './view-context.js';
+import { mountExplore } from './explore-controller.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -87,6 +88,7 @@ let cacheOffer = null;
 let advState = null;
 let popReturnState = null;
 const chartSelections = new Map();
+let exploreController = null;
 let calAnchor = null;
 
 // Keep the toast outside #app-root so it survives view renders.
@@ -325,6 +327,8 @@ function reportProcessingError(error, type = 'general') {
 }
 
 async function initializeAnalysis(result) {
+  exploreController?.dispose();
+  exploreController = null;
   compareResult = null;
   compareResultKey = null;
   compareStatus = 'idle';
@@ -1019,6 +1023,7 @@ let searchTimer = 0;
 
 function syncTallTables(root) {
   root.querySelectorAll('.table-scroll--tall').forEach((wrap) => {
+    if (wrap.closest('#explore-card')) return;
     const tenthRow = wrap.querySelector('tbody')?.rows?.[9];
     if (tenthRow) {
       const hBar = Math.max(0, wrap.offsetHeight - wrap.clientHeight);
@@ -1104,213 +1109,8 @@ function wireRankCard() {
   });
 }
 
-function wireExploreView() {
-  const card = document.getElementById('explore-card');
-  if (!card) return;
-
-  const getExploreQuery = () => {
-    const [, , q] = parseHash();
-    return new URLSearchParams(q ? q.replace(/^\?/, '') : '');
-  };
-
-  const updateExploreQuery = (updater, focusSelector = null, selection = null) => {
-    const tableScroll = card.querySelector('.table-scroll');
-    const scrollLeft = tableScroll?.scrollLeft ?? 0;
-    const scrollTop = tableScroll?.scrollTop ?? 0;
-    const columnsOpen = card.querySelector('.col-picker')?.open ?? false;
-    const params = getExploreQuery();
-    updater(params);
-    const [, id] = parseHash();
-    const queryStr = params.toString() ? `?${params.toString()}` : '';
-    const hash = formatSemanticRoute('explore', null, queryStr);
-    history.replaceState(history.state, '', hash);
-    analysisState.updatePresentation({ hash: location.hash, metric: activeMetric });
-    const root = document.getElementById('view-root');
-    if (root && current) {
-      const viewCtx = buildViewContext('explore');
-      root.innerHTML = renderView('explore', current, id, viewCtx);
-      wireView();
-      const nextScroll = root.querySelector('.table-scroll');
-      if (nextScroll) { nextScroll.scrollLeft = scrollLeft; nextScroll.scrollTop = scrollTop; }
-      const columns = root.querySelector('.col-picker');
-      if (columns) columns.open = columnsOpen;
-      const target = focusSelector && root.querySelector(focusSelector);
-      const focusTarget = !focusSelector ? null : target && !target.disabled ? target : root.querySelector('[data-explore-search]');
-      focusTarget?.focus({ preventScroll: true });
-      if (selection && target && typeof target.setSelectionRange === 'function') {
-        target.setSelectionRange(selection.start, selection.end, selection.direction);
-      }
-    }
-  };
-
-  card.querySelectorAll('[data-explore-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.exploreTab;
-      updateExploreQuery((p) => {
-        p.set('tab', tab);
-        p.delete('page');
-        p.delete('sort');
-        p.delete('dir');
-        p.delete('minPlays');
-        p.delete('minMonths');
-      }, `[data-explore-tab="${tab}"]`);
-    });
-  });
-
-  const tablist = card.querySelector('[role="tablist"][aria-label="Explorar catálogo"]');
-  tablist?.addEventListener('keydown', (event) => {
-    const tabs = [...tablist.querySelectorAll('[role="tab"]')];
-    const index = tabs.indexOf(document.activeElement);
-    if (index < 0) return;
-    const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length]
-      : event.key === 'ArrowLeft' ? tabs[(index - 1 + tabs.length) % tabs.length]
-        : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : null;
-    if (!next) return;
-    event.preventDefault();
-    next.click();
-  });
-
-  let exploreSearchTimer;
-  const searchInput = card.querySelector('[data-explore-search]');
-  if (searchInput) {
-    let composing = false;
-    const scheduleSearch = () => {
-      clearTimeout(exploreSearchTimer);
-      exploreSearchTimer = setTimeout(() => {
-        if (!searchInput.isConnected) return;
-        const v = searchInput.value;
-        const wasFocused = document.activeElement === searchInput;
-        const selection = { start: searchInput.selectionStart, end: searchInput.selectionEnd, direction: searchInput.selectionDirection };
-        updateExploreQuery((p) => {
-          if (v) p.set('q', v);
-          else p.delete('q');
-          p.delete('page');
-        }, wasFocused ? '[data-explore-search]' : null, wasFocused && selection.start != null && selection.end != null ? selection : null);
-      }, 200);
-    };
-    searchInput.addEventListener('compositionstart', () => { composing = true; clearTimeout(exploreSearchTimer); });
-    searchInput.addEventListener('compositionend', () => { composing = false; scheduleSearch(); });
-    searchInput.addEventListener('input', (event) => { if (!composing && !event.isComposing) scheduleSearch(); });
-  }
-
-  card.querySelectorAll('[data-clear-search]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      updateExploreQuery((p) => {
-        p.delete('q');
-        p.delete('page');
-      }, '[data-explore-search]');
-    });
-  });
-
-  card.querySelectorAll('.btn-sort').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const sort = btn.dataset.sort;
-      const dir = btn.dataset.dir;
-      updateExploreQuery((p) => {
-        p.set('sort', sort);
-        p.set('dir', dir);
-        p.delete('page');
-      }, `[data-sort="${sort}"]`);
-    });
-  });
-
-  card.querySelectorAll('[data-page]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const page = Number(btn.dataset.page);
-      if (!page || page < 1) return;
-      updateExploreQuery((p) => {
-        p.set('page', String(page));
-      }, `[data-page-action="${btn.dataset.pageAction}"]`);
-    });
-  });
-
-  const pageSizeSelect = card.querySelector('[data-page-size]');
-  if (pageSizeSelect) {
-    pageSizeSelect.addEventListener('change', () => {
-      const size = pageSizeSelect.value;
-      updateExploreQuery((p) => {
-        p.set('pageSize', String(size));
-        p.delete('page');
-      }, '[data-page-size]');
-    });
-  }
-
-  card.querySelectorAll('[data-density]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const d = btn.dataset.density;
-      if (typeof localStorage !== 'undefined') localStorage.setItem('scrobbleview:density', d);
-      updateExploreQuery(() => {}, `[data-density="${d}"]`);
-    });
-  });
-
-  card.querySelectorAll('[data-col-toggle]').forEach((chk) => {
-    chk.addEventListener('change', () => {
-      const col = chk.dataset.colToggle;
-      const [, , q] = parseHash();
-      const p = new URLSearchParams(q ? q.replace(/^\?/, '') : '');
-      const tab = p.get('tab') || 'artists';
-      const set = new Set([...card.querySelectorAll('[data-col-toggle]:checked')].map(input => input.dataset.colToggle));
-      if (typeof localStorage !== 'undefined') localStorage.setItem(`scrobbleview:cols:${tab}`, JSON.stringify([...set]));
-      updateExploreQuery(() => {}, `[data-col-toggle="${col}"]`);
-    });
-  });
-
-  card.querySelectorAll('[data-reset-cols]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const [, , q] = parseHash();
-      const p = new URLSearchParams(q ? q.replace(/^\?/, '') : '');
-      const tab = p.get('tab') || 'artists';
-      if (typeof localStorage !== 'undefined') localStorage.removeItem(`scrobbleview:cols:${tab}`);
-      updateExploreQuery(() => {}, '[data-reset-cols]');
-    });
-  });
-
-  card.querySelectorAll('[data-expand-name]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const cell = btn.closest('.col-name');
-      const nameSpan = cell?.querySelector('.cell-name');
-      if (nameSpan) {
-        const isExpanded = nameSpan.classList.toggle('is-expanded');
-        const label = isExpanded ? 'Contraer nombre' : 'Expandir nombre';
-        btn.classList.toggle('is-expanded', isExpanded);
-        btn.setAttribute('aria-expanded', String(isExpanded));
-        btn.setAttribute('aria-label', label);
-        btn.title = label;
-      }
-    });
-  });
-
-  const minPlaysInput = card.querySelector('[data-min-plays]');
-  if (minPlaysInput) {
-    minPlaysInput.addEventListener('change', () => {
-      const val = Math.max(1, Math.min(10000, Number(minPlaysInput.value) || 1));
-      updateExploreQuery((p) => {
-        p.set('minPlays', String(val));
-        p.delete('page');
-      }, '[data-min-plays]');
-    });
-  }
-
-  const minMonthsInput = card.querySelector('[data-min-months]');
-  if (minMonthsInput) {
-    minMonthsInput.addEventListener('change', () => {
-      const val = Math.max(1, Math.min(120, Number(minMonthsInput.value) || 1));
-      updateExploreQuery((p) => {
-        p.set('minMonths', String(val));
-        p.delete('page');
-      }, '[data-min-months]');
-    });
-  }
-
-  card.querySelectorAll('[data-action="export-table"]').forEach((btn) => {
-    btn.addEventListener('click', () => exportUI.start({ scope: 'table' }));
-  });
-}
-
-function wireView() {
+function wireView(exploreReturnState = null) {
   wireRankCard();
-  wireExploreView();
   syncTallTables(appRoot);
 
   const compareForm = appRoot.querySelector('#compare-form');
@@ -1509,6 +1309,7 @@ function wireView() {
   document.querySelectorAll('[data-action="reset-preferences"]').forEach((btn) => {
     btn.onclick = () => resetPreferences();
   });
+  exploreController?.refresh(exploreReturnState);
 }
 
 const exportUI = createExportUI({
@@ -1538,6 +1339,37 @@ const exportUI = createExportUI({
   }
 });
 
+function mountExploreController() {
+  exploreController?.dispose();
+  exploreController = mountExplore(appRoot, {
+    readSnapshot() {
+      const [, , , route] = parseHash();
+      const confirmed = analysisState.getConfirmed();
+      if (!confirmed?.model) return null;
+      return { route, context: buildViewContext('explore'), model: confirmed.model };
+    },
+    commitQuery(nextQuery, returnState) {
+      const query = nextQuery ? `?${nextQuery}` : '';
+      const hash = formatSemanticRoute('explore', null, query);
+      history.replaceState(history.state, '', hash);
+      analysisState.updatePresentation({ hash: location.hash, metric: activeMetric });
+      const [view, id] = parseHash();
+      const viewRoot = document.getElementById('view-root');
+      if (view !== 'explore' || !viewRoot || !current) return;
+      viewRoot.innerHTML = renderView('explore', current, id, buildViewContext('explore'));
+      wireView(returnState);
+    },
+    savePreference(key, value) {
+      if (typeof localStorage === 'undefined') return;
+      if (value == null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    },
+    exportTable() {
+      exportUI.start({ scope: 'table' });
+    }
+  });
+}
+
 headerActions?.querySelectorAll('[data-action="export"]').forEach((button) => {
   button.addEventListener('click', (event) => exportUI.start({ trigger: event.currentTarget }));
 });
@@ -1551,6 +1383,7 @@ const inputApi = setupInput({
   onReady() {
     // An existing hash takes precedence over the default dashboard route.
     if (!location.hash) location.hash = '#/dashboard';
+    mountExploreController();
     render();
   },
   onError() {
