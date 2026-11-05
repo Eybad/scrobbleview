@@ -409,7 +409,7 @@ test('filter-ui: Borrar todo vive en la fila de chips (sin fila propia)', async 
   assert.ok(chipsRow.includes('Borrar todo'), 'etiqueta compacta');
 });
 
-test('contraste: muted sobre surface-2 cumple WCAG AA (≥ 4.5:1)', async () => {
+test('contraste: roles de texto, color y controles cumplen los mínimos de la paleta', async () => {
   const css = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');
   const hexVar = (name) => {
     const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
@@ -418,13 +418,30 @@ test('contraste: muted sobre surface-2 cumple WCAG AA (≥ 4.5:1)', async () => 
   };
   const luminance = (hexStr) => {
     const channels = [0, 2, 4].map((i) => parseInt(hexStr.slice(1 + i, 3 + i), 16) / 255)
-      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
     return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
   };
-  const l1 = luminance(hexVar('text-muted'));
-  const l2 = luminance(hexVar('surface-2'));
-  const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-  assert.ok(ratio >= 4.5, `contraste ${ratio.toFixed(2)}:1 ≥ 4.5:1 (botones quiet y texto del toast)`);
+  const contrast = (foreground, background) => {
+    const l1 = luminance(hexVar(foreground));
+    const l2 = luminance(hexVar(background));
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  };
+  const pairs = [
+    ['text', 'surface', 4.5],
+    ['text-muted', 'surface', 4.5],
+    ['text-faint-high', 'surface-2', 4.5],
+    ['accent', 'surface', 4.5],
+    ['on-accent', 'accent', 4.5],
+    ['focus', 'surface-2', 4.5],
+    ['border-strong', 'surface-2', 3],
+    ['accent', 'accent-soft', 4.5],
+    ['warning', 'warning-soft', 4.5],
+    ['danger', 'danger-soft', 4.5]
+  ];
+  for (const [foreground, background, minimum] of pairs) {
+    const ratio = contrast(foreground, background);
+    assert.ok(ratio >= minimum, `contraste --${foreground}/--${background}: ${ratio.toFixed(2)}:1 ≥ ${minimum}:1`);
+  }
 });
 
 test('filter-ui: rango invertido colapsa al día editado', () => {

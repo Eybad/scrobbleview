@@ -1,6 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScale, barChart, lineChart, stackedBar, HEAT, fmtNum, fmtMs, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
+import { readFile } from 'node:fs/promises';
+import { makeScale, barChart, lineChart, stackedBar, ACCENT, HEAT, PALETTE, fmtNum, fmtMs, fmtBytes, hbarChart, heatLegend, calendarGrid, NO_DATA, sparkline } from '../src/charts.js';
+
+test('charts: la paleta SVG coincide con los tokens CSS y el heatmap aumenta su luminancia', async () => {
+  const css = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');
+  const cssColor = (name) => {
+    const match = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
+    assert.ok(match, `variable --${name} presente en tokens.css`);
+    return match[1].toLowerCase();
+  };
+  const luminance = (hex) => {
+    const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
+      .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+
+  assert.equal(ACCENT, cssColor('accent'));
+  assert.deepEqual(HEAT, Array.from({ length: 6 }, (_, index) => cssColor(`heat-${index}`)));
+  assert.deepEqual(PALETTE, ['#88a9cc', '#c2aa7a', '#78b892', '#ad96bd', '#7eb9bc', '#c392a4', '#b8b87c', '#7aa89a', '#9b9ec2', '#c29a7e']);
+  for (let index = 1; index < HEAT.length; index++) {
+    assert.ok(luminance(HEAT[index]) > luminance(HEAT[index - 1]), `luminancia creciente entre heat-${index - 1} y heat-${index}`);
+  }
+});
 
 test('barChart: caps bar width for sparse series and centers bars in slots', () => {
   const svg = barChart({ data: [{ label: 'A', value: 10 }, { label: 'B', value: 20 }] });
@@ -166,7 +188,11 @@ test('calendarGrid: días fuera del rango de datos se distinguen de cero', () =>
     colorScale: makeScale(5000),
     dataRange: { from: 19889, to: 19890 }
   });
-  assert.ok(html.includes(NO_DATA), 'color de sin datos presente');
+  assert.match(html, /<pattern id="calendar-no-data-2024"[^>]*>/, 'patrón de ausencia definido dentro del SVG');
+  assert.equal((html.match(/<pattern\b/g) ?? []).length, 1, 'un único patrón por SVG');
+  assert.ok(html.includes(`fill="${NO_DATA}"`), 'fondo del patrón de ausencia presente');
+  assert.ok(html.includes('stroke="#64758a"'), 'diagonal del patrón distingue la ausencia');
+  assert.ok(html.includes('fill="url(#calendar-no-data-2024)"'), 'las fechas sin datos usan el patrón');
   assert.ok(html.includes('sin datos'), 'title de sin datos');
   assert.ok(html.includes(`fill="${HEAT[0]}"`), 'cero dentro del rango usa el nivel 0');
   assert.ok(html.includes(`fill="${HEAT[5]}"`), 'el día con datos satura la escala');

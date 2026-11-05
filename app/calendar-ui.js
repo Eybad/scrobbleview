@@ -152,7 +152,7 @@ export function calendarMonthViewHTML({
     dailyList.push({ iso, val, valLabel });
 
     cellsHtml += `<td class="cal-month-day-cell" role="gridcell" aria-selected="${iso === selectedDate}">
-      <button type="button" class="cal-month-cell${iso === selectedDate ? ' is-selected' : ''}" data-day="${epochDay}" data-date="${iso}" data-val="${val}" data-label="${esc(valLabel)}" tabindex="${iso === selectedDate || (!hasSelectedDateInMonth && d === 1) ? '0' : '-1'}" style="background-color: ${fill}" aria-label="${iso}: ${esc(valLabel)}">
+      <button type="button" class="cal-month-cell${iso === selectedDate ? ' is-selected' : ''}${outOfData ? ' cal-month-cell--no-data' : ''}" data-day="${epochDay}" data-date="${iso}" data-val="${val}" data-label="${esc(valLabel)}" tabindex="${iso === selectedDate || (!hasSelectedDateInMonth && d === 1) ? '0' : '-1'}" style="background-color: ${fill}" aria-label="${iso}: ${esc(valLabel)}">
         <span class="cal-month-cell__day">${d}</span>
       </button>
     </td>`;

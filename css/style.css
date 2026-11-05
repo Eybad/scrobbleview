@@ -239,7 +239,7 @@
 
 
 .compare-range input:disabled {
-  opacity: 0.7;
+  color: var(--text-muted);
 }
 
 

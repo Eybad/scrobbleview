@@ -805,11 +805,11 @@ export function trackView(model, tk, ctx = {}) {
   });
 
   const scopeNotice = originAlbum && originStats
-    ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;border-left:4px solid var(--accent, #1db954);">
+    ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;border-left:4px solid var(--accent);">
         <p style="margin:0 0 0.25rem 0;">
           <strong>Alcance: En este álbum</strong> (<strong>${esc(originAlbum.name)}</strong>: ${fmtNum(originStats.plays)} rep., ${fmtMs(originStats.ms)})
         </p>
-        <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
+        <p style="margin:0;font-size:0.9rem;color:var(--text-muted);">
           Totales como <strong>Canción agrupada</strong>: ${fmtNum(tr.plays)} reproducciones · ${fmtMs(tr.ms)}.
           <a href="${esc(formatSemanticRoute('track', tr, ctx.query))}">Ver ficha global de la canción agrupada</a>
         </p>
@@ -818,7 +818,7 @@ export function trackView(model, tk, ctx = {}) {
       ? '<p class="empty">El álbum de origen no está disponible en la selección actual.</p>'
       : (ctx.detail?.total ?? albumList.length) > 1
       ? `<div class="scope-notice card" style="margin-bottom:1rem;padding:0.75rem 1rem;">
-          <p style="margin:0;font-size:0.9rem;color:var(--text-sub, #b3b3b3);">
+          <p style="margin:0;font-size:0.9rem;color:var(--text-muted);">
             <strong>Canción agrupada:</strong> consolida ${fmtNum(tr.plays)} reproducciones a través de ${fmtNum(ctx.detail?.total ?? albumList.length)} atribuciones de álbum.
           </p>
          </div>`

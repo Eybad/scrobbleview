@@ -30,8 +30,8 @@ input,
 
 
 a {
-  color: var(--accent);
-  text-decoration: none;
+  color: var(--focus);
+  text-decoration: underline;
 }
 
 
@@ -111,11 +111,9 @@ code {
 }
 
 
-/* Two-tone focus remains visible against every theme surface. */
 :focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px #000;
   scroll-margin-top: var(--sp-6);
   scroll-margin-bottom: 6rem;
 }

@@ -238,8 +238,8 @@ async function run() {
   const homePrivacy = element('.privacy-note');
   assert(homePrivacy.getClientRects().length > 0 && homePrivacy.textContent.includes('nunca se suben'), 'El aviso de privacidad permanece visible en el inicio');
   assert(appWindow.getComputedStyle(homePrivacy).textAlign === 'left', 'El aviso conserva su lectura alineada');
-  assert(appWindow.getComputedStyle(element('.drop-zone-badge')).backgroundColor === 'rgba(29, 185, 84, 0.12)', 'El badge de carga conserva su fondo discreto');
-  assert(appWindow.getComputedStyle(element('.drop-zone-icon')).color === 'rgb(29, 185, 84)', 'El icono de carga conserva el acento verde');
+  assert(appWindow.getComputedStyle(element('.drop-zone-badge')).backgroundColor === 'rgb(26, 48, 42)', 'El badge de carga usa el fondo de acento suave');
+  assert(appWindow.getComputedStyle(element('.drop-zone-icon')).color === 'rgb(120, 184, 146)', 'El icono de carga usa el acento de la paleta');
   assert(appWindow.getComputedStyle(element('.drop-zone-files')).borderTopWidth === '0px', 'La zona de carga no agrega un separador interno');
   const syntheticEvents = ['2024-01-10', '2024-02-10', '2024-02-11'].map(date => ({
     ts: `${date}T12:00:00Z`, ms_played: 180000,

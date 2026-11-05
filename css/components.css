@@ -23,7 +23,7 @@
 
 /* Prevent repeat exports while the ZIP is being built. */
 .btn-icon:disabled {
-  opacity: 0.5;
+  color: var(--text-faint-high);
   cursor: default;
 }
 
@@ -34,7 +34,6 @@
   background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
   border: 1px solid var(--accent-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 
@@ -161,7 +160,6 @@
   padding: var(--sp-8) var(--sp-6);
   text-align: center;
   cursor: pointer;
-  box-shadow: var(--shadow);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
@@ -170,7 +168,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: rgba(29, 185, 84, 0.12);
+  background: var(--accent-soft);
   border: 1px solid var(--accent-border);
   display: inline-flex;
   align-items: center;
@@ -213,7 +211,6 @@
 .drop-zone.busy {
   cursor: progress;
   pointer-events: none;
-  opacity: 0.72;
   border-color: var(--accent);
   border-style: solid;
 }
@@ -264,20 +261,20 @@
 
 .btn-primary {
   background: var(--accent);
-  color: #06130a;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.1);
+  background: #8cc9a5;
 }
 
 
 .btn-secondary {
   background: var(--surface-2);
   color: var(--text);
-  border-color: var(--border);
+  border-color: var(--border-strong);
 }
 
 
@@ -289,8 +286,14 @@
 
 .btn:disabled,
 .btn-link:disabled {
-  opacity: 0.5;
+  color: var(--text-muted);
   cursor: default;
+}
+
+
+.btn-primary:disabled {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 
 
@@ -406,11 +409,11 @@
 
 
 .status--warning {
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-left: 4px solid #f59e0b;
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  border-left: 4px solid var(--warning);
   border-radius: var(--radius-sm);
-  color: #fcd34d;
+  color: var(--warning);
   padding: var(--sp-3) var(--sp-4);
   text-align: left;
 }
@@ -622,7 +625,7 @@
 
 
 .card h2 a:hover {
-  color: var(--accent);
+  text-decoration: underline;
 }
 
 
@@ -687,7 +690,7 @@
   align-items: center;
   justify-content: center;
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: var(--fs-md);
@@ -703,7 +706,7 @@
 
 
 .btn-step:disabled {
-  opacity: 0.4;
+  color: var(--text-muted);
   cursor: not-allowed;
 }
 
@@ -726,7 +729,7 @@
   max-height: 80vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow);
   margin: auto;
 }
 
@@ -771,7 +774,7 @@
   cursor: pointer;
   padding: var(--sp-3);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   background: var(--surface-2);
 }
 
@@ -899,7 +902,7 @@
 
 .btn {
   background: var(--surface-2);
-  border-color: var(--border);
+  border-color: var(--border-strong);
   color: var(--text);
   border-radius: var(--radius-sm);
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
@@ -908,13 +911,13 @@
 
 .btn-primary {
   background: var(--accent);
-  color: #07150c;
+  color: var(--on-accent);
 }
 
 
 .btn-secondary {
   background: var(--surface-2);
-  border-color: var(--border);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -1109,7 +1112,7 @@
 select,
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
   color-scheme: dark;
-  border-color: var(--border);
+  border-color: var(--border-strong);
   border-radius: var(--radius-sm);
   background-color: var(--surface-2);
   color: var(--text);
@@ -1150,7 +1153,7 @@ textarea:focus-visible {
 
 textarea {
   color-scheme: dark;
-  border-color: var(--border);
+  border-color: var(--border-strong);
   border-radius: var(--radius-sm);
   background-color: var(--surface-2);
   color: var(--text);
@@ -1159,4 +1162,13 @@ textarea {
   padding: var(--sp-2) var(--sp-3);
   font: inherit;
   font-size: var(--fs-sm);
+}
+
+
+select:disabled,
+input:disabled,
+textarea:disabled {
+  color: var(--text-muted);
+  opacity: 1;
+  cursor: not-allowed;
 }

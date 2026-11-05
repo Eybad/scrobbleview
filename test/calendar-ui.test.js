@@ -5,7 +5,7 @@ import {
   calendarMonthViewHTML,
   calendarScaleToggleHTML
 } from '../app/calendar-ui.js';
-import { makeScale, HEAT } from '../src/charts.js';
+import { makeScale, NO_DATA } from '../src/charts.js';
 
 test('calendarInspectorHTML: renders inspector with explicit filter and range actions', () => {
   const html = calendarInspectorHTML({ year: 2024, byMs: true });
@@ -39,6 +39,22 @@ test('calendarMonthViewHTML: renders month navigation and comfortable cell touch
   assert.ok(html.includes('class="cal-month-cell"'));
   assert.ok(html.includes('data-day='));
   assert.ok(html.includes('2024-05-15'));
+});
+
+test('calendarMonthViewHTML: distingue el período sin datos con patrón', () => {
+  const html = calendarMonthViewHTML({
+    year: 2024,
+    month: 5,
+    daysMap: new Map(),
+    colorScale: makeScale(100),
+    dataRange: {
+      from: Math.floor(Date.UTC(2024, 4, 15) / 86400000),
+      to: Math.floor(Date.UTC(2024, 4, 15) / 86400000)
+    }
+  });
+
+  assert.match(html, /class="cal-month-cell cal-month-cell--no-data"[^>]*data-date="2024-05-01"[^>]*style="background-color: #101822"[^>]*aria-label="2024-05-01: sin datos"/);
+  assert.ok(html.includes(`background-color: ${NO_DATA}`));
 });
 
 test('calendarScaleToggleHTML: explains shared scale and normalized scale options', () => {

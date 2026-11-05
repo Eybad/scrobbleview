@@ -4,16 +4,16 @@ export const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'a
 export const DOW_SHORT = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
 export const DOW_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-export const PALETTE = ['#3b82f6', '#f59e0b', '#1db954', '#a855f7', '#06b6d4', '#ec4899', '#eab308', '#10b981', '#8b5cf6', '#f97316'];
+export const PALETTE = ['#88a9cc', '#c2aa7a', '#78b892', '#ad96bd', '#7eb9bc', '#c392a4', '#b8b87c', '#7aa89a', '#9b9ec2', '#c29a7e'];
 
 // Keep SVG colors in sync with CSS; generated strings cannot read CSS variables.
-export const ACCENT = '#1db954';
-export const HEAT = ['#1a1e26', '#123524', '#14532d', '#15803d', '#22c55e', '#4ade80'];
+export const ACCENT = '#78b892';
+export const HEAT = ['#1a2533', '#567c84', '#70938f', '#8baa9c', '#a6c1ad', '#c2d7c4'];
 
 // No data differs from zero activity inside the observed range.
-export const NO_DATA = '#1e222b';
+export const NO_DATA = '#101822';
 
-const GRID = '#2a2f3a';
+const GRID = '#2b3a4d';
 
 export function esc(s) {
   return String(s)
@@ -328,6 +328,7 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
     monthLabels.push(`<text x="${34 + col * (cellSize + gap)}" y="13" class="chart-label" font-size="12">${MONTHS_SHORT[m]}</text>`);
   }
   const cells = [];
+  const noDataPatternId = `calendar-no-data-${year}`;
   for (let doy = 0; doy < daysInYear; doy++) {
     const date = new Date(Date.UTC(year, 0, 1 + doy));
     const iso = date.toISOString().slice(0, 10);
@@ -339,12 +340,13 @@ export function calendarGrid({ days, year, colorScale, cellTitle = (d) => `${d.d
     // Distinguish uncovered dates from zero activity within the observed range.
     const day = Math.floor(Date.UTC(year, 0, 1 + doy) / 86400000);
     const outOfData = dataRange != null && (day < dataRange.from || day > dataRange.to);
-    const fill = outOfData ? NO_DATA : colorScale(v);
+    const fill = outOfData ? `url(#${noDataPatternId})` : colorScale(v);
     const title = outOfData ? `${iso}: sin datos` : cellTitle({ date: iso, value: v });
     const attrs = interactive ? ` data-day="${day}"` : '';
     cells.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${fill}" rx="2"${attrs}><title>${esc(title)}</title></rect>`);
   }
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Calendario de actividad ${esc(String(year))}" class="chart calendar">${monthLabels.join('')}${cells.join('')}</svg>`;
+  const pattern = `<defs><pattern id="${noDataPatternId}" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="${NO_DATA}"/><path d="M0 0V4" stroke="#64758a" stroke-width="1"/></pattern></defs>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Calendario de actividad ${esc(String(year))}" class="chart calendar">${pattern}${monthLabels.join('')}${cells.join('')}</svg>`;
 }
 
 export function listeningClock({ cells, colorScale, cellTitle = (c) => `${DOW_LONG[c.dow]} ${c.hour}:00 — ${c.value}`, cellSize = 14, gap = 2 }) {
