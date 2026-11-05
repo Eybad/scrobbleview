@@ -263,6 +263,10 @@ async function run() {
   input.dispatchEvent(new appWindow.Event('change', { bubbles: true }));
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
   assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
+  const persistentAppRoot = appDocument.getElementById('app-root');
+  const persistentFrameSlots = [...appDocument.querySelectorAll('[data-app-slot]')];
+  const persistentFilterBar = appDocument.getElementById('filter-bar');
+  const persistentViewRoot = appDocument.getElementById('view-root');
   const tabButton = element('.tabs button');
   const tabButtonStyle = appWindow.getComputedStyle(tabButton);
   assert(tabButtonStyle.flexGrow === '1' && tabButtonStyle.flexBasis === '0px' && tabButtonStyle.justifyContent === 'center', 'Las pestañas distribuyen y centran sus botones');
@@ -301,6 +305,10 @@ async function run() {
   shareFixture.remove();
   navLink('Resumen del período').click();
   await waitFor(() => Boolean(element('.hero-archetype')), 'abrir el resumen del período para verificar su tarjeta');
+  assert(appDocument.getElementById('app-root') === persistentAppRoot, 'La raíz de la aplicación debe sobrevivir a los cambios de vista');
+  assert([...appDocument.querySelectorAll('[data-app-slot]')].every((slot, index) => slot === persistentFrameSlots[index]), 'Los slots globales deben conservar sus nodos');
+  assert(appDocument.getElementById('filter-bar') === persistentFilterBar, 'La barra global de filtros debe conservar sus controles');
+  assert(appDocument.getElementById('view-root') === persistentViewRoot, 'El slot de vista debe conservar su nodo');
   const heroStyle = appWindow.getComputedStyle(element('.hero-archetype'));
   assert(heroStyle.borderLeftColor === heroStyle.borderColor, 'El resumen del período conserva un borde uniforme');
   navLink('Resumen').click();

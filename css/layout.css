@@ -158,7 +158,12 @@ main.container {
 }
 
 
-#view-root > :last-child {
+.app-frame-slot {
+  display: contents;
+}
+
+
+#view-root > [data-view-content] > :last-child {
   margin-bottom: 0;
 }
 

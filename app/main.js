@@ -93,6 +93,18 @@ let exploreController = null;
 let chartInteractions = null;
 let calendarController = null;
 let calendarViewContext = null;
+let appFrame = null;
+
+function disposeApplicationFrame() {
+  exploreController?.dispose();
+  exploreController = null;
+  chartInteractions?.dispose();
+  chartInteractions = null;
+  calendarController?.dispose();
+  calendarController = null;
+  appRoot.replaceChildren();
+  appFrame = null;
+}
 
 // Keep the toast outside #app-root so it survives view renders.
 const toast = document.createElement('div');
@@ -185,12 +197,7 @@ function reportProcessingError(error, type = 'general') {
 }
 
 async function initializeAnalysis(result) {
-  exploreController?.dispose();
-  exploreController = null;
-  chartInteractions?.dispose();
-  chartInteractions = null;
-  calendarController?.dispose();
-  calendarController = null;
+  disposeApplicationFrame();
   compareResult = null;
   compareResultKey = null;
   compareStatus = 'idle';
@@ -497,6 +504,73 @@ function navHTML(active) {
   </nav>`;
 }
 
+function ensureApplicationFrame() {
+  if (appFrame) return appFrame;
+  const [name] = parseHash();
+  const navigation = document.createElement('div');
+  navigation.className = 'app-frame-slot';
+  navigation.dataset.appSlot = 'navigation';
+  navigation.innerHTML = navHTML(name);
+  const context = document.createElement('div');
+  context.className = 'app-frame-slot';
+  context.dataset.appSlot = 'context';
+  context.innerHTML = contextBarHTML({ state, model, metric: activeMetric });
+  const filters = document.createElement('div');
+  filters.className = 'app-frame-slot';
+  filters.dataset.appSlot = 'filters';
+  filters.innerHTML = filterBarHTML(model, state);
+  const warning = document.createElement('div');
+  warning.className = 'app-frame-slot';
+  warning.dataset.appSlot = 'warning';
+  const viewRoot = document.createElement('div');
+  viewRoot.id = 'view-root';
+  appRoot.replaceChildren(navigation, context, filters, warning, viewRoot);
+  appFrame = { navigation, context, filters, warning, viewRoot };
+  wireFilters();
+  return appFrame;
+}
+
+function updateFramePresentation(name, warningHTML = '') {
+  const frame = ensureApplicationFrame();
+  const navX = frame.navigation.querySelector('.app-nav')?.scrollLeft ?? 0;
+  frame.navigation.innerHTML = navHTML(name);
+  frame.context.innerHTML = contextBarHTML({ state, model, metric: activeMetric });
+  frame.warning.innerHTML = warningHTML;
+  updateFilterDynamics();
+  const nav = frame.navigation.querySelector('.app-nav');
+  if (!nav) return;
+  nav.scrollLeft = navX;
+  const syncNavFade = () => {
+    nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
+    nav.classList.toggle('is-end', nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2);
+  };
+  syncNavFade();
+  nav.addEventListener('scroll', syncNavFade, { passive: true });
+  const activeLink = nav.querySelector('a[aria-current="page"]');
+  if (activeLink) {
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = activeLink.getBoundingClientRect();
+    const visibleLeft = navRect.left + nav.clientLeft;
+    const visibleRight = visibleLeft + nav.clientWidth;
+    if (linkRect.left < visibleLeft) nav.scrollLeft -= visibleLeft - linkRect.left;
+    else if (linkRect.right > visibleRight) nav.scrollLeft += linkRect.right - visibleRight;
+  }
+}
+
+function renderViewContent(markup, viewName) {
+  const frame = ensureApplicationFrame();
+  const indexSlot = document.createElement('div');
+  indexSlot.dataset.viewIndex = '';
+  indexSlot.hidden = true;
+  const content = document.createElement('div');
+  content.dataset.viewContent = '';
+  content.innerHTML = markup;
+  frame.viewRoot.dataset.view = viewName;
+  frame.viewRoot.replaceChildren(indexSlot, content);
+  chartInteractions?.refresh();
+  calendarController?.refresh();
+}
+
 // Keep the persistent save prompt separate from transient cache messages.
 const cacheToast = document.createElement('div');
 cacheToast.id = 'cache-toast';
@@ -664,8 +738,6 @@ function prepareComparison(context) {
 function render() {
   if (!current) return;
   const [name, id, , resolved] = parseHash();
-  // Restore horizontal nav position after rebuilding its markup.
-  const navX = appRoot.querySelector('.app-nav')?.scrollLeft ?? 0;
   const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);
   calendarViewContext = name === 'calendar' ? viewCtx : null;
@@ -686,30 +758,11 @@ function render() {
     viewContent = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
   }
   const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
-  appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
-  chartInteractions?.refresh();
-  calendarController?.refresh();
+  ensureApplicationFrame();
+  updateFramePresentation(name, filterWarning);
+  renderViewContent(viewContent, name);
   updateCacheToast();
   announceFilters();
-  const nav = appRoot.querySelector('.app-nav');
-  if (nav) {
-    nav.scrollLeft = navX;
-    const syncNavFade = () => {
-      nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
-      nav.classList.toggle('is-end', nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2);
-    };
-    syncNavFade();
-    nav.addEventListener('scroll', syncNavFade, { passive: true });
-    const activeLink = nav.querySelector('a[aria-current="page"]');
-    if (activeLink) {
-      const navRect = nav.getBoundingClientRect();
-      const linkRect = activeLink.getBoundingClientRect();
-      const visibleLeft = navRect.left + nav.clientLeft;
-      const visibleRight = visibleLeft + nav.clientWidth;
-      if (linkRect.left < visibleLeft) nav.scrollLeft -= visibleLeft - linkRect.left;
-      else if (linkRect.right > visibleRight) nav.scrollLeft += linkRect.right - visibleRight;
-    }
-  }
   siteHeader?.classList.remove('site-header--home');
   headerActions?.removeAttribute('hidden');
   siteFooter?.removeAttribute('hidden');
@@ -718,7 +771,6 @@ function render() {
     footerMeta.hidden = false;
   }
   tagline?.setAttribute('hidden', '');
-  wireFilters();
   wireView();
 }
 
@@ -727,20 +779,14 @@ async function applyAndRenderView(focusSelector = null) {
   unresolvedFilter = false;
   appRoot.querySelector('#filter-resolution-warning')?.remove();
   syncHash();
-  updateFilterDynamics();
   if (!await refreshModel()) return;
   const [name, id] = parseHash();
-  const root = document.getElementById('view-root');
-  if (root) {
-    const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
-    const viewCtx = buildViewContext(name);
-    calendarViewContext = name === 'calendar' ? viewCtx : null;
-    if (name === 'compare') prepareComparison(viewCtx);
-    root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
-    chartInteractions?.refresh();
-    calendarController?.refresh();
-  }
-  updateFilterDynamics();
+  const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
+  const viewCtx = buildViewContext(name);
+  calendarViewContext = name === 'calendar' ? viewCtx : null;
+  if (name === 'compare') prepareComparison(viewCtx);
+  updateFramePresentation(name);
+  renderViewContent(isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx), name);
   announceFilters();
   syncHash();
   wireView();
@@ -1204,7 +1250,7 @@ const exportUI = createExportUI({
 
 function mountExploreController() {
   exploreController?.dispose();
-  exploreController = mountExplore(appRoot, {
+  exploreController = mountExplore(appFrame.viewRoot, {
     readSnapshot() {
       const [, , , route] = parseHash();
       const confirmed = analysisState.getConfirmed();
@@ -1217,9 +1263,11 @@ function mountExploreController() {
       history.replaceState(history.state, '', hash);
       analysisState.updatePresentation({ hash: location.hash, metric: activeMetric });
       const [view, id] = parseHash();
-      const viewRoot = document.getElementById('view-root');
+      const viewRoot = appFrame?.viewRoot;
       if (view !== 'explore' || !viewRoot || !current) return;
-      viewRoot.innerHTML = renderView('explore', current, id, buildViewContext('explore'));
+      const viewContext = buildViewContext('explore');
+      updateFramePresentation('explore', '');
+      renderViewContent(renderView('explore', current, id, viewContext), 'explore');
       wireView(returnState);
     },
     savePreference(key, value) {
@@ -1321,7 +1369,7 @@ function dispatchCalendarAction(action) {
 
 function mountCalendarController() {
   calendarController?.dispose();
-  calendarController = mountCalendar(appRoot, {
+  calendarController = mountCalendar(appFrame.viewRoot, {
     readState() {
       const [, , , route] = parseHash();
       return { route, state, context: calendarViewContext, model: current };
@@ -1343,8 +1391,9 @@ const inputApi = setupInput({
   onReady() {
     // An existing hash takes precedence over the default dashboard route.
     if (!location.hash) location.hash = '#/dashboard';
+    ensureApplicationFrame();
     mountExploreController();
-    chartInteractions = mountChartInteractions(appRoot, { announce });
+    chartInteractions = mountChartInteractions(appFrame.viewRoot, { announce });
     mountCalendarController();
     render();
   },
@@ -1380,7 +1429,7 @@ cancelProcessing.addEventListener('click', () => {
   analysisState.clear();
   analysisClient.cancel();
   model = null; current = null; currentPrev = null; currentDetail = null; detailContext = null; cacheOffer = null;
-  appRoot.replaceChildren();
+  disposeApplicationFrame();
   for (const job of jobs.values()) clearTimeout(job.timer);
   jobs.clear(); processingError = null; processingErrorType = null;
   appRoot.setAttribute('aria-busy', 'false');
