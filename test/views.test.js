@@ -136,11 +136,13 @@ test('rankings: barra proporcional translúcida por fila', async () => {
   assert.ok(/--bar-w:\d+(?:\.\d+)?%/.test(html), 'filas proporcionales al máximo');
 });
 
-test('meta de vistas: rango destacado en dashboard y metadatos de carga en footer', async () => {
+test('dashboard exposes its heading and period while keeping load metadata in the footer', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);
   assert.ok(!dash.includes('>Tu resumen<'), 'sin título visible redundante "Tu resumen"');
-  assert.ok(dash.includes('<h1 class="visually-hidden">Resumen</h1>'), 'h1 accesible conservado');
+  const headings = [...dash.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)];
+  assert.equal(headings.length, 1);
+  assert.equal(headings[0][1].trim(), 'Resumen');
   const firstMeta = dash.match(/view-range">([^<]*)</)[1];
   assert.ok(firstMeta.includes('→') && !firstMeta.includes('·'), 'primera línea: solo el rango de fechas con hora y minuto');
   assert.ok(!dash.includes('archivos ·') && !dash.includes('Se ignoraron:'), 'metadatos de archivos y warnings retirados del encabezado de Resumen');
@@ -426,17 +428,16 @@ test('contraste: muted sobre surface-2 cumple WCAG AA (≥ 4.5:1)', async () => 
   assert.ok(css.includes('.btn-link.btn-quiet:hover'), 'el hover del descarte gana la cascada (no hereda el accent de btn-link)');
 });
 
-test('css: el hover de filas no aplica en táctil ni tapa la barra', async () => {
+test('table hover uses a fine pointer and preserves share bar backgrounds', async () => {
   const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  const mq = css.indexOf('@media (hover: hover)');
-  assert.ok(mq >= 0, 'media query (hover: hover) presente');
-  assert.ok(css.indexOf('tbody tr:hover td') > mq, 'hover genérico de fila dentro de la media query');
-  assert.ok(css.indexOf('tr:hover td:first-child') > mq, 'sync de celda sticky dentro de la media query');
-  const sel = 'tr[style*="--bar-w"]:hover td:not(:first-child)';
-  assert.ok(css.includes(sel), 'regla de hover para filas con barra');
-  const block = css.slice(css.indexOf(sel));
-  const body = block.slice(block.indexOf('{') + 1, block.indexOf('}'));
-  assert.ok(body.includes('background: transparent'), 'tds transparentes en hover: el gradiente del tr sigue visible');
+  const hoverMedia = css.match(/@media\s*\(hover:\s*hover\)\s*and\s*\(pointer:\s*fine\)\s*\{([\s\S]*?)\n\}/g) ?? [];
+  assert.ok(hoverMedia.length > 0);
+  assert.ok(hoverMedia.some(media => /tbody tr:hover td\s*\{[^}]*background-color:\s*var\(--surface-2\)/.test(media)));
+  assert.ok(hoverMedia.some(media => /\.table-scroll table tbody tr:hover td:first-child\s*\{[^}]*background-color:\s*var\(--surface-2\)/.test(media)));
+  const shareRule = css.match(/[^{}]*\.col-share\s*\{([^{}]*background-image[^{}]*)\}/);
+  assert.ok(shareRule);
+  assert.match(shareRule[1], /background-image:\s*linear-gradient\([^;]*var\(--bar-w\)/);
+  assert.ok(hoverMedia.every(media => !/\bbackground\s*:/.test(media)));
 });
 
 test('filter-ui: rango invertido colapsa al día editado', () => {
@@ -751,7 +752,7 @@ test('filter-ui: sin switch global de métrica (solo en rankings) y badge de fil
   assert.ok(barAdvanced.includes('id="filter-adv-badge">2<'));
 });
 
-test('rankings and css: Top 100 option, skip-link, base links, and no invalid --sp-5', async () => {
+test('rankings offer Top 100, the page has a skip link, and spacing tokens are defined', async () => {
   const model = await demoModel();
   const rankHtml = rankCardHTML(model, { topN: 100 });
   assert.ok(rankHtml.includes('<option value="100" selected>Top 100</option>'));
@@ -761,7 +762,10 @@ test('rankings and css: Top 100 option, skip-link, base links, and no invalid --
   assert.ok(html.includes('id="main-content"'));
 
   const css = await readFile(new URL('../css/style.css', import.meta.url), 'utf8');
-  assert.ok(!css.includes('var(--sp-5)'));
+  const spacingTokens = new Set([...css.matchAll(/(--sp-\d+)\s*:/g)].map(match => match[1]));
+  for (const [, token] of css.matchAll(/var\((--sp-\d+)\)/g)) {
+    assert.ok(spacingTokens.has(token), `Undefined spacing token: ${token}`);
+  }
   assert.ok(css.includes('.skip-link'));
   assert.ok(/^\s*a\s*\{/m.test(css));
 });

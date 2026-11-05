@@ -1161,9 +1161,9 @@ tbody tr:last-child td {
 }
 
 /* Avoid persistent hover styling after taps on touch screens. */
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   tbody tr:hover td {
-    background: var(--surface-2);
+    background-color: var(--surface-2);
   }
 }
 
@@ -1300,9 +1300,9 @@ td a:hover {
   z-index: 3;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .table-scroll table tbody tr:hover td:first-child {
-    background: var(--surface-2);
+    background-color: var(--surface-2);
   }
 }
 
