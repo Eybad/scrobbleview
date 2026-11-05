@@ -63,11 +63,13 @@ test('A10: captureHistoryState and restoreHistoryState preserve scroll and focus
   assert.equal(focusedSelector, '[data-metric="plays"]');
 });
 
-test('contextBarHTML: formats active period, filter pill, and metric switch', () => {
+test('contextBarHTML: keeps the requested period visible and warns about incomplete coverage', () => {
   const model = { meta: { firstTs: 1704067200, lastTs: 1706745600 }, yearly: new Map([[2024, {}]]) };
 
   const htmlAll = contextBarHTML({ state: emptyFilterState(), model, metric: 'ms' });
   assert.ok(htmlAll.includes('Todo el historial'));
+  assert.ok(!htmlAll.match(/class="context-pill context-period"[^>]*\shidden/));
+  assert.ok(!htmlAll.includes('context-coverage-warning'));
   assert.ok(htmlAll.includes('data-metric="ms"'));
   assert.ok(htmlAll.includes('aria-pressed="true"'));
 
@@ -75,5 +77,13 @@ test('contextBarHTML: formats active period, filter pill, and metric switch', ()
   const htmlRange = contextBarHTML({ state: stateRange, model, metric: 'plays' });
   assert.ok(htmlRange.includes('2024-01-01 – 2024-02-01'));
   assert.ok(htmlRange.includes('data-metric="plays"'));
-  assert.ok(htmlRange.includes('aria-label="Filtros activos: 1 filtro aplicado"'));
+  assert.ok(!htmlRange.includes('context-coverage-warning'));
+
+  const incompleteRange = {
+    ...emptyFilterState(),
+    range: { from: 1703980800, to: 1706832000 }
+  };
+  const htmlIncomplete = contextBarHTML({ state: incompleteRange, model, metric: 'ms' });
+  assert.ok(htmlIncomplete.includes('context-coverage-warning'));
+  assert.ok(htmlIncomplete.includes('El rango observado no abarca todo el período seleccionado.'));
 });

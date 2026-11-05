@@ -261,7 +261,7 @@ async function clearCached() {
 function setFilterBusy(busy) {
   appRoot.setAttribute('aria-busy', String(busy));
   appRoot.classList.toggle('app--updating', busy);
-  for (const selector of ['#filter-bar', '#view-root']) {
+  for (const selector of ['#analysis-controls', '#view-root']) {
     appRoot.querySelector(selector)?.toggleAttribute('inert', busy);
   }
 }
@@ -457,6 +457,39 @@ function resetPreferences() {
   announce('Preferencias restablecidas a los valores predeterminados.');
 }
 
+function updateContextBar(root, options) {
+  const template = document.createElement('template');
+  template.innerHTML = contextBarHTML(options);
+  const next = template.content.firstElementChild;
+  const current = root.querySelector('.context-bar');
+  if (!next) {
+    current?.remove();
+    return;
+  }
+  if (!current) {
+    root.replaceChildren(next);
+    return;
+  }
+
+  const currentPeriod = current.querySelector('.context-period');
+  const nextPeriod = next.querySelector('.context-period');
+  currentPeriod.textContent = nextPeriod.textContent;
+  currentPeriod.title = nextPeriod.title;
+
+  const currentWarning = current.querySelector('.context-coverage-warning');
+  const nextWarning = next.querySelector('.context-coverage-warning');
+  if (currentWarning && nextWarning) currentWarning.textContent = nextWarning.textContent;
+  else if (nextWarning) currentPeriod.after(nextWarning);
+  else currentWarning?.remove();
+
+  for (const metric of ['ms', 'plays']) {
+    const button = current.querySelector(`[data-metric="${metric}"]`);
+    const nextButton = next.querySelector(`[data-metric="${metric}"]`);
+    button.className = nextButton.className;
+    button.setAttribute('aria-pressed', nextButton.getAttribute('aria-pressed'));
+  }
+}
+
 function navigationQuery(view) {
   const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
@@ -470,26 +503,30 @@ function navigationQuery(view) {
 
 function ensureApplicationFrame() {
   if (appFrame) return appFrame;
-  const [name] = parseHash();
   const navigation = document.createElement('div');
   navigation.className = 'app-frame-slot';
   navigation.dataset.appSlot = 'navigation';
+  const analysisControls = document.createElement('div');
+  analysisControls.id = 'analysis-controls';
+  analysisControls.className = 'app-analysis-controls';
+  analysisControls.dataset.appSlot = 'analysis';
   const context = document.createElement('div');
   context.className = 'app-frame-slot';
   context.dataset.appSlot = 'context';
-  context.innerHTML = contextBarHTML({ state, model, metric: activeMetric });
+  updateContextBar(context, { state, model, metric: activeMetric });
   const filters = document.createElement('div');
   filters.className = 'app-frame-slot';
   filters.dataset.appSlot = 'filters';
   filters.innerHTML = filterBarHTML(model, state);
+  analysisControls.append(context, filters);
   const warning = document.createElement('div');
   warning.className = 'app-frame-slot';
   warning.dataset.appSlot = 'warning';
   const viewRoot = document.createElement('div');
   viewRoot.id = 'view-root';
-  appRoot.replaceChildren(navigation, context, filters, warning, viewRoot);
+  appRoot.replaceChildren(navigation, analysisControls, warning, viewRoot);
   const navigationController = mountNavigation(navigation);
-  appFrame = { navigation, context, filters, warning, viewRoot, navigationController };
+  appFrame = { navigation, analysisControls, context, filters, warning, viewRoot, navigationController };
   wireFilters();
   return appFrame;
 }
@@ -497,7 +534,7 @@ function ensureApplicationFrame() {
 function updateFramePresentation(name, warningHTML = '') {
   const frame = ensureApplicationFrame();
   frame.navigationController.update({ view: name, query: navigationQuery(name), favorites });
-  frame.context.innerHTML = contextBarHTML({ state, model, metric: activeMetric });
+  updateContextBar(frame.context, { state, model, metric: activeMetric });
   frame.warning.innerHTML = warningHTML;
   updateFilterDynamics();
 }
@@ -779,10 +816,17 @@ function updateFilterDynamics() {
 }
 
 function wireFilters() {
-  const adv = appRoot.querySelector('.filter-advanced');
-  if (adv) {
-    adv.addEventListener('toggle', () => { advState = adv.open; });
-    adv.open = advState ?? false;
+  const advancedToggle = appRoot.querySelector('.filter-advanced-toggle');
+  const filterPanel = appRoot.querySelector('#filter-panel');
+  if (advancedToggle && filterPanel) {
+    const expanded = advState ?? false;
+    advancedToggle.setAttribute('aria-expanded', String(expanded));
+    filterPanel.hidden = !expanded;
+    advancedToggle.addEventListener('click', () => {
+      advState = filterPanel.hidden;
+      filterPanel.hidden = !advState;
+      advancedToggle.setAttribute('aria-expanded', String(advState));
+    });
   }
 
   appRoot.querySelectorAll('[data-preset]').forEach((btn) => {
@@ -1530,12 +1574,6 @@ appRoot.addEventListener('click', (e) => {
     render();
     const newBtn = appRoot.querySelector(`.context-bar [data-metric="${activeMetric}"]`);
     if (newBtn) newBtn.focus({ preventScroll: true });
-    return;
-  }
-  const focusBtn = e.target.closest?.('[data-action="focus-filters"]');
-  if (focusBtn && appRoot.contains(focusBtn)) {
-    const chips = document.getElementById('filter-chips');
-    if (chips) chips.focus();
     return;
   }
 });

@@ -163,6 +163,14 @@ main.container {
 }
 
 
+.app-analysis-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+
 #view-root > [data-view-content] > :last-child {
   margin-bottom: 0;
 }

@@ -298,19 +298,28 @@ test('rankings: título y artista escapados (canciones y álbumes)', async () =>
 test('filter-ui: fechas custom dentro de los avanzados colapsables', async () => {
   const model = await demoModel();
   const bar = filterBarHTML(model, emptyFilterState());
-  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
-  assert.ok(details.includes('data-filter="from"'), 'Desde dentro del details');
-  assert.ok(details.includes('data-filter="to"'), 'Hasta dentro del details');
+  const panel = bar.slice(bar.indexOf('id="filter-panel"'));
+  assert.ok(panel.includes('data-filter="from"'), 'Desde dentro del panel avanzado');
+  assert.ok(panel.includes('data-filter="to"'), 'Hasta dentro del panel avanzado');
+  const order = [
+    bar.indexOf('class="filter-row filter-presets"'),
+    bar.indexOf('class="filter-advanced-toggle"'),
+    bar.indexOf('id="filter-chips"'),
+    bar.indexOf('id="filter-panel"')
+  ];
+  assert.ok(order.every((position) => position >= 0) && order.every((position, index) => index === 0 || order[index - 1] < position), 'presets, summary, chips y panel conservan el orden acordado');
+  assert.ok(bar.includes('aria-controls="filter-panel"'), 'el summary controla el panel avanzado');
 });
 
 test('filter-ui: summary de avanzados con chevron a la izquierda y grupos marcados', async () => {
   const model = await demoModel();
   const bar = filterBarHTML(model, emptyFilterState());
-  const summary = bar.slice(bar.indexOf('<summary>'), bar.indexOf('</summary>'));
+  const summaryStart = bar.indexOf('class="filter-advanced-toggle"');
+  const summary = bar.slice(summaryStart, bar.indexOf('</button>', summaryStart));
   assert.ok(summary.includes('class="chevron"'), 'chevron presente en el summary');
-  assert.ok(summary.indexOf('class="chevron"') < summary.indexOf('Fechas'), 'chevron a la izquierda del texto');
-  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
-  assert.equal((details.match(/filter-group-start/g) || []).length, 2, 'dos inicios de grupo: días de semana y toggles');
+  assert.ok(summary.indexOf('class="chevron"') < summary.indexOf('Fechas y filtros'), 'chevron a la izquierda del texto');
+  const panel = bar.slice(bar.indexOf('id="filter-panel"'));
+  assert.equal((panel.match(/filter-group-start/g) || []).length, 2, 'dos inicios de grupo: días de semana y toggles');
 });
 
 test('filter-ui: chips de entidad y conversión de fechas', async () => {
@@ -404,7 +413,7 @@ test('filter-ui: Borrar todo vive en la fila de chips (sin fila propia)', async 
   const st = emptyFilterState();
   st.range = { from: 0, to: 86399 };
   const bar2 = filterBarHTML(model, st);
-  const chipsRow = bar2.slice(bar2.indexOf('id="filter-chips"'), bar2.indexOf('<details'));
+  const chipsRow = bar2.slice(bar2.indexOf('id="filter-chips"'), bar2.indexOf('id="filter-panel"'));
   assert.ok(chipsRow.includes('data-action="clear"'), 'Borrar todo dentro de la fila de chips');
   assert.ok(chipsRow.includes('Borrar todo'), 'etiqueta compacta');
 });
@@ -462,9 +471,9 @@ test('filter-ui: el announcer resume el resultado del filtrado', () => {
 test('filter-ui: min/max de los date inputs acotados al dataset', async () => {
   const model = await demoModel();
   const bar = filterBarHTML(model, emptyFilterState());
-  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
-  assert.ok(details.includes(`min="${locToISODate(model.meta.firstTs)}"`), 'Desde acotado al primer ts');
-  assert.ok(details.includes(`max="${locToISODate(model.meta.lastTs)}"`), 'Hasta acotado al último ts');
+  const panel = bar.slice(bar.indexOf('id="filter-panel"'));
+  assert.ok(panel.includes(`min="${locToISODate(model.meta.firstTs)}"`), 'Desde acotado al primer ts');
+  assert.ok(panel.includes(`max="${locToISODate(model.meta.lastTs)}"`), 'Hasta acotado al último ts');
 });
 
 test('empty state: mensaje y botón de limpiar cuando el filtro no matchea nada', () => {
@@ -750,6 +759,7 @@ test('filter-ui: sin switch global de métrica (solo en rankings) y badge de fil
   assert.equal(advancedFilterCount(state, model.meta.lastTs), 2);
   const barAdvanced = filterBarHTML(model, state);
   assert.ok(barAdvanced.includes('id="filter-adv-badge">2<'));
+  assert.ok(barAdvanced.includes('>Fechas y filtros<span'), 'el summary muestra el nombre acordado');
 });
 
 test('rankings offer Top 100, the page has a skip link, and spacing tokens are defined', async () => {
@@ -927,8 +937,8 @@ test('mobile rankings (Option 1B), filter-dates alignment, habits NaN/undefined 
   assert.ok(rankHtml.includes('<span class="cell-name">'), 'artist names wrapped in .cell-name for ellipsis truncation');
 
   const bar = filterBarHTML(model, emptyFilterState());
-  const details = bar.slice(bar.indexOf('<details'), bar.indexOf('</details>'));
-  assert.equal((details.match(/class="filter-row filter-dates"/g) || []).length, 2, 'both Desde/Hasta and Año/Mes use 2-col filter-dates grid');
+  const panel = bar.slice(bar.indexOf('id="filter-panel"'));
+  assert.equal((panel.match(/class="filter-row filter-dates"/g) || []).length, 2, 'Desde/Hasta y Año/Mes conservan sus filas de fechas');
 
   const habits = renderView('habits', model);
   assert.ok(!habits.includes('NaN'), 'habits view has no NaN values');

@@ -324,10 +324,14 @@ export function filterBarHTML(model, state) {
   const maxISO = model.meta.lastTs != null ? locToISODate(model.meta.lastTs) : null;
 
   return `<div class="filter-bar" id="filter-bar" role="group" aria-label="Filtros">
-    <div class="filter-row filter-presets">${presets}</div>
+    <div class="filter-toolbar">
+      <div class="filter-row filter-presets">${presets}</div>
+      <button type="button" class="filter-advanced-toggle" aria-expanded="false" aria-controls="filter-panel">
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>Fechas y filtros<span class="filter-badge" id="filter-adv-badge"${activeAdvCount > 0 ? '' : ' hidden'}>${activeAdvCount}</span>
+      </button>
+    </div>
     <div class="filter-row" id="filter-chips" tabindex="-1">${chipsHTML(model, state)}</div>
-    <details class="filter-advanced">
-      <summary><svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>Fechas y filtros avanzados<span class="filter-badge" id="filter-adv-badge"${activeAdvCount > 0 ? '' : ' hidden'}>${activeAdvCount}</span></summary>
+    <div class="filter-panel" id="filter-panel" hidden>
       <div class="filter-row filter-dates">
         <label class="field">Desde <input type="date" name="filter-from" autocomplete="off" data-filter="from" value="${fromISO}"${minISO ? ` min="${minISO}"` : ''}></label>
         <label class="field">Hasta <input type="date" name="filter-to" autocomplete="off" data-filter="to" value="${toISO}"${maxISO ? ` max="${maxISO}"` : ''}></label>
@@ -345,6 +349,6 @@ export function filterBarHTML(model, state) {
         <div class="chip-grid chip-grid-4" role="group" aria-label="Franjas del día">${blocks}</div>
       </div>
       <div class="filter-row filter-group-start toggle-grid">${toggles}</div>
-    </details>
+    </div>
   </div>`;
 }

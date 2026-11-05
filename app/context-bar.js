@@ -1,4 +1,4 @@
-import { locToISODate, advancedFilterCount } from './filter-ui.js';
+import { locToISODate, rangeFromMonth, rangeFromYear } from './filter-ui.js';
 import { esc } from '../src/charts.js';
 
 export function formatPeriodLabel(state, model) {
@@ -17,18 +17,17 @@ export function formatPeriodLabel(state, model) {
 export function contextBarHTML({ state, model, metric }) {
   if (!model) return '';
   const period = formatPeriodLabel(state, model);
-  const hasExplicitPeriod = Boolean(state.range || state.years?.size);
-  const advCount = advancedFilterCount(state, model.meta.lastTs ?? 0);
-  const entityCount = (state.artistId ? 1 : 0) + (state.trackId ? 1 : 0) + (state.albumId ? 1 : 0);
-  const totalFilters = advCount + entityCount;
-
-  const filterLabel = `${totalFilters} filtro${totalFilters > 1 ? 's' : ''} aplicado${totalFilters > 1 ? 's' : ''}`;
+  const requestedRange = state.range ?? selectedPeriodRange(state);
+  const observedStart = model.meta.firstTs;
+  const observedEnd = model.meta.lastTs;
+  const incompleteRange = requestedRange && Number.isFinite(observedStart) && Number.isFinite(observedEnd)
+    && (requestedRange.from < observedStart || requestedRange.to > observedEnd);
 
   return `<aside class="context-bar" aria-label="Contexto de análisis y métrica">
     <div class="context-bar-inner">
       <div class="context-summary">
-        <span class="context-pill context-period" title="Período activo"${hasExplicitPeriod ? '' : ' hidden'}>${esc(period)}</span>
-        ${totalFilters > 0 ? `<button type="button" class="context-pill context-filter-btn" data-action="focus-filters" aria-label="Filtros activos: ${filterLabel}">${totalFilters} filtro${totalFilters > 1 ? 's' : ''}</button>` : ''}
+        <span class="context-pill context-period" title="Período seleccionado">${esc(period)}</span>
+        ${incompleteRange ? '<span class="context-coverage-warning">El rango observado no abarca todo el período seleccionado.</span>' : ''}
       </div>
       <div class="context-controls">
         <div class="metric-switch" role="group" aria-label="Métrica">
@@ -38,4 +37,15 @@ export function contextBarHTML({ state, model, metric }) {
       </div>
     </div>
   </aside>`;
+}
+
+function selectedPeriodRange(state) {
+  const ranges = [];
+  for (const year of state.years ?? []) ranges.push(rangeFromYear(year));
+  for (const month of state.months ?? []) ranges.push(rangeFromMonth(month));
+  if (!ranges.length) return null;
+  return {
+    from: Math.min(...ranges.map((range) => range.from)),
+    to: Math.max(...ranges.map((range) => range.to))
+  };
 }
