@@ -348,6 +348,8 @@ async function run() {
     clientY: hourlyCellRect.top + hourlyCellRect.height / 2
   }));
   assert(!hourlyChart.querySelector('.chart-inspector').hidden, 'El toque/clic de un punto debe mantener abierto el inspector');
+  assert(hourlyCell.classList.contains('is-selected'), 'El punto tocado debe quedar seleccionado');
+  const selectedHourlyIdentity = hourlyPoints[35].date || hourlyPoints[35].label;
 
   navLink('Hábitos').click();
   await waitFor(() => Boolean(element('.chart-card[data-chart-id="habits-skips-monthly"]')), 'abrir serie mensual con banderas desconocidas');
@@ -361,6 +363,15 @@ async function run() {
   assert(skipsChart.querySelector('.table-fallback').textContent.includes('Sin base'), 'La tabla del gráfico debe conservar los puntos desconocidos');
   navLink('Resumen').click();
   await waitFor(() => viewHeading() === 'Resumen', 'volver al resumen tras inspeccionar gráficos');
+  const restoredHourlyChart = element('.chart-card[data-chart-id="dashboard-day-hour"]');
+  const restoredHourlyPoint = [...restoredHourlyChart.querySelectorAll('[data-chart-index]')]
+    .find(point => (hourlyPoints[Number(point.dataset.chartIndex)].date || hourlyPoints[Number(point.dataset.chartIndex)].label) === selectedHourlyIdentity);
+  assert(restoredHourlyPoint?.classList.contains('is-selected'), 'La selección debe restaurarse por identidad después de navegar');
+  assert(!restoredHourlyChart.querySelector('.chart-inspector').hidden, 'El inspector debe reabrirse al restaurar la selección');
+  restoredHourlyChart.querySelector('[data-action="close-inspector"]').click();
+  assert(restoredHourlyChart.querySelector('.chart-inspector').hidden, 'Cerrar debe ocultar el inspector');
+  assert(!restoredHourlyChart.querySelector('.is-selected'), 'Cerrar debe limpiar el punto seleccionado');
+  assert(appDocument.getElementById('live-status').textContent === 'Inspector cerrado.', 'Cerrar debe anunciar el estado actualizado');
 
   element('[data-preset="4w"]').click();
   await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '4', 'filtro de 4 semanas');

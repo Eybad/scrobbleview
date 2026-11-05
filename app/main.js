@@ -5,7 +5,7 @@ import { emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptTextFromConfirmed, emptyFiltersHTML, footerMetaText, calendarYearGridHTML } from './views.js';
 import { createExportUI } from './export-ui.js';
-import { esc, fmtNum, fmtMs, lineChart, barChart } from '../src/charts.js';
+import { esc, fmtNum, fmtMs } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
@@ -18,6 +18,7 @@ import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGrid
 import { parseCompareState, compareQuery, compareDateRange, compareDateAt, compareEntityKey, normalizeCompareEntities } from './compare-state.js';
 import { buildViewContext as createViewContext, discoveryQuery, LONGITUDINAL_PAGE_SIZES, LONGITUDINAL_THRESHOLDS, parseDiscoveryState } from './view-context.js';
 import { mountExplore } from './explore-controller.js';
+import { mountChartInteractions } from './chart-interactions.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -87,8 +88,8 @@ const tableLimits = initialLimits.map;
 let cacheOffer = null;
 let advState = null;
 let popReturnState = null;
-const chartSelections = new Map();
 let exploreController = null;
+let chartInteractions = null;
 let calAnchor = null;
 
 // Keep the toast outside #app-root so it survives view renders.
@@ -111,64 +112,6 @@ document.body.appendChild(liveRegion);
 
 function announce(text) {
   liveRegion.textContent = text;
-}
-
-function chartPoints(card) {
-  try {
-    const points = JSON.parse(card.dataset.chartPoints ?? '[]');
-    return Array.isArray(points) ? points : [];
-  } catch {
-    return [];
-  }
-}
-
-function resizeContractCharts() {
-  appRoot.querySelectorAll('.chart-card[data-chart-type="line"], .chart-card[data-chart-type="bar"]').forEach((card) => {
-    const svg = card.querySelector('svg.chart');
-    const chart = card.dataset.chartType;
-    const width = Math.floor(svg?.parentElement?.clientWidth ?? 0);
-    const points = chartPoints(card);
-    if (!svg || width <= 0 || points.length === 0) return;
-    const format = card.dataset.chartUnit === 'tiempo escuchado' ? fmtMs : fmtNum;
-    const markup = chart === 'line'
-      ? lineChart({ points: points.map((point) => ({ label: point.label, y: point.value })), format, width })
-      : barChart({ data: points.map((point) => ({ label: point.label, value: point.value })), format, width, showValue: svg.querySelector('.chart-value') != null });
-    svg.outerHTML = markup;
-  });
-}
-
-function selectChartPoint(card, index) {
-  const points = chartPoints(card);
-  if (!points.length) return;
-  const selectedIndex = Math.max(0, Math.min(points.length - 1, index));
-  const point = points[selectedIndex];
-  chartSelections.set(card.dataset.chartId, { index: selectedIndex, key: point.date || point.label });
-  const inspector = card.querySelector('.chart-inspector');
-  if (!inspector) return;
-  inspector.querySelector('.chart-inspector__label').textContent = point.date || point.label;
-  inspector.querySelector('.chart-inspector__value').textContent = point.valueText;
-  inspector.querySelector('.chart-inspector__pct').textContent = point.shareText ? ` · ${point.shareText}` : '';
-  inspector.hidden = false;
-  const status = card.querySelector('.chart-nav__status');
-  if (status) status.textContent = `${selectedIndex + 1} de ${points.length}: ${point.label}`;
-  card.querySelectorAll('[data-chart-step]').forEach((button) => {
-    const direction = Number(button.dataset.dir);
-    button.disabled = direction < 0 ? selectedIndex === 0 : selectedIndex === points.length - 1;
-  });
-  card.querySelectorAll('[data-chart-index]').forEach((item) => {
-    item.classList.toggle('is-selected', Number(item.dataset.chartIndex) === selectedIndex);
-  });
-}
-
-function restoreChartSelections() {
-  appRoot.querySelectorAll('.chart-card[data-chart-id]').forEach((card) => {
-    const selection = chartSelections.get(card.dataset.chartId);
-    if (!selection) return;
-    const points = chartPoints(card);
-    const matchingIndex = points.findIndex((point) => (point.date || point.label) === selection.key);
-    if (matchingIndex >= 0) selectChartPoint(card, matchingIndex);
-    else chartSelections.delete(card.dataset.chartId);
-  });
 }
 
 function restoreCalendarInspector() {
@@ -227,35 +170,6 @@ function syncCalendarGridSelection(selectedDate) {
     cell.parentElement?.setAttribute('aria-selected', String(selected));
     cell.classList.toggle('is-selected', selected);
   }
-}
-
-function chartIndexAt(svg, chart, event, points) {
-  const rect = svg.getBoundingClientRect();
-  if (chart.dataset.chartType === 'grid' || chart.dataset.chartType === 'stacked') {
-    const matrix = svg.getScreenCTM();
-    if (!matrix) return 0;
-    const cursor = svg.createSVGPoint();
-    cursor.x = event.clientX;
-    cursor.y = event.clientY;
-    const position = cursor.matrixTransform(matrix.inverse());
-    if (chart.dataset.chartType === 'stacked') {
-      const rowHeight = (svg.viewBox.baseVal.height - 4) / points.length;
-      return Math.max(0, Math.min(points.length - 1, Math.floor(position.y / rowHeight)));
-    }
-    const cols = Number(svg.dataset.gridCols);
-    const rows = Number(svg.dataset.gridRows);
-    const labelWidth = Number(svg.dataset.gridLabelWidth);
-    const labelTop = Number(svg.dataset.gridLabelTop ?? 0);
-    const cellWidth = Number(svg.dataset.gridCellWidth);
-    const cellHeight = Number(svg.dataset.gridCellHeight);
-    const gap = Number(svg.dataset.gridGap);
-    const x = Math.max(0, Math.min(cols - 1, Math.floor((position.x - labelWidth) / (cellWidth + gap))));
-    const y = Math.max(0, Math.min(rows - 1, Math.floor((position.y - labelTop) / (cellHeight + gap))));
-    return points.findIndex((point) => point.extra?.x === x && point.extra?.y === y);
-  }
-  if (rect.width <= 0) return 0;
-  const position = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-  return Math.round(position * (points.length - 1));
 }
 
 function announceFilters() {
@@ -329,6 +243,8 @@ function reportProcessingError(error, type = 'general') {
 async function initializeAnalysis(result) {
   exploreController?.dispose();
   exploreController = null;
+  chartInteractions?.dispose();
+  chartInteractions = null;
   compareResult = null;
   compareResultKey = null;
   compareStatus = 'idle';
@@ -823,8 +739,7 @@ function render() {
   }
   const filterWarning = unresolvedFilter ? `<div class="card" id="filter-resolution-warning" role="alert"><p>Un filtro de entidad del enlace no pudo asociarse con este historial. Buscá la entidad para seleccionarla de nuevo.</p><a href="#/v1/explore${esc(viewCtx.query)}">Buscar en Explorar</a></div>` : '';
   appRoot.innerHTML = navHTML(name) + filterBarHTML(model, state) + contextBarHTML({ state, model, metric: activeMetric }) + filterWarning + `<div id="view-root">${viewContent}</div>`;
-  resizeContractCharts();
-  restoreChartSelections();
+  chartInteractions?.refresh();
   restoreCalendarInspector();
   updateCacheToast();
   announceFilters();
@@ -873,8 +788,7 @@ async function applyAndRenderView(focusSelector = null) {
     const viewCtx = buildViewContext(name);
     if (name === 'compare') prepareComparison(viewCtx);
     root.innerHTML = isEmpty ? emptyFiltersHTML() : renderView(name, current, id, viewCtx);
-    resizeContractCharts();
-    restoreChartSelections();
+    chartInteractions?.refresh();
     restoreCalendarInspector();
   }
   updateFilterDynamics();
@@ -1384,6 +1298,7 @@ const inputApi = setupInput({
     // An existing hash takes precedence over the default dashboard route.
     if (!location.hash) location.hash = '#/dashboard';
     mountExploreController();
+    chartInteractions = mountChartInteractions(appRoot, { announce });
     render();
   },
   onError() {
@@ -1792,68 +1707,6 @@ appRoot.addEventListener('click', (e) => {
     return;
   }
 
-  const chartStep = e.target.closest?.('[data-chart-step]');
-  if (chartStep && appRoot.contains(chartStep)) {
-    const chart = chartStep.closest('.chart-card');
-    const selected = chartSelections.get(chart.dataset.chartId)?.index;
-    const direction = Number(chartStep.dataset.dir);
-    const start = selected ?? (direction > 0 ? -1 : 1);
-    selectChartPoint(chart, start + direction);
-    return;
-  }
-
-  const chartPage = e.target.closest?.('[data-chart-page]');
-  if (chartPage && appRoot.contains(chartPage)) {
-    const chart = chartPage.closest('.chart-card');
-    const controls = chartPage.closest('[data-chart-table]');
-    const rows = [...chart.querySelectorAll('[data-chart-row]')];
-    const pageSize = Number(controls.dataset.pageSize);
-    const pageCount = Math.ceil(rows.length / pageSize);
-    const page = Math.max(0, Math.min(pageCount - 1, Number(controls.dataset.page) + Number(chartPage.dataset.dir)));
-    const start = page * pageSize;
-    rows.forEach((row, index) => { row.hidden = index < start || index >= start + pageSize; });
-    controls.dataset.page = String(page);
-    controls.querySelector('.chart-table-status').textContent = `Mostrando ${start + 1}–${Math.min(start + pageSize, rows.length)} de ${rows.length}`;
-    controls.querySelector('[data-dir="-1"]').disabled = page === 0;
-    controls.querySelector('[data-dir="1"]').disabled = page >= pageCount - 1;
-    return;
-  }
-
-  const chartListPoint = e.target.closest?.('.chart-card[data-chart-type="list"] [data-chart-index]');
-  if (chartListPoint) {
-    const chart = chartListPoint.closest('.chart-card');
-    selectChartPoint(chart, Number(chartListPoint.dataset.chartIndex));
-    return;
-  }
-
-  const chartWrap = e.target.closest?.('.chart-card .chart-interactive-wrap');
-  const clickedChart = e.target.closest?.('svg.chart');
-  if (chartWrap && clickedChart) {
-    const svg = clickedChart;
-    const chart = chartWrap.closest('.chart-card');
-    const points = chartPoints(chart);
-    if (points.length) {
-      const selectedIndex = chartIndexAt(svg, chart, e, points);
-      if (selectedIndex >= 0) selectChartPoint(chart, selectedIndex);
-    }
-    return;
-  }
-
-  const closeInspector = e.target.closest?.('[data-action="close-inspector"]');
-  if (closeInspector && appRoot.contains(closeInspector)) {
-    const card = closeInspector.closest?.('.chart-card');
-    const inspector = card?.querySelector('.chart-inspector');
-    if (inspector) {
-      inspector.hidden = true;
-      chartSelections.delete(card.dataset.chartId);
-      card.querySelectorAll('[data-chart-index]').forEach((item) => item.classList.remove('is-selected'));
-      const status = card.querySelector('.chart-nav__status');
-      if (status) status.textContent = `Tocar o usar flechas para inspeccionar (${chartPoints(card).length} puntos)`;
-      card.querySelector('[data-chart-step][data-dir="-1"]')?.setAttribute('disabled', '');
-      card.querySelector('[data-chart-step][data-dir="1"]')?.removeAttribute('disabled');
-    }
-    return;
-  }
 });
 
 appRoot.addEventListener('keydown', (e) => {
@@ -1884,17 +1737,6 @@ appRoot.addEventListener('keydown', (e) => {
       return;
     }
   }
-  const nav = e.target.closest?.('.chart-nav');
-  if (!nav || !appRoot.contains(nav) || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-  const chart = nav.closest('.chart-card');
-  const points = chartPoints(chart);
-  if (!points.length) return;
-  const selected = chartSelections.get(chart.dataset.chartId)?.index;
-  const next = e.key === 'Home' ? 0 : e.key === 'End' ? points.length - 1 : Math.max(0, Math.min(points.length - 1, (selected ?? (e.key === 'ArrowRight' ? -1 : points.length)) + (e.key === 'ArrowRight' ? 1 : -1)));
-  e.preventDefault();
-  selectChartPoint(chart, next);
-  const activeStep = e.target.closest('[data-chart-step]');
-  if (activeStep?.disabled) chart.querySelector(`[data-dir="${-Number(activeStep.dataset.dir)}"]`)?.focus();
 });
 
 appRoot.addEventListener('change', (e) => {
@@ -1907,7 +1749,5 @@ appRoot.addEventListener('change', (e) => {
 });
 
 window.addEventListener('resize', () => {
-  resizeContractCharts();
-  restoreChartSelections();
   syncTallTables(appRoot);
 }, { passive: true });
