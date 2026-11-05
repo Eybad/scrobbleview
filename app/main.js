@@ -16,7 +16,7 @@ import { resetPresentationPreferences } from './presentation-preferences.js';
 import { contextBarHTML } from './context-bar.js';
 import { parseCalendarState, parseCalendarSelection, calendarQuery, calendarGridTargetDate } from './calendar-ui.js';
 import { parseCompareState, compareQuery, compareDateRange, compareDateAt, compareEntityKey, normalizeCompareEntities } from './compare-state.js';
-import { calculateCompareRange } from '../src/compare.js';
+import { buildViewContext as createViewContext, discoveryQuery, LONGITUDINAL_PAGE_SIZES, LONGITUDINAL_THRESHOLDS, parseDiscoveryState } from './view-context.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -28,41 +28,6 @@ const tagline = document.querySelector('.tagline');
 const LIMITS_STORAGE_KEY = 'scrobbleview:tableLimits';
 const PROCESSING_INDICATOR_DELAY_MS = 180;
 const VALID_LIMITS = new Set([10, 25, 50, 100]);
-const LONGITUDINAL_THRESHOLDS = new Set([30, 90, 180]);
-const LONGITUDINAL_PAGE_SIZES = new Set([25, 50, 100]);
-
-function parseDiscoveryState(query) {
-  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
-  const threshold = Number(params.get('cb'));
-  const pageSize = Number(params.get('lps'));
-  const page = (key) => {
-    const value = Number(params.get(key));
-    return Number.isSafeInteger(value) && value > 0 ? value : 1;
-  };
-  return {
-    comebackThresholdDays: LONGITUDINAL_THRESHOLDS.has(threshold) ? threshold : 30,
-    longitudinalPageSize: LONGITUDINAL_PAGE_SIZES.has(pageSize) ? pageSize : 25,
-    longitudinalPages: {
-      comebackTracks: page('ctp'),
-      comebackArtists: page('cap'),
-      firstTracks: page('ftp'),
-      firstArtists: page('fap')
-    }
-  };
-}
-
-function discoveryQuery(query, state) {
-  const params = new URLSearchParams((query ?? '').replace(/^\?/, ''));
-  const pages = state.longitudinalPages ?? {};
-  params.set('cb', String(LONGITUDINAL_THRESHOLDS.has(state.comebackThresholdDays) ? state.comebackThresholdDays : 30));
-  params.set('lps', String(LONGITUDINAL_PAGE_SIZES.has(state.longitudinalPageSize) ? state.longitudinalPageSize : 25));
-  for (const [key, field] of [['ctp', 'comebackTracks'], ['cap', 'comebackArtists'], ['ftp', 'firstTracks'], ['fap', 'firstArtists']]) {
-    const value = Number(pages[field]);
-    if (Number.isSafeInteger(value) && value > 1) params.set(key, String(value));
-    else params.delete(key);
-  }
-  return params.toString();
-}
 
 function loadStoredLimits() {
   const map = new Map();
@@ -722,12 +687,9 @@ cacheToast.addEventListener('click', async (e) => {
 });
 
 function buildViewContext(viewName) {
-  const fParams = portableFilterParams(state, model);
-  const mParam = serializeMetricParam(activeMetric);
-  const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
-  const [, , rawQuery] = parseHash();
-
-  let exploreState = null;
+  const [, , , route] = parseHash();
+  const rawQuery = route.query ?? '';
+  let presentation = {};
   if (viewName === 'explore') {
     const tab = parseExploreState(rawQuery).tab;
     const storedDensity = typeof localStorage !== 'undefined' ? localStorage.getItem('scrobbleview:density') : null;
@@ -736,89 +698,22 @@ function buildViewContext(viewName) {
     if (storedColsRaw) {
       try { visibleCols = new Set(JSON.parse(storedColsRaw)); } catch (_) {}
     }
-    exploreState = parseExploreState(rawQuery, { density: storedDensity, visibleCols });
+    presentation = { density: storedDensity, visibleCols };
   }
-
-  const contextQuery = viewName === 'calendar' || viewName === 'day'
-    ? `?${calendarQuery(queryStr, state.calMonth, state.normalizeYears, {
-      date: state.calDate,
-      rangeFrom: state.calRangeFrom,
-      rangeTo: state.calRangeTo
-    })}`
-    : queryStr;
-  const query = viewName === 'discovery' ? `?${discoveryQuery(contextQuery, state)}` : contextQuery;
-  const longitudinalKey = JSON.stringify([filterParams(state), state.comebackThresholdDays ?? 30, state.longitudinalPages, state.longitudinalPageSize]);
-
-  const observedRange = model?.meta?.firstTs == null ? null : {
-    from: Math.floor(model.meta.firstTs / 86400) * 86400,
-    to: Math.floor(model.meta.lastTs / 86400) * 86400 + 86399
-  };
-  const defaultCompareRange = state.range ?? observedRange;
-  const compareFrom = state.compareFrom ?? compareDateAt(defaultCompareRange, 'from');
-  const compareTo = state.compareTo ?? compareDateAt(defaultCompareRange, 'to');
-  const compareRangeA = compareDateRange(compareFrom, compareTo);
-  const compareRefRange = compareDateRange(state.compareRefFrom, state.compareRefTo);
-  const compareDataRange = model?.meta?.firstTs == null ? null : { minSec: model.meta.firstTs, maxSec: model.meta.lastTs };
-  let compareRangeB = compareRefRange;
-  let compareWarning = '';
-  let compareError = '';
-  if (compareRangeA && state.comparePreset !== 'manual') {
-    try {
-      const calculated = calculateCompareRange(state.comparePreset, compareRangeA, compareDataRange);
-      compareRangeB = calculated.rangeB;
-      compareWarning = calculated.warning;
-    } catch (error) {
-      compareError = error.message;
-    }
-  } else if (compareRangeA && state.comparePreset === 'manual' && compareRefRange) {
-    try {
-      const calculated = calculateCompareRange('manual', compareRangeA, compareDataRange, compareRefRange);
-      compareWarning = calculated.warning;
-    } catch (error) {
-      compareError = error.message;
-    }
-  }
-  if (!compareRangeA) compareError ||= 'Elegí fechas válidas para el período A.';
-  if (state.comparePreset === 'manual' && !compareRefRange) compareError ||= 'Elegí fechas válidas para el período B.';
-
-  return {
-    years: state.years,
-    range: state.range,
-    prev: viewName === 'dashboard' ? currentPrev : null,
-    limits: tableLimits,
+  return createViewContext(viewName, {
+    route,
+    state,
+    model,
+    previousTotals: currentPrev,
+    detail: currentDetail,
     metric: activeMetric,
     rankUI,
-    query,
-    exploreState,
-    detail: currentDetail,
-    rawQuery,
-    detailRequested: viewName === 'day' || viewName === 'session' || viewName === 'track',
-    normalizeYears: state.normalizeYears ?? false,
-    calMonth: state.calMonth,
-    calDate: state.calDate,
-    month: state.calMonth?.month ?? (new Date().getMonth() + 1),
-    comparePreset: state.comparePreset,
-    compareGranularity: state.compareGranularity,
-    compareEntities: state.compareEntities,
-    compareEntityMode: state.compareEntityMode,
-    comebackThresholdDays: state.comebackThresholdDays ?? 30,
-    longitudinalPages: state.longitudinalPages,
-    longitudinalPageSize: state.longitudinalPageSize,
-    longitudinal: longitudinalResultKey === longitudinalKey ? longitudinalResult : null,
-    longitudinalError: longitudinalLoadError,
-    compareFrom,
-    compareTo,
-    compareRefFrom: state.compareRefFrom,
-    compareRefTo: state.compareRefTo,
-    compareRangeA,
-    compareRangeB,
-    compareDataRange,
-    compareWarning,
-    compareError,
-    compareResult,
-    compareStatus,
-    compareLoadError
-  };
+    limits: tableLimits,
+    presentation,
+    compare: { key: compareResultKey, result: compareResult, status: compareStatus, error: compareLoadError },
+    longitudinal: { key: longitudinalResultKey, result: longitudinalResult, error: longitudinalLoadError },
+    now: new Date()
+  });
 }
 
 function dispatchComparison(job) {
