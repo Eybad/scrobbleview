@@ -25,6 +25,7 @@ export function formatCacheMeta(summary) {
 
 export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCached }) {
   const zone = document.getElementById('drop-zone');
+  const zoneContent = document.getElementById('drop-zone-content');
   const input = document.getElementById('file-input');
   const btnUpload = document.getElementById('btn-upload');
   const btnDemo = document.getElementById('btn-demo');
@@ -39,6 +40,33 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   const viewApp = document.getElementById('view-app');
 
   let busy = false;
+  let cachedInfo = null;
+
+  function syncCacheChoice() {
+    const active = Boolean(cachedInfo);
+    if (cacheChoice) cacheChoice.hidden = !active;
+    if (cacheCard) cacheCard.hidden = !active;
+    if (cacheMeta && active) cacheMeta.textContent = formatCacheMeta(cachedInfo);
+    zone.hidden = active;
+    if (btnUploadAlt) btnUploadAlt.hidden = !active;
+  }
+
+  function setImportBusy(active) {
+    if (active) {
+      if (cacheChoice) cacheChoice.hidden = true;
+      zone.hidden = false;
+      zoneContent.classList.add('is-suspended');
+      zoneContent.toggleAttribute('inert', true);
+      zoneContent.setAttribute('aria-hidden', 'true');
+      zone.classList.add('busy');
+      return;
+    }
+    zoneContent.classList.remove('is-suspended');
+    zoneContent.toggleAttribute('inert', false);
+    zoneContent.removeAttribute('aria-hidden');
+    zone.classList.remove('busy');
+    syncCacheChoice();
+  }
 
   function setStatus(msg, kind = '') {
     status.textContent = msg;
@@ -56,30 +84,25 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   async function run(inputData) {
     if (busy) return;
     busy = true;
-    zone.classList.add('busy');
-    setStatus('Procesando…');
+    setImportBusy(true);
+    setStatus('');
     try {
-      const result = await analyze(inputData, {
-        onProgress(p, label) {
-          const name = label ? ` (${label})` : '';
-          setStatus(`Procesando${name}… ${Math.round(p * 100)}%`);
-        }
-      });
+      const result = await analyze(inputData);
       showApp(result);
     } catch (err) {
       setStatus(err.code === 'E_ABORT' ? err.message : `Error: ${err.message}`, err.code === 'E_ABORT' ? '' : 'error');
       onError?.(err);
     } finally {
       busy = false;
-      zone.classList.remove('busy');
+      setImportBusy(false);
     }
   }
 
   async function runCached() {
     if (busy || !onLoadCached) return;
     busy = true;
-    zone.classList.add('busy');
-    setStatus('Cargando datos guardados…');
+    setImportBusy(true);
+    setStatus('');
     try {
       const result = await onLoadCached();
       if (!result) {
@@ -92,7 +115,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
       onError?.(err);
     } finally {
       busy = false;
-      zone.classList.remove('busy');
+      setImportBusy(false);
     }
   }
 
@@ -168,16 +191,13 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   return {
     setStatus,
     reset(message) {
+      setImportBusy(false);
       viewApp.hidden = true; viewHome.hidden = false; setStatus(message);
       (zone.hidden ? btnCached : btnUpload)?.focus();
     },
     showCachedButtons(cacheInfo) {
-      const active = Boolean(cacheInfo);
-      if (cacheChoice) cacheChoice.hidden = !active;
-      if (cacheCard) cacheCard.hidden = !active;
-      if (cacheMeta && active) cacheMeta.textContent = formatCacheMeta(cacheInfo);
-      zone.hidden = active;
-      if (btnUploadAlt) btnUploadAlt.hidden = !active;
+      cachedInfo = cacheInfo || null;
+      if (!busy) syncCacheChoice();
     }
   };
 }

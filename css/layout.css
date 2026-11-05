@@ -144,6 +144,36 @@ main.container {
 }
 
 
+#view-root {
+  position: relative;
+  isolation: isolate;
+}
+
+
+.view-placeholder:not([hidden]) {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: block;
+  background: var(--bg);
+  pointer-events: none;
+}
+
+
+.view-placeholder__message {
+  position: sticky;
+  top: var(--sp-4);
+  width: min(100%, var(--container-max));
+  margin: var(--sp-4) auto 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+
 .app-analysis-controls {
   display: flex;
   flex-direction: column;

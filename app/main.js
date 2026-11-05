@@ -29,7 +29,6 @@ const siteFooter = document.querySelector('.site-footer');
 const footerMeta = document.getElementById('footer-meta');
 
 const LIMITS_STORAGE_KEY = 'scrobbleview:tableLimits';
-const PROCESSING_INDICATOR_DELAY_MS = 180;
 const VALID_LIMITS = new Set([10, 25, 50, 100]);
 
 function loadStoredLimits() {
@@ -143,41 +142,126 @@ const cancelProcessing = document.getElementById('cancel-processing');
 const retryProcessing = document.getElementById('retry-processing');
 const jobs = new Map();
 let nextJob = 0, processingError = null, processingErrorType = null;
+let activeImportJob = null;
+let cancelledFilter = null;
+let filterProcessingError = null;
+let displayedJobId = null;
+
+function processingTarget(job) {
+  if (!job) {
+    if (!processingError) return null;
+    if (processingErrorType === 'export' && document.getElementById('dialog-export')?.open) return document.getElementById('export-progress');
+    return processing;
+  }
+  if (job.type === 'import') return document.getElementById('import-progress');
+  if (job.type === 'export') return document.getElementById('dialog-export')?.open
+    ? document.getElementById('export-progress')
+    : processing;
+  return processing;
+}
 
 function updateProcessing() {
-  const job = [...jobs.values()].filter((item) => item.visible).at(-1);
-  processing.hidden = !job && !processingError;
-  processingStatus.setAttribute('role', processingError && !job ? 'alert' : 'status');
+  const activeEntries = [...jobs.entries()];
+  const importEntry = activeEntries.filter(([, item]) => item.type === 'import').at(-1);
+  const exportEntry = activeEntries.filter(([, item]) => item.type === 'export').at(-1);
+  const generalEntry = activeEntries.filter(([, item]) => item.type === 'general').at(-1);
+  const globalEntry = importEntry ?? exportEntry ?? generalEntry;
+  const [jobId, job] = globalEntry ?? [];
+  displayedJobId = jobId ?? null;
+  const target = processingTarget(job);
+  const importProgress = document.getElementById('import-progress');
+  const exportProgress = document.getElementById('export-progress');
+  const slots = [processing, importProgress, exportProgress].filter(Boolean);
+  for (const slot of slots) slot.hidden = slot !== target;
+  target?.append(processingStatus, processingProgress, cancelProcessing);
+  const globalError = !job && Boolean(processingError);
+  if (globalError) {
+    processingStatus.setAttribute('role', 'alert');
+    processingStatus.removeAttribute('aria-live');
+  } else {
+    processingStatus.setAttribute('role', 'status');
+    processingStatus.setAttribute('aria-live', 'off');
+  }
   processingStatus.textContent = job ? `${job.label}… ${Math.round(job.fraction * 100)}%` : processingError ?? '';
   processingProgress.hidden = !job;
-  if (job) processingProgress.value = job.fraction;
+  if (job) {
+    processingProgress.value = job.fraction;
+    processingStatus.style.setProperty('--processing-progress', `${job.fraction * 100}%`);
+  } else {
+    processingStatus.style.removeProperty('--processing-progress');
+  }
   cancelProcessing.hidden = !job;
-  retryProcessing.hidden = Boolean(job) || processingErrorType !== 'filter' || !analysisState.getFailed() || !analysisState.getConfirmed().context;
+  cancelProcessing.textContent = 'Cancelar';
+  cancelProcessing.setAttribute('aria-label', job?.type === 'import' ? 'Cancelar carga' : 'Cancelar exportación');
+  processing.hidden = target !== processing;
+
+  const filterProgress = appFrame?.context.querySelector('#filter-progress');
+  const filterJob = activeEntries.filter(([, item]) => item.type === 'filter').at(-1)?.[1] ?? null;
+  const filterStatus = filterProgress?.querySelector('#filter-processing-status');
+  const filterNativeProgress = filterProgress?.querySelector('#filter-processing-progress');
+  const cancelFilter = filterProgress?.querySelector('#cancel-filter-processing');
+  const resetFilterProcessing = appFrame?.context.querySelector('#reset-filter-processing');
+  const filterError = !filterJob && Boolean(filterProcessingError);
+  if (filterProgress) {
+    filterProgress.hidden = !filterJob && !filterError;
+    filterProgress.classList.toggle('is-error', filterError);
+  }
+  appFrame?.context.querySelector('.context-period')?.toggleAttribute('hidden', Boolean(filterJob || filterError));
+  if (filterStatus) {
+    if (filterError) {
+      filterStatus.setAttribute('role', 'alert');
+      filterStatus.removeAttribute('aria-live');
+      filterStatus.textContent = filterProcessingError;
+    } else {
+      filterStatus.setAttribute('role', 'status');
+      filterStatus.setAttribute('aria-live', 'off');
+      filterStatus.textContent = filterJob ? `${filterJob.label}… ${Math.round(filterJob.fraction * 100)}%` : '';
+      filterStatus.style.setProperty('--processing-progress', `${(filterJob?.fraction ?? 0) * 100}%`);
+    }
+  } else {
+    filterStatus?.removeAttribute('role');
+  }
+  if (filterNativeProgress) {
+    filterNativeProgress.hidden = !filterJob;
+    if (filterJob) filterNativeProgress.value = filterJob.fraction;
+  }
+  if (cancelFilter) cancelFilter.hidden = !filterJob;
+  if (filterError) filterProgress?.append(retryProcessing);
+  else processing.append(retryProcessing);
+  retryProcessing.hidden = !filterError || (!analysisState.getFailed() && !cancelledFilter) || !analysisState.getConfirmed().context;
+  if (resetFilterProcessing) resetFilterProcessing.hidden = !filterError;
 }
 
 function beginProcessing(label, type = 'general') {
   const id = ++nextJob;
-  processingError = null;
-  processingErrorType = null;
-  const job = { label, fraction: 0, type, visible: false, timer: 0 };
+  if (type === 'import') {
+    processingError = null;
+    processingErrorType = null;
+    filterProcessingError = null;
+    cancelledFilter = null;
+  } else if (type === 'filter') {
+    filterProcessingError = null;
+    cancelledFilter = null;
+  } else {
+    processingError = null;
+    processingErrorType = null;
+  }
+  const job = { label, fraction: 0, type };
   jobs.set(id, job);
-  job.timer = setTimeout(() => {
-    const activeJob = jobs.get(id);
-    if (!activeJob) return;
-    activeJob.visible = true;
-    updateProcessing();
-  }, PROCESSING_INDICATOR_DELAY_MS);
+  if (!(type === 'filter' && activeImportJob)) announce(`${label}.`);
   updateProcessing();
   return {
+    setContext(context) {
+      job.context = context;
+    },
     progress(fraction, nextLabel) {
       const activeJob = jobs.get(id);
       if (!activeJob) return;
       activeJob.fraction = fraction;
-      activeJob.label = nextLabel;
-      if (activeJob.visible) updateProcessing();
+      if (nextLabel) activeJob.label = nextLabel;
+      updateProcessing();
     },
     finish() {
-      clearTimeout(job.timer);
       jobs.delete(id);
       updateProcessing();
     }
@@ -186,12 +270,13 @@ function beginProcessing(label, type = 'general') {
 
 function reportProcessingError(error, type = 'general') {
   if (error.code === 'E_ABORT') return;
-  processingErrorType = type;
   if (type === 'filter') {
-    processingError = `${error.message} Reintentá o restablecé los filtros.`;
+    filterProcessingError = `${error.message} Reintentá o restablecé los filtros.`;
   } else if (type === 'export') {
+    processingErrorType = type;
     processingError = `${error.message} Reintentá la exportación.`;
   } else {
+    processingErrorType = type;
     processingError = `${error.message} Podés volver a cargar los archivos.`;
   }
   updateProcessing();
@@ -216,6 +301,7 @@ async function initializeAnalysis(result) {
   rankUI = { tab: 'artists', metric: activeMetric, topN: rankUI.topN, query: '' };
   initializing = true;
   try {
+    activeImportJob?.progress(0, 'Actualizando estadísticas');
     let restored, hash;
     do {
       hash = location.hash;
@@ -228,6 +314,7 @@ async function initializeAnalysis(result) {
 
 async function analyze(input, { onProgress } = {}) {
   const job = beginProcessing('Leyendo archivos', 'import');
+  activeImportJob = job;
   try {
     const result = await analysisClient.request('load', input, { onProgress(fraction, label) {
       job.progress(fraction, label); onProgress?.(fraction, label);
@@ -235,18 +322,25 @@ async function analyze(input, { onProgress } = {}) {
     await initializeAnalysis(result);
     cacheOffer = cacheAvailable() ? 'save' : null;
     return result;
-  } finally { job.finish(); }
+  } finally {
+    if (activeImportJob === job) activeImportJob = null;
+    job.finish();
+  }
 }
 
 async function loadCached() {
   const job = beginProcessing('Cargando datos guardados', 'import');
+  activeImportJob = job;
   try {
     const result = await analysisClient.request('cached', {}, { onProgress: job.progress });
     if (!result) return null;
     await initializeAnalysis(result);
     cacheOffer = 'loaded';
     return result;
-  } finally { job.finish(); }
+  } finally {
+    if (activeImportJob === job) activeImportJob = null;
+    job.finish();
+  }
 }
 
 async function clearCached() {
@@ -258,11 +352,21 @@ async function clearCached() {
 }
 
 function setFilterBusy(busy) {
-  appRoot.setAttribute('aria-busy', String(busy));
   appRoot.classList.toggle('app--updating', busy);
-  for (const selector of ['#analysis-controls', '#view-root']) {
-    appRoot.querySelector(selector)?.toggleAttribute('inert', busy);
+  const frame = appFrame;
+  if (!frame) return;
+  const viewContent = frame.viewRoot.querySelector('[data-view-content]');
+  const placeholder = frame.viewRoot.querySelector('[data-view-placeholder]');
+  frame.viewRoot.setAttribute('aria-busy', String(busy));
+  frame.filters.toggleAttribute('inert', busy);
+  frame.context.querySelector('.metric-switch')?.toggleAttribute('inert', busy);
+  if (viewContent) {
+    viewContent.style.visibility = busy ? 'hidden' : '';
+    viewContent.toggleAttribute('inert', busy);
+    if (busy) viewContent.setAttribute('aria-hidden', 'true');
+    else viewContent.removeAttribute('aria-hidden');
   }
+  if (placeholder) placeholder.hidden = !busy;
 }
 
 async function refreshModel() {
@@ -278,7 +382,13 @@ async function refreshModel() {
   const requestLongitudinal = view === 'habits' || view === 'discovery';
   const currentLongitudinalKey = JSON.stringify([filterParams(state), state.comebackThresholdDays ?? 30, state.longitudinalPages, state.longitudinalPageSize]);
   const requestedLongitudinalRevision = requestLongitudinal ? ++longitudinalRevision : longitudinalRevision;
-  const job = beginProcessing('Actualizando estadísticas', 'filter');
+  const job = initializing && activeImportJob
+    ? activeImportJob
+    : beginProcessing('Actualizando estadísticas', 'filter');
+  const ownsJob = job !== activeImportJob;
+  const requestedFilter = state;
+  const requestedMetric = activeMetric;
+  if (ownsJob) job.setContext({ state: requestedFilter, metric: requestedMetric, hash: requestedHash });
   setFilterBusy(true);
   try {
     const result = await analysisState.update(state, { view, id, originQuery, page: detailPage, pageSize: detailPageSize, context: { hash: requestedHash || '#/dashboard', metric: activeMetric }, onProgress: job.progress });
@@ -305,16 +415,18 @@ async function refreshModel() {
     current = result.model;
     currentPrev = result.prev;
     currentDetail = result.detail;
+    cancelledFilter = null;
     return true;
   } catch (error) {
-    if (error.code !== 'E_ABORT') {
-      if (!initializing) restoreConfirmedContext();
+    if (error.code !== 'E_ABORT' && !initializing) {
+      restoreConfirmedContext();
+      cancelledFilter = { state: requestedFilter, metric: requestedMetric, hash: requestedHash };
       reportProcessingError(error, 'filter');
     }
     if (initializing) throw error;
     return false;
   } finally {
-    job.finish();
+    if (ownsJob) job.finish();
     setFilterBusy([...jobs.values()].some(item => item.type === 'filter'));
   }
 }
@@ -470,6 +582,7 @@ function updateContextBar(root, options) {
     return;
   }
 
+  const currentPeriodSlot = current.querySelector('.context-period-slot');
   const currentPeriod = current.querySelector('.context-period');
   const nextPeriod = next.querySelector('.context-period');
   currentPeriod.textContent = nextPeriod.textContent;
@@ -478,7 +591,7 @@ function updateContextBar(root, options) {
   const currentWarning = current.querySelector('.context-coverage-warning');
   const nextWarning = next.querySelector('.context-coverage-warning');
   if (currentWarning && nextWarning) currentWarning.textContent = nextWarning.textContent;
-  else if (nextWarning) currentPeriod.after(nextWarning);
+  else if (nextWarning) currentPeriodSlot.after(nextWarning);
   else currentWarning?.remove();
 
   for (const metric of ['ms', 'plays']) {
@@ -513,6 +626,7 @@ function ensureApplicationFrame() {
   context.className = 'app-frame-slot';
   context.dataset.appSlot = 'context';
   updateContextBar(context, { state, model, metric: activeMetric });
+  context.querySelector('#cancel-filter-processing')?.addEventListener('click', cancelFilterUpdate);
   const filters = document.createElement('div');
   filters.className = 'app-frame-slot';
   filters.dataset.appSlot = 'filters';
@@ -540,14 +654,26 @@ function updateFramePresentation(name, warningHTML = '') {
 
 function renderViewContent(markup, viewName) {
   const frame = ensureApplicationFrame();
+  const busy = frame.viewRoot.getAttribute('aria-busy') === 'true';
   const indexSlot = document.createElement('div');
   indexSlot.dataset.viewIndex = '';
   indexSlot.hidden = true;
   const content = document.createElement('div');
   content.dataset.viewContent = '';
   content.innerHTML = markup;
+  const placeholder = document.createElement('div');
+  placeholder.className = 'view-placeholder';
+  placeholder.dataset.viewPlaceholder = '';
+  placeholder.setAttribute('aria-hidden', 'true');
+  placeholder.hidden = !busy;
+  placeholder.innerHTML = '<p class="view-placeholder__message">Los resultados confirmados se conservan durante el cálculo.</p>';
+  if (busy) {
+    content.style.visibility = 'hidden';
+    content.setAttribute('inert', '');
+    content.setAttribute('aria-hidden', 'true');
+  }
   frame.viewRoot.dataset.view = viewName;
-  frame.viewRoot.replaceChildren(indexSlot, content);
+  frame.viewRoot.replaceChildren(indexSlot, content, placeholder);
   chartInteractions?.refresh();
   calendarController?.refresh();
 }
@@ -1213,6 +1339,7 @@ const exportUI = createExportUI({
   client: analysisClient,
   beginProcessing,
   announce,
+  refreshProcessing: updateProcessing,
   reportError: (error) => reportProcessingError(error, 'export'),
   getContext() {
     if (!model) return { model: null };
@@ -1390,36 +1517,39 @@ const inputApi = setupInput({
   onClearCached: clearCached
 });
 
+function cancelFilterUpdate() {
+  const [activeJobId, activeJob] = [...jobs.entries()].filter(([, job]) => job.type === 'filter').at(-1) ?? [];
+  if (!activeJob || initializing) return;
+  longitudinalRevision++;
+  const confirmed = analysisState.cancelUpdate();
+  cancelledFilter = activeJob.context ?? null;
+  restoreConfirmedContext(confirmed);
+  jobs.delete(activeJobId);
+  filterProcessingError = 'Actualización cancelada. Podés reintentarla.';
+  setFilterBusy([...jobs.values()].some(item => item.type === 'filter'));
+  updateProcessing();
+}
+
 cancelProcessing.addEventListener('click', () => {
-  const [activeJobId, activeJob] = [...jobs.entries()].at(-1) ?? [];
-  if (activeJob?.type === 'filter' && !initializing) {
-    longitudinalRevision++;
-    const confirmed = analysisState.cancelUpdate();
-    restoreConfirmedContext(confirmed);
-    clearTimeout(activeJob.timer);
-    jobs.delete(activeJobId);
-    processingError = 'Actualización cancelada. Podés reintentarla.';
-    processingErrorType = 'filter';
-    setFilterBusy([...jobs.values()].some(item => item.type === 'filter'));
-    updateProcessing();
-    return;
-  }
+  const activeJobId = displayedJobId;
+  const activeJob = jobs.get(activeJobId);
+  if (!activeJob) return;
   if (activeJob?.type === 'export') {
     analysisClient.cancelExport();
-    clearTimeout(activeJob.timer);
     jobs.delete(activeJobId);
     processingError = null;
     processingErrorType = null;
+    announce('Exportación cancelada.');
     updateProcessing();
     return;
   }
+  if (activeJob?.type !== 'import') return;
+  activeImportJob = null;
   analysisState.clear();
   analysisClient.cancel();
   model = null; current = null; currentPrev = null; currentDetail = null; detailContext = null; cacheOffer = null;
   disposeApplicationFrame();
-  for (const job of jobs.values()) clearTimeout(job.timer);
-  jobs.clear(); processingError = null; processingErrorType = null;
-  appRoot.setAttribute('aria-busy', 'false');
+  jobs.clear(); processingError = null; processingErrorType = null; filterProcessingError = null; cancelledFilter = null;
   appRoot.classList.remove('app--updating');
   updateProcessing(); updateCacheToast();
   headerActions?.setAttribute('hidden', '');
@@ -1430,21 +1560,26 @@ cancelProcessing.addEventListener('click', () => {
 
 retryProcessing.addEventListener('click', async () => {
   const failed = analysisState.getFailed();
-  if (!failed) {
+  const cancelled = cancelledFilter;
+  const retry = failed ?? cancelled;
+  if (!retry) {
     const [view] = parseHash();
     if (!longitudinalLoadError || (view !== 'habits' && view !== 'discovery')) return;
     longitudinalLoadError = null;
     if (await refreshModel()) render();
     return;
   }
-  state = failed.state;
-  activeMetric = failed.metric;
+  cancelledFilter = null;
+  state = retry.state;
+  activeMetric = retry.metric;
   rankUI.metric = activeMetric;
-  detailPage = failed.page;
-  detailPageSize = failed.pageSize;
-  detailContext = (failed.view === 'day' || failed.view === 'session' || failed.view === 'track')
-    ? JSON.stringify([failed.view, failed.id, filterParams(state)]) : null;
-  history.replaceState(history.state, '', failed.hash);
+  if (failed) {
+    detailPage = failed.page;
+    detailPageSize = failed.pageSize;
+    detailContext = (failed.view === 'day' || failed.view === 'session' || failed.view === 'track')
+      ? JSON.stringify([failed.view, failed.id, filterParams(state)]) : null;
+  }
+  history.replaceState(history.state, '', retry.hash);
   if (await refreshModel()) render();
 });
 window.addEventListener('pagehide', (event) => { if (!event.persisted) analysisClient.cancel(); });

@@ -61,12 +61,21 @@ function downloadArchive(document, result) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function createExportUI({ document, getContext, client, beginProcessing, announce, reportError }) {
+export function createExportUI({ document, getContext, client, beginProcessing, announce, reportError, refreshProcessing = () => {} }) {
   const dialog = document.getElementById('dialog-export');
   const form = document.getElementById('export-form');
   let pendingContext = null;
+  let exportInFlight = false;
+
+  function setExportBusy(busy) {
+    document.getElementById('export-options')?.toggleAttribute('inert', busy);
+    const confirm = document.getElementById('btn-confirm-export');
+    if (confirm) confirm.disabled = busy;
+  }
 
   async function exportArchive(scope, context) {
+    if (exportInFlight) return false;
+    exportInFlight = true;
     const label = scope === 'selection' ? 'Exportando selección analítica'
       : scope === 'table' ? 'Exportando tabla actual'
         : 'Preparando exportación';
@@ -82,13 +91,21 @@ export function createExportUI({ document, getContext, client, beginProcessing, 
       }, { onProgress: job.progress });
     } finally {
       job.finish();
+      exportInFlight = false;
     }
-    if (!result?.bytes) return;
+    if (!result?.bytes) return false;
     downloadArchive(document, result);
     if (scope === 'table') announce(`Descargadas ${fmtNum(result.totalMatches)} filas con su metadata.`);
+    else announce('Exportación lista.');
+    return true;
   }
 
   function openDialog(defaultScope, current, context) {
+    if (exportInFlight) {
+      if (!dialog.open) dialog.showModal();
+      refreshProcessing();
+      return true;
+    }
     if (current.filterBusy) {
       announce('Esperá a que termine la actualización de filtros antes de exportar.');
       return true;
@@ -155,6 +172,7 @@ export function createExportUI({ document, getContext, client, beginProcessing, 
       if (allRadio) allRadio.checked = true;
     }
     dialog.showModal();
+    refreshProcessing();
     return true;
   }
 
@@ -162,18 +180,25 @@ export function createExportUI({ document, getContext, client, beginProcessing, 
     if (error.code !== 'E_ABORT') reportError(error);
   }
 
+  dialog?.addEventListener?.('close', refreshProcessing);
   dialog?.querySelector('[data-action="close-export"]')?.addEventListener('click', () => dialog.close());
   if (dialog) {
     form?.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (exportInFlight) return;
       const scope = new document.defaultView.FormData(form).get('export-scope') || 'all';
-      dialog.close();
+      if (!getContext().model) {
+        dialog.close();
+        return;
+      }
+      setExportBusy(true);
       try {
-        if (!getContext().model) return;
-        await exportArchive(scope, pendingContext ?? captureContext(getContext()));
+        const exported = await exportArchive(scope, pendingContext ?? captureContext(getContext()));
+        if (exported && dialog.open) dialog.close();
       } catch (error) {
         handleError(error);
       } finally {
+        setExportBusy(false);
         pendingContext = null;
       }
     });

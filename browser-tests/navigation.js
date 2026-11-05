@@ -285,9 +285,43 @@ async function run() {
   element('#btn-upload').click();
   assert(pickerOpens === 1, 'El botón explícito abre el selector una sola vez');
   input.click = nativeInputClick;
-  const dropEvent = new appWindow.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer });
+  {
+    const workerPrototype = appWindow.Worker.prototype;
+    const originalPostMessage = workerPrototype.postMessage;
+    let delayedLoad = null;
+    const dropZone = element('#drop-zone');
+    const before = dropZone.getBoundingClientRect();
+    workerPrototype.postMessage = function (...args) {
+      if (args[0]?.type === 'load') {
+        delayedLoad = { worker: this, args };
+        return;
+      }
+      return originalPostMessage.apply(this, args);
+    };
+    try {
+      const cancelledDrop = new appWindow.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer });
+      dropZone.dispatchEvent(cancelledDrop);
+      assert(cancelledDrop.defaultPrevented, 'El drop mantiene la carga por arrastre');
+      await waitFor(() => delayedLoad !== null, 'iniciar importación sintética cancelable');
+      await new Promise(resolve => appWindow.requestAnimationFrame(resolve));
+      const during = dropZone.getBoundingClientRect();
+      assert(!element('#import-progress').hidden && element('#drop-zone-content').inert && appWindow.getComputedStyle(element('#drop-zone-content')).visibility === 'hidden', 'La importación reemplaza el contenido visible y accesible de la zona de carga');
+      assert(element('#processing-status').textContent.endsWith('%') && element('#status').textContent === '', 'El porcentaje de importación es visual y la región de inicio no repite actualizaciones');
+      assert(element('#processing').hidden && Math.abs(before.height - during.height) <= 1, 'La carga conserva su caja sin insertar una banda global');
+      assert(element('#cancel-processing').getBoundingClientRect().height >= 44, 'Cancelar la carga conserva el target de 44 px');
+      element('#cancel-processing').click();
+      await waitFor(() => !element('#view-home').hidden && element('#status').textContent === 'Procesamiento cancelado.', 'cancelar importación y restaurar el inicio');
+      const after = dropZone.getBoundingClientRect();
+      assert(element('#import-progress').hidden && !element('#drop-zone-content').inert && appWindow.getComputedStyle(element('#drop-zone-content')).visibility !== 'hidden', 'La cancelación restituye el contenido de selección');
+      assert(Math.abs(before.height - after.height) <= 1, 'La cancelación conserva la altura de la zona de carga');
+    } finally {
+      workerPrototype.postMessage = originalPostMessage;
+    }
+  }
+  const retryTransfer = new appWindow.DataTransfer();
+  retryTransfer.items.add(new appWindow.File([json], 'Streaming_History_Audio_synthetic.json', { type: 'application/json' }));
+  const dropEvent = new appWindow.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: retryTransfer });
   element('#drop-zone').dispatchEvent(dropEvent);
-  assert(dropEvent.defaultPrevented, 'El drop mantiene la carga por arrastre');
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
   assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
   const persistentAppRoot = appDocument.getElementById('app-root');
@@ -508,9 +542,60 @@ async function run() {
   await waitFor(() => !element('#view-root').hidden && element('[data-preset="all"]').getAttribute('aria-pressed') === 'true' && kpiValue('Reproducciones') === '8', 'hash sin filtros');
   assert(kpiValue('Reproducciones') === '8', 'Un hash sin filtros debe restaurar las 8 reproducciones');
 
-  element('[data-preset="4w"]').click();
-  element('#cancel-processing').click();
-  await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '8', 'cancelación del filtro');
+  const filterScrollTarget = Math.min(320, appWindow.document.documentElement.scrollHeight - appWindow.innerHeight);
+  const previousFilterScrollBehavior = appDocument.documentElement.style.scrollBehavior;
+  appDocument.documentElement.style.scrollBehavior = 'auto';
+  appWindow.scrollTo(0, filterScrollTarget);
+  await waitForWindowScroll(appWindow, filterScrollTarget);
+  appDocument.documentElement.style.scrollBehavior = previousFilterScrollBehavior;
+  const stableViewRoot = element('#view-root');
+  const stableContent = element('[data-view-content]');
+  const viewBeforeCancel = stableViewRoot.getBoundingClientRect();
+  const contentBeforeCancel = stableContent.getBoundingClientRect();
+  const periodSlotBeforeCancel = element('.context-period-slot').getBoundingClientRect();
+  const scrollBeforeCancel = appWindow.scrollY;
+  {
+    const workerPrototype = appWindow.Worker.prototype;
+    const originalPostMessage = workerPrototype.postMessage;
+    let delayedFilter = null;
+    workerPrototype.postMessage = function (...args) {
+      if (args[0]?.type === 'filter' && delayedFilter === null) {
+        delayedFilter = { worker: this, args };
+        return;
+      }
+      return originalPostMessage.apply(this, args);
+    };
+    try {
+      element('[data-preset="4w"]').click();
+      await waitFor(() => delayedFilter !== null, 'iniciar filtro sintético cancelable');
+      await new Promise(resolve => appWindow.requestAnimationFrame(resolve));
+      const viewDuringCancel = stableViewRoot.getBoundingClientRect();
+      const contentDuringCancel = element('[data-view-content]').getBoundingClientRect();
+      assert(stableViewRoot.getAttribute('aria-busy') === 'true', 'El root del resultado anuncia que está calculando');
+      assert(element('[data-view-content]').getAttribute('aria-hidden') === 'true' && element('[data-view-content]').inert, 'Solo el contenido anterior queda oculto e inerte');
+      assert(appWindow.getComputedStyle(element('[data-view-content]')).visibility === 'hidden', 'Los valores anteriores no quedan visibles durante el cálculo');
+      assert(!element('[data-view-placeholder]').hidden && element('#processing').hidden, 'El placeholder estático reemplaza el resultado sin una banda global');
+      assert(element('#filter-processing-status').textContent.endsWith('%') && !element('.context-period').getClientRects().length, 'El estado porcentual ocupa el slot del período');
+      assert(element('#live-status').textContent === 'Actualizando estadísticas.', 'La fase se anuncia una sola vez, sin anunciar cada porcentaje');
+      assert(element('#cancel-filter-processing').getBoundingClientRect().height >= 44, 'Cancelar filtro conserva el target de 44 px');
+      assert(Math.abs(viewBeforeCancel.height - viewDuringCancel.height) <= 1 && Math.abs(contentBeforeCancel.height - contentDuringCancel.height) <= 1, 'El placeholder conserva la geometría del contenido');
+      assert(Math.abs(viewBeforeCancel.top - viewDuringCancel.top) <= 1 && appWindow.scrollY === scrollBeforeCancel, 'El filtro no desplaza la vista ni el scroll');
+      element('#cancel-filter-processing').click();
+      await waitFor(() => stableViewRoot.getAttribute('aria-busy') === 'false' && kpiValue('Reproducciones') === '8', 'cancelación del filtro');
+      workerPrototype.postMessage = originalPostMessage;
+      delayedFilter.worker.postMessage(...delayedFilter.args);
+      await waitFor(() => element('#filter-progress').classList.contains('is-error') && !element('#retry-processing').hidden, 'mostrar acciones del error de cancelación');
+      const contentAfterCancel = element('[data-view-content]').getBoundingClientRect();
+      assert(element('[data-view-content]').getAttribute('aria-hidden') === null && !element('[data-view-content]').inert, 'La cancelación restaura el resultado confirmado');
+      assert(element('[data-view-placeholder]').hidden && Math.abs(contentBeforeCancel.height - contentAfterCancel.height) <= 1, 'La cancelación retira el placeholder sin cambiar la altura del resultado');
+      const periodSlotAfterCancel = element('.context-period-slot').getBoundingClientRect();
+      assert(Math.abs(appWindow.scrollY - scrollBeforeCancel) <= periodSlotAfterCancel.height - periodSlotBeforeCancel.height + 1, 'La corrección de scroll queda acotada a la expansión del mensaje de error inline');
+      element('#reset-filter-processing').click();
+      await waitFor(() => element('#filter-progress').hidden && !element('.context-period').hidden, 'restablecer filtros desde el error inline');
+    } finally {
+      workerPrototype.postMessage = originalPostMessage;
+    }
+  }
   assert(!element('#view-app').hidden, 'Cancelar el filtro debe conservar el análisis');
   assert(element('#view-home').hidden, 'Cancelar el filtro no debe volver al inicio');
 
@@ -742,9 +827,14 @@ async function run() {
   try {
     element('#btn-confirm-export').click();
     await waitFor(() => delayedExport !== null, 'enviar exportación al Worker');
-    await waitFor(() => !element('#processing').hidden, 'mostrar exportación activa antes de cancelarla');
+    await waitFor(() => !element('#export-progress').hidden, 'mostrar progreso de exportación en el footer del diálogo');
+    assert(element('#dialog-export').open && !element('#cancel-processing').hidden, 'La exportación conserva el diálogo y su acción de cancelación');
+    element('#dialog-export').close();
+    await waitFor(() => !element('#processing').hidden, 'exponer la exportación en el estado global al cerrar el diálogo');
+    assert(appWindow.getComputedStyle(element('#processing')).position === 'fixed', 'El estado global no desplaza el contenido al cerrar el diálogo');
     element('#cancel-processing').click();
     await waitFor(() => element('#processing').hidden, 'cancelar una exportación activa');
+    await waitFor(() => !element('#btn-confirm-export').disabled, 'restaurar las acciones del diálogo después de cancelar');
     assert(delayedExport, 'La exportación cancelada debe haber quedado pendiente en el Worker');
     workerPrototype.postMessage = originalPostMessage;
     delayedExport.worker.postMessage(...delayedExport.args);

@@ -38,11 +38,11 @@
   <div id="cache-toast-mount" class="container"></div>
 
   <main class="container" id="main-content" tabindex="-1">
-    <div id="processing" hidden>
-      <p id="processing-status" role="status" aria-atomic="true"></p>
+    <div id="processing" class="processing-global" hidden>
+      <p id="processing-status" aria-live="off" aria-atomic="true"></p>
       <progress id="processing-progress" max="1" value="0" aria-label="Progreso del procesamiento"></progress>
-      <button type="button" id="cancel-processing">Cancelar procesamiento</button>
-      <button type="button" id="retry-processing" hidden>Reintentar actualización</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="cancel-processing">Cancelar procesamiento</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="retry-processing" hidden>Reintentar actualización</button>
     </div>
     <section id="view-home" class="view" aria-labelledby="home-title">
       <div class="home-layout">
@@ -70,12 +70,15 @@
           </div>
 
           <div id="drop-zone" class="drop-zone">
-            <span class="drop-zone-badge" aria-hidden="true">
-              <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
-            </span>
-            <p class="drop-zone-title">También podés arrastrarlos acá</p>
-            <button type="button" id="btn-upload" class="btn btn-primary" data-action="choose-files">Elegir archivos</button>
-            <p class="drop-zone-files">ZIP o varios JSON del historial ampliado</p>
+            <div id="drop-zone-content" class="drop-zone-content">
+              <span class="drop-zone-badge" aria-hidden="true">
+                <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
+              </span>
+              <p class="drop-zone-title">También podés arrastrarlos acá</p>
+              <button type="button" id="btn-upload" class="btn btn-primary" data-action="choose-files">Elegir archivos</button>
+              <p class="drop-zone-files">ZIP o varios JSON del historial ampliado</p>
+            </div>
+            <div id="import-progress" class="processing-slot processing-slot--import" hidden></div>
             <input type="file" id="file-input" accept=".json,.zip" multiple hidden>
           </div>
 
@@ -123,7 +126,7 @@
       <p id="export-dialog-note" class="export-dialog-note">
         Cada descarga es un ZIP con tablas CSV y un archivo de metadata. Contiene métricas agregadas para hojas de cálculo y no reemplaza ni se puede reimportar como el historial JSON original de Spotify.
       </p>
-      <fieldset class="export-dialog-options">
+      <fieldset id="export-options" class="export-dialog-options">
         <legend class="visually-hidden">Alcance de la exportación</legend>
         <label class="export-dialog-option">
           <input type="radio" name="export-scope" value="all" checked>
@@ -151,6 +154,7 @@
         <button type="button" class="btn btn-secondary" data-action="close-export">Cancelar</button>
         <button type="submit" class="btn btn-primary" id="btn-confirm-export">Descargar</button>
       </div>
+      <div id="export-progress" class="processing-slot processing-slot--export" hidden></div>
     </form>
   </dialog>
 </body>
