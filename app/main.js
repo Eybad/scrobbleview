@@ -4,7 +4,7 @@ import { AbortError } from '../src/parse/errors.js';
 import { emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
 import { setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptTextFromConfirmed, emptyFiltersHTML, footerMetaText, calendarYearGridHTML } from './views.js';
-import { describeCatalogQuery, catalogOrderLabel } from './catalog-query.js';
+import { createExportUI } from './export-ui.js';
 import { esc, fmtNum, fmtMs, lineChart, barChart } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
@@ -1423,14 +1423,7 @@ function wireExploreView() {
   }
 
   card.querySelectorAll('[data-action="export-table"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (openExportDialog('table')) return;
-      try {
-        await exportModel('table', captureExportContext());
-      } catch (error) {
-        if (error.code !== 'E_ABORT') reportProcessingError(error, 'export');
-      }
-    });
+    btn.addEventListener('click', () => exportUI.start({ scope: 'table' }));
   });
 }
 
@@ -1637,213 +1630,37 @@ function wireView() {
   });
 }
 
-function cloneFilterState(filters) {
-  return {
-    ...filters,
-    range: filters.range ? { ...filters.range } : null,
-    ...Object.fromEntries(['years', 'months', 'hours', 'dows'].map((key) => [key, filters[key] ? new Set(filters[key]) : null]))
-  };
-}
-
-function captureExportContext() {
-  const exploreState = buildViewContext('explore').exploreState;
-  const compareContext = parseHash()[0] === 'compare' ? buildViewContext('compare') : null;
-  return {
-    filterState: cloneFilterState(state),
-    metric: activeMetric,
-    exploreState: exploreState ? {
-      tab: exploreState.tab,
-      query: exploreState.query,
-      sortBy: exploreState.sortBy,
-      sortDir: exploreState.sortDir,
-      page: exploreState.page,
-      pageSize: exploreState.pageSize,
-      minPlays: exploreState.minPlays,
-      minMonths: exploreState.minMonths
-    } : null,
-    compareRanges: compareContext?.compareRangeA && compareContext?.compareRangeB ? {
-      rangeA: compareContext.compareRangeA,
-      rangeB: compareContext.compareRangeB
-    } : null
-  };
-}
-
-function summarizeExportFilters(filters, fullModel) {
-  const parts = [];
-  if (filters.range) parts.push(`${locToISODate(filters.range.from)} a ${locToISODate(filters.range.to)}`);
-  if (filters.years?.size) parts.push(`años ${[...filters.years].sort((a, b) => a - b).join(', ')}`);
-  if (filters.months?.size) parts.push(`${filters.months.size} meses seleccionados`);
-  if (filters.dows?.size) parts.push(`${filters.dows.size} días de semana seleccionados`);
-  if (filters.hours?.size) parts.push(`${filters.hours.size} horas seleccionadas`);
-  for (const [id, kind, label] of [
-    [filters.artistId, 'artists', 'Artista'],
-    [filters.trackId, 'tracks', 'Canción'],
-    [filters.albumId, 'albums', 'Álbum']
-  ]) {
-    if (id == null) continue;
-    const entity = fullModel[kind].byId.get(id);
-    parts.push(`${label}: ${entity ? `${entity.name}${entity.artist ? ` — ${entity.artist}` : ''}` : id}`);
-  }
-  for (const [key, label] of [['skip', 'Saltada'], ['shuffle', 'Aleatoria'], ['offline', 'Sin conexión']]) {
-    if (filters[key] != null) parts.push(`${label}: ${filters[key] === 'unknown' ? 'desconocida' : filters[key] ? 'sí' : 'no'}`);
-  }
-  return parts.length ? parts.join('; ') : 'sin filtros analíticos';
-}
-
-function downloadExport(result) {
-  if (!result?.bytes) return;
-  const blob = new Blob([result.bytes], { type: 'application/zip' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = result.filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function exportModel(scope = 'all', context = captureExportContext()) {
-  if (!model) return;
-  const label = scope === 'selection' ? 'Exportando selección analítica'
-    : scope === 'table' ? 'Exportando tabla actual'
-      : 'Preparando exportación';
-  const job = beginProcessing(label, 'export');
-  let result;
-  try {
-    const payload = {
-      scope,
-      filterState: scope === 'all' ? undefined : context.filterState,
-      metric: context.metric,
-      exploreState: scope === 'table' ? context.exploreState : undefined,
-      compareRanges: context.compareRanges ?? undefined
+const exportUI = createExportUI({
+  document,
+  client: analysisClient,
+  beginProcessing,
+  announce,
+  reportError: (error) => reportProcessingError(error, 'export'),
+  getContext() {
+    if (!model) return { model: null };
+    const exploreState = buildViewContext('explore').exploreState;
+    const [viewName] = parseHash();
+    const compareContext = viewName === 'compare' ? buildViewContext('compare') : null;
+    return {
+      model,
+      confirmedModel: analysisState.getConfirmed().model ?? current,
+      filterState: state,
+      metric: activeMetric,
+      exploreState,
+      viewName,
+      filterBusy: [...jobs.values()].some((job) => job.type === 'filter'),
+      compareRanges: compareContext?.compareRangeA && compareContext?.compareRangeB ? {
+        rangeA: compareContext.compareRangeA,
+        rangeB: compareContext.compareRangeB
+      } : null
     };
-    result = await analysisClient.request('export', payload, { onProgress: job.progress });
   }
-  finally { job.finish(); }
-  if (!result?.bytes) return;
-  downloadExport(result);
-  if (scope === 'table') announce(`Descargadas ${fmtNum(result.totalMatches)} filas con su metadata.`);
-}
-
-const exportDialog = document.getElementById('dialog-export');
-const exportForm = document.getElementById('export-form');
-let pendingExportContext = null;
-
-function openExportDialog(defaultScope = 'all') {
-  if (!model) return false;
-  if ([...jobs.values()].some((job) => job.type === 'filter')) {
-    announce('Esperá a que termine la actualización de filtros antes de exportar.');
-    return true;
-  }
-  if (!exportDialog || typeof exportDialog.showModal !== 'function') return false;
-
-  const confirmed = analysisState.getConfirmed();
-  const confirmedModel = confirmed.model ?? current;
-  const context = captureExportContext();
-  if (!confirmedModel) return true;
-  pendingExportContext = context;
-
-  const allDesc = document.getElementById('export-all-desc');
-  if (allDesc) allDesc.textContent = `${fmtNum(model.totals.records)} reproducciones de todo el historial, sin filtros analíticos.`;
-
-  const optSelection = document.getElementById('export-opt-selection');
-  const selDesc = document.getElementById('export-selection-desc');
-  const hasFilters = isFilterActive(context.filterState);
-  if (optSelection && selDesc) {
-    optSelection.classList.toggle('is-disabled', !hasFilters);
-    optSelection.querySelector('input').disabled = !hasFilters;
-    selDesc.textContent = hasFilters
-      ? `${fmtNum(confirmedModel.totals.records)} reproducciones; ${summarizeExportFilters(context.filterState, model)}.`
-      : 'No hay filtros analíticos activos.';
-  }
-
-  const [viewName] = parseHash();
-  const optTable = document.getElementById('export-opt-table');
-  const tableDesc = document.getElementById('export-table-desc');
-  const hasTable = viewName === 'explore' && confirmedModel;
-  if (optTable) {
-    optTable.hidden = !hasTable;
-    if (hasTable) {
-      const tableButton = document.querySelector('#explore-card [data-action="export-table"]');
-      const totalMatches = Number(tableButton?.dataset.totalMatches);
-      const effectiveDir = tableButton?.dataset.sortDirection;
-      const tableRadio = optTable.querySelector('input[name="export-scope"]');
-      const hasRenderedQuery = Number.isSafeInteger(totalMatches) && totalMatches >= 0
-        && (effectiveDir === 'asc' || effectiveDir === 'desc');
-      if (tableRadio) tableRadio.disabled = !hasRenderedQuery;
-      const { tab, options } = describeCatalogQuery(confirmedModel, {
-        metric: context.metric,
-        exploreState: context.exploreState
-      });
-      const tabName = tab === 'artists' ? 'artistas' : tab === 'tracks' ? 'canciones' : 'álbumes';
-      const criteria = [];
-      if (options.query) criteria.push(`búsqueda “${options.query}”`);
-      if (options.minPlays != null) criteria.push(`mínimo ${options.minPlays} reproducciones`);
-      if (options.minMonths != null) criteria.push(`mínimo ${options.minMonths} meses activos`);
-      if (options.minKnownSkips != null) criteria.push(`mínimo ${options.minKnownSkips} saltos conocidos`);
-      const criterion = criteria.length ? criteria.join('; ') : 'sin búsqueda ni umbrales adicionales';
-      const metricLabel = context.metric === 'ms' ? 'tiempo escuchado' : 'reproducciones';
-      if (tableDesc) {
-        tableDesc.textContent = hasRenderedQuery
-          ? `${fmtNum(totalMatches)} ${tabName}; selección: ${summarizeExportFilters(context.filterState, model)}; métrica principal: ${metricLabel}; ${criterion}; orden: ${catalogOrderLabel(options.sortBy, effectiveDir)}. Descarga un ZIP con el CSV y su metadata.`
-          : 'No se pudo confirmar el conteo de la tabla actual. Volvé a abrir Explorar antes de exportarla.';
-      }
-    }
-  }
-
-  const tableScopeAvailable = hasTable && !exportForm?.querySelector('input[name="export-scope"][value="table"]')?.disabled;
-  const selectedScope = tableScopeAvailable || defaultScope !== 'table' ? defaultScope : 'all';
-  const radio = exportForm?.querySelector(`input[name="export-scope"][value="${selectedScope}"]`);
-  if (radio && !radio.disabled) radio.checked = true;
-  else {
-    const allRadio = exportForm?.querySelector('input[name="export-scope"][value="all"]');
-    if (allRadio) allRadio.checked = true;
-  }
-  exportDialog.showModal();
-  return true;
-}
-
-headerActions?.querySelectorAll('[data-action="export"]').forEach((btn) => {
-  btn.addEventListener('click', async (e) => {
-    if (!model) return;
-    if (openExportDialog('all')) return;
-
-    const b = e.currentTarget;
-    if (b.disabled) return;
-    b.disabled = true;
-    try {
-      await exportModel('all');
-    } catch (error) {
-      if (error.code !== 'E_ABORT') reportProcessingError(error, 'export');
-    } finally {
-      b.disabled = false;
-    }
-  });
 });
 
-if (exportDialog) {
-  exportDialog.querySelector('[data-action="close-export"]')?.addEventListener('click', () => {
-    exportDialog.close();
-  });
-  exportForm?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const data = new FormData(exportForm);
-    const scope = data.get('export-scope') || 'all';
-    exportDialog.close();
-    try {
-      if (scope === 'table') {
-        await exportModel(scope, pendingExportContext ?? captureExportContext());
-      } else {
-        await exportModel(scope, pendingExportContext ?? captureExportContext());
-      }
-    } catch (error) {
-      if (error.code !== 'E_ABORT') reportProcessingError(error, 'export');
-    } finally {
-      pendingExportContext = null;
-    }
-  });
-}
+headerActions?.querySelectorAll('[data-action="export"]').forEach((button) => {
+  button.addEventListener('click', (event) => exportUI.start({ trigger: event.currentTarget }));
+});
+
 headerActions?.querySelectorAll('[data-action="reset"]').forEach((btn) => {
   btn.addEventListener('click', () => location.reload());
 });
