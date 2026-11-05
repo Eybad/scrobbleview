@@ -1,66 +1,5 @@
-/* main.js toggles these classes to reveal horizontal scroll affordances. */
-.app-nav {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: var(--sp-2);
-  align-items: center;
-
-  padding: var(--sp-2) 0 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--sp-6);
-  overflow-x: auto;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 2em), transparent 100%);
-}
-
-
-.app-nav.is-scrolled {
-  mask-image: linear-gradient(to right, transparent 0, #000 2em, #000 calc(100% - 2em), transparent 100%);
-}
-
-
-.app-nav.is-end {
-  mask-image: none;
-}
-
-
-.app-nav.is-scrolled.is-end {
-  mask-image: linear-gradient(to right, transparent 0, #000 2em, #000 100%);
-}
-
-
-.app-nav::-webkit-scrollbar,
 .tabs::-webkit-scrollbar {
   display: none;
-}
-
-
-.app-nav a {
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: var(--fs-sm);
-  padding: var(--sp-1) var(--sp-3);
-
-  border-bottom: 2px solid transparent;
-
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-
-.app-nav a:hover {
-  color: var(--text);
-}
-
-
-.app-nav a[aria-current="page"] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
 }
 
 
@@ -561,89 +500,150 @@
 }
 
 
-.app-nav-favorites {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  margin-bottom: var(--sp-2);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-xs);
-}
-
-
-.nav-fav-title {
-  color: var(--text-muted);
-  font-weight: 600;
-  margin-right: var(--sp-1);
-}
-
-
-.nav-fav-chip {
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  color: var(--text);
-  text-decoration: none;
-}
-
-
-.nav-fav-chip.active {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
+.app-nav-shell {
+  position: relative;
+  z-index: 30;
+  margin-bottom: var(--sp-3);
 }
 
 
 .app-nav {
-  gap: 3px;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
   padding: 4px;
-  margin-bottom: var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 2em), transparent 100%);
 }
 
 
-.app-nav.is-scrolled {
-  mask-image: linear-gradient(to right, transparent 0, #000 2em, #000 calc(100% - 2em), transparent 100%);
-}
-
-
-.app-nav.is-end {
-  mask-image: none;
-}
-
-
-.app-nav.is-scrolled.is-end {
-  mask-image: linear-gradient(to right, transparent 0, #000 2em, #000 100%);
-}
-
-
-.app-nav a {
+.app-nav__item {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
   min-height: 44px;
-  padding-inline: var(--sp-3);
+  padding: 0 var(--sp-3);
   border: 0;
   border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-muted);
-  transition: background-color 0.15s ease, color 0.15s ease;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 
 
-.app-nav a:hover {
+.app-nav__item:hover {
   background: var(--surface-2);
   color: var(--text);
 }
 
 
-.app-nav a[aria-current="page"] {
+.app-nav__item[aria-current="page"],
+.app-nav__item.is-section-current {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+
+.app-nav__trigger::after {
+  position: absolute;
+  right: var(--sp-3);
+  bottom: 0;
+  left: var(--sp-3);
+  height: 2px;
+  background: transparent;
+  content: "";
+}
+
+
+.app-nav__trigger.is-section-current::after {
+  background: var(--accent);
+}
+
+
+.app-nav__caret {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 160ms ease-out;
+}
+
+
+.app-nav__trigger[aria-expanded="true"] .app-nav__caret {
+  transform: translateY(2px) rotate(225deg);
+}
+
+
+.app-nav-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-4);
+  width: 100%;
+  max-height: 60dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+  animation: nav-panel-enter 160ms ease-out both;
+}
+
+
+.app-nav-panel[hidden] {
+  display: none;
+}
+
+
+.app-nav-panel__group {
+  min-width: 0;
+}
+
+
+.app-nav-panel__heading {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+
+.app-nav-panel__links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+
+.app-nav-panel__link {
+  justify-content: flex-start;
+  width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+
+@keyframes nav-panel-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 
@@ -781,14 +781,33 @@
 }
 
 
-@media (max-width: 760px) {
+@media (max-width: 47.999rem) {
   .app-nav {
-    margin-inline: -2px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
 
-  .app-nav a {
-    padding-inline: var(--sp-3);
+  .app-nav__item {
+    min-width: 0;
+    padding-inline: 2px;
+    font-size: 13px;
+    white-space: normal;
+  }
+
+
+  .app-nav__trigger {
+    gap: 6px;
+  }
+
+
+  .app-nav__caret {
+    flex: 0 0 7px;
+  }
+
+
+  .app-nav-panel__link {
+    justify-content: flex-start;
   }
 
 
@@ -828,6 +847,26 @@
   .context-controls .metric-switch > .btn {
     min-height: 44px;
     padding-inline: var(--sp-2);
+  }
+}
+
+
+@media (min-width: 48rem) {
+  .app-nav-panel__links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .app-nav__item,
+  .app-nav__caret {
+    transition: none;
+  }
+
+
+  .app-nav-panel {
+    animation: none;
   }
 }
 

@@ -142,8 +142,22 @@ function viewHeading(appDocument = frame.contentDocument) {
 }
 
 function navLink(label) {
-  const link = [...frame.contentDocument.querySelectorAll('.app-nav a')]
+  const appDocument = frame.contentDocument;
+  let link = [...appDocument.querySelectorAll('.app-nav a[data-nav-view], .app-nav-panel a[data-nav-view]')]
     .find(candidate => candidate.textContent.trim() === label);
+  if (!link) {
+    const viewsByLabel = {
+      Horarios: 'hours', Hábitos: 'habits', Sesiones: 'sessions', Descubrimiento: 'discovery',
+      Años: 'yearly', Calendario: 'calendar', 'Resumen del período': 'wrapped'
+    };
+    const view = viewsByLabel[label];
+    const mobile = frame.contentWindow.innerWidth < 768;
+    const group = mobile ? 'more'
+      : ['hours', 'habits', 'sessions', 'discovery'].includes(view) ? 'patterns' : 'periods';
+    appDocument.querySelector(`[data-nav-group="${group}"]`)?.click();
+    link = [...appDocument.querySelectorAll('.app-nav-panel a[data-nav-view]')]
+      .find(candidate => candidate.textContent.trim() === label);
+  }
   assert(link, `Falta el destino de navegación ${label}`);
   return link;
 }
@@ -218,6 +232,7 @@ function collectCssRules(rules) {
 
 async function run() {
   results.textContent = 'Ejecutando…';
+  localStorage.removeItem('scrobbleview:favorites');
   auxiliaryTab = window.open('about:blank', '_blank');
   assert(auxiliaryTab, 'El navegador debe permitir la pestaña de prueba');
   window.focus();
@@ -267,6 +282,40 @@ async function run() {
   const persistentFrameSlots = [...appDocument.querySelectorAll('[data-app-slot]')];
   const persistentFilterBar = appDocument.getElementById('filter-bar');
   const persistentViewRoot = appDocument.getElementById('view-root');
+  const nav = element('.app-nav');
+  assert([...nav.querySelectorAll('a[data-nav-view]')].map(link => link.dataset.navView).join('|') === 'dashboard|explore|compare', 'Móvil muestra los tres destinos primarios antes de abrir Más');
+  assert(nav.querySelectorAll('[role="menu"], [role="tablist"]').length === 0, 'La navegación usa enlaces y disclosures nativos');
+  assert(nav.querySelector('a[data-nav-view="dashboard"]').getAttribute('href').startsWith('#/v1/dashboard?m='), 'Cada destino expone una ruta semántica completa con la métrica actual');
+  const moreTrigger = element('[data-nav-group="more"]');
+  assert(moreTrigger.textContent.trim() === 'Más' && moreTrigger.getAttribute('aria-label') === 'Más secciones', 'Más tiene una etiqueta visible breve y un nombre accesible completo');
+  element('[data-action="toggle-fav"]').click();
+  moreTrigger.click();
+  assert([...appDocument.querySelectorAll('.app-nav-panel > [data-nav-panel-group]')].map(group => group.dataset.navPanelGroup).join('|') === 'favorites|patterns|periods', 'Favoritos aparece primero en Más cuando hay una sección guardada');
+  assert(element('.app-nav-panel [data-nav-panel-group="favorites"] a[data-nav-view="dashboard"]'), 'El menú Favoritos conserva destinos favoritos válidos');
+  moreTrigger.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert(element('.app-nav-panel').hidden && appDocument.activeElement === moreTrigger, 'Escape cierra Más y devuelve foco al disparador');
+  element('[data-action="toggle-fav"]').click();
+  moreTrigger.click();
+  assert([...appDocument.querySelectorAll('.app-nav-panel > [data-nav-panel-group]')].map(group => group.dataset.navPanelGroup).join('|') === 'patterns|periods', 'Más omite Favoritos cuando no hay secciones guardadas');
+  assert([...appDocument.querySelectorAll('.app-nav-panel [data-nav-panel-group="patterns"] a')].length === 4, 'Patrones agrupa sus cuatro destinos');
+  assert(element('.app-nav-panel [data-nav-view="sessions"]').getAttribute('href').startsWith('#/v1/sessions?m='), 'Los enlaces del panel conservan href semántico y contexto');
+  assert([...appDocument.querySelectorAll('.app-nav-panel [data-nav-panel-group="periods"] a')].length === 3, 'Períodos agrupa sus tres destinos');
+  moreTrigger.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert(element('.app-nav-panel').hidden && appDocument.activeElement === moreTrigger, 'Escape cierra el disclosure y devuelve foco al disparador');
+  moreTrigger.click();
+  element('.view-header h1').dispatchEvent(new appWindow.MouseEvent('click', { bubbles: true }));
+  assert(element('.app-nav-panel').hidden && appDocument.activeElement === moreTrigger, 'Click fuera cierra el panel sin robar foco');
+  navLink('Sesiones').click();
+  await waitFor(() => viewHeading() === 'Sesiones de escucha', 'abrir Sesiones desde el grupo Patrones');
+  assert(moreTrigger.classList.contains('is-section-current') && moreTrigger.getAttribute('aria-label') === 'Más secciones, sección actual', 'Más identifica visual y accesiblemente la sección actual');
+  moreTrigger.click();
+  const mobileSession = element('.app-nav-panel [data-nav-view="sessions"]');
+  assert(mobileSession.getAttribute('aria-current') === 'page', 'La ruta exacta conserva aria-current en Más');
+  moreTrigger.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert(element('.app-nav-panel').hidden && appDocument.activeElement === moreTrigger, 'Escape cierra el grupo activo y devuelve foco a Más');
+  navLink('Resumen').click();
+  await waitFor(() => viewHeading() === 'Resumen', 'volver al Resumen tras probar disclosures');
+  assert(element('.app-nav') === nav, 'La navegación conserva su nodo durante cambios de ruta');
   const tabButton = element('.tabs button');
   const tabButtonStyle = appWindow.getComputedStyle(tabButton);
   assert(tabButtonStyle.flexGrow === '1' && tabButtonStyle.flexBasis === '0px' && tabButtonStyle.justifyContent === 'center', 'Las pestañas distribuyen y centran sus botones');
@@ -734,6 +783,17 @@ async function run() {
   for (const width of viewportWidths) {
     frame.style.width = `${width}px`;
     await nextFrame();
+    const navigation = element('.app-nav');
+    assert(appWindow.getComputedStyle(navigation).display === 'grid', `La navegación móvil usa grid a ${width}px`);
+    assert(appWindow.getComputedStyle(navigation).gridTemplateColumns.trim().split(/\s+/).length === 4, `La navegación tiene cuatro celdas iguales a ${width}px`);
+    assert(navigation.scrollWidth <= navigation.clientWidth, `La navegación no desborda a ${width}px`);
+    assert([...navigation.children].every(node => node.getBoundingClientRect().height >= 44), `Los destinos alcanzan 44px de alto a ${width}px`);
+    const more = navigation.querySelector('[data-nav-group="more"]');
+    assert(more?.getAttribute('aria-label') === 'Más secciones', `Más conserva su nombre accesible a ${width}px`);
+    more.click();
+    const moreViews = [...appDocument.querySelectorAll('.app-nav-panel a[data-nav-view]')].map(link => link.dataset.navView);
+    assert(moreViews.length === 7 && new Set(moreViews).size === 7, `Más expone los siete destinos secundarios sin duplicados a ${width}px`);
+    more.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     const kpiColumns = appWindow.getComputedStyle(element('.kpis')).gridTemplateColumns.trim().split(/\s+/).length;
     const recordColumns = appWindow.getComputedStyle(element('.records-grid')).gridTemplateColumns.trim().split(/\s+/).length;
     const clippedText = [...appDocument.querySelectorAll('.kpis dt, .kpis dd, .records-grid .record-label, .records-grid .record-value')]
@@ -744,6 +804,11 @@ async function run() {
     assert(recordColumns === 2, `Los récords deben tener dos columnas a ${width}px`);
     assert(clippedText.length === 0, `Texto de KPIs o récords recortado a ${width}px: ${clippedText.slice(0, 3).map(node => `${node.className}:${node.textContent.trim()}:${node.scrollWidth}/${node.clientWidth},${node.scrollHeight}/${node.clientHeight}`).join('; ')}`);
   }
+  frame.style.width = '768px';
+  await nextFrame();
+  assert(appWindow.matchMedia('(min-width: 48rem)').matches && appWindow.getComputedStyle(element('.app-nav')).display === 'flex', 'La navegación cambia a desktop exactamente desde 48rem');
+  frame.style.width = '640px';
+  await nextFrame();
   appDocument.documentElement.style.fontSize = '125%';
   await nextFrame();
   const enlargedFont = Number.parseFloat(appWindow.getComputedStyle(appDocument.documentElement).fontSize);
@@ -806,6 +871,32 @@ async function run() {
       canceledExportLateDownloads: lateDownloadAttempts
     }
   });
+  const currentMore = element('[data-nav-group="more"]');
+  currentMore.click();
+  const focusedSessionLink = element('.app-nav-panel a[data-nav-view="sessions"]');
+  focusedSessionLink.focus();
+  frame.style.width = '800px';
+  await waitFor(() => frame.contentDocument.activeElement.dataset.navGroup === 'patterns' && element('.app-nav-panel').hidden, 'restaurar foco de Más a Patrones al cruzar 48rem');
+  const desktopNav = element('.app-nav');
+  assert([...desktopNav.querySelectorAll('a[data-nav-view]')].map(link => link.dataset.navView).join('|') === 'dashboard|explore|compare', 'Desktop expone solo los tres destinos primarios en la fila');
+  assert([...desktopNav.querySelectorAll('[data-nav-group]')].map(button => button.dataset.navGroup).join('|') === 'patterns|periods', 'Desktop agrupa Patrones y Períodos');
+  navLink('Sesiones').click();
+  await waitFor(() => viewHeading() === 'Sesiones de escucha', 'abrir Sesiones en la navegación desktop');
+  element('[data-action="toggle-fav"]').click();
+  await waitFor(() => element('.app-nav [data-nav-group="favorites"]'), 'mostrar Favoritos al final de la fila desktop');
+  const desktopFavorites = element('.app-nav [data-nav-group="favorites"]');
+  assert(desktopNav.lastElementChild === desktopFavorites, 'Favoritos ocupa el final de la navegación desktop');
+  desktopFavorites.click();
+  assert(element('.app-nav-panel [data-nav-panel-group="favorites"] a[data-nav-view="sessions"]'), 'Favoritos desktop enlaza la sección marcada');
+  desktopFavorites.dispatchEvent(new failureWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert(element('.app-nav-panel').hidden && frame.contentDocument.activeElement === desktopFavorites, 'Escape devuelve foco al disparador Favoritos');
+  element('[data-action="toggle-fav"]').click();
+  await waitFor(() => !frame.contentDocument.querySelector('.app-nav [data-nav-group="favorites"]'), 'quitar el último Favorito desktop');
+  const patternsTrigger = element('.app-nav [data-nav-group="patterns"]');
+  patternsTrigger.focus();
+  frame.style.width = '640px';
+  await waitFor(() => frame.contentDocument.activeElement.dataset.navGroup === 'more' && element('.app-nav-panel').hidden, 'restaurar foco de Patrones a Más al volver bajo 48rem');
+  assert(failureWindow.getComputedStyle(element('.app-nav')).display === 'grid' && frame.contentDocument.activeElement.getAttribute('aria-label') === 'Más secciones, sección actual', 'El cruce a móvil conserva foco y sección actual');
   results.textContent = 'APROBADO: navegación, exportación y cancelación, scroll real, responsive, caché IndexedDB real, carga desde una pestaña nueva y recuperación ante error.';
 }
 

@@ -20,6 +20,7 @@ import { buildViewContext as createViewContext, discoveryQuery, LONGITUDINAL_PAG
 import { mountExplore } from './explore-controller.js';
 import { mountChartInteractions } from './chart-interactions.js';
 import { mountCalendar } from './calendar-controller.js';
+import { mountNavigation, SECTION_NAMES } from './navigation-ui.js';
 
 const appRoot = document.getElementById('app-root');
 const siteHeader = document.querySelector('.site-header');
@@ -102,6 +103,7 @@ function disposeApplicationFrame() {
   chartInteractions = null;
   calendarController?.dispose();
   calendarController = null;
+  appFrame?.navigationController.dispose();
   appRoot.replaceChildren();
   appFrame = null;
 }
@@ -422,19 +424,6 @@ async function applyHashParams() {
 }
 
 const FAVORITES_STORAGE_KEY = 'scrobbleview:favorites';
-const SECTION_NAMES = {
-  dashboard: 'Resumen',
-  explore: 'Explorar',
-  compare: 'Comparar',
-  hours: 'Horarios',
-  habits: 'Hábitos',
-  sessions: 'Sesiones',
-  discovery: 'Descubrimiento',
-  yearly: 'Años',
-  calendar: 'Calendario',
-  wrapped: 'Resumen del período'
-};
-
 function loadStoredFavorites() {
   const set = new Set();
   try {
@@ -468,40 +457,15 @@ function resetPreferences() {
   announce('Preferencias restablecidas a los valores predeterminados.');
 }
 
-function navHTML(active) {
+function navigationQuery(view) {
   const fParams = portableFilterParams(state, model);
   const mParam = serializeMetricParam(activeMetric);
-  const queryStr = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
-  const link = (hash, label, view) => {
-    const query = view === 'compare' && active === 'compare' ? `?${compareQuery(queryStr, state)}`
-      : view === 'discovery' && active === 'discovery' ? `?${discoveryQuery(queryStr, state)}`
-        : queryStr;
-    return `<a href="#/${hash}${esc(query)}"${active === view ? ' aria-current="page"' : ''}>${label}</a>`;
+  const baseQuery = fParams ? `${fParams}&${mParam}` : `?${mParam}`;
+  return {
+    default: baseQuery,
+    ...(view === 'compare' ? { compare: compareQuery(baseQuery, state) } : {}),
+    ...(view === 'discovery' ? { discovery: discoveryQuery(baseQuery, state) } : {})
   };
-
-  let favsHTML = '';
-  if (favorites.size > 0) {
-    const favLinks = [...favorites]
-      .filter((v) => SECTION_NAMES[v])
-      .map((v) => `<a href="#/${v}${esc(queryStr)}" class="nav-fav-chip${active === v ? ' active' : ''}">${SECTION_NAMES[v]}</a>`)
-      .join('');
-    if (favLinks) {
-      favsHTML = `<div class="app-nav-favorites" aria-label="Accesos rápidos favoritos"><span class="nav-fav-title">Favoritos:</span>${favLinks}</div>`;
-    }
-  }
-
-  return `${favsHTML}<nav class="app-nav" aria-label="Secciones">
-    ${link('dashboard', 'Resumen', 'dashboard')}
-    ${link('explore', 'Explorar', 'explore')}
-    ${link('compare', 'Comparar', 'compare')}
-    ${link('hours', 'Horarios', 'hours')}
-    ${link('habits', 'Hábitos', 'habits')}
-    ${link('sessions', 'Sesiones', 'sessions')}
-    ${link('discovery', 'Descubrimiento', 'discovery')}
-    ${link('yearly', 'Años', 'yearly')}
-    ${link('calendar', 'Calendario', 'calendar')}
-    ${link('wrapped', 'Resumen del período', 'wrapped')}
-  </nav>`;
 }
 
 function ensureApplicationFrame() {
@@ -510,7 +474,6 @@ function ensureApplicationFrame() {
   const navigation = document.createElement('div');
   navigation.className = 'app-frame-slot';
   navigation.dataset.appSlot = 'navigation';
-  navigation.innerHTML = navHTML(name);
   const context = document.createElement('div');
   context.className = 'app-frame-slot';
   context.dataset.appSlot = 'context';
@@ -525,36 +488,18 @@ function ensureApplicationFrame() {
   const viewRoot = document.createElement('div');
   viewRoot.id = 'view-root';
   appRoot.replaceChildren(navigation, context, filters, warning, viewRoot);
-  appFrame = { navigation, context, filters, warning, viewRoot };
+  const navigationController = mountNavigation(navigation);
+  appFrame = { navigation, context, filters, warning, viewRoot, navigationController };
   wireFilters();
   return appFrame;
 }
 
 function updateFramePresentation(name, warningHTML = '') {
   const frame = ensureApplicationFrame();
-  const navX = frame.navigation.querySelector('.app-nav')?.scrollLeft ?? 0;
-  frame.navigation.innerHTML = navHTML(name);
+  frame.navigationController.update({ view: name, query: navigationQuery(name), favorites });
   frame.context.innerHTML = contextBarHTML({ state, model, metric: activeMetric });
   frame.warning.innerHTML = warningHTML;
   updateFilterDynamics();
-  const nav = frame.navigation.querySelector('.app-nav');
-  if (!nav) return;
-  nav.scrollLeft = navX;
-  const syncNavFade = () => {
-    nav.classList.toggle('is-scrolled', nav.scrollLeft > 0);
-    nav.classList.toggle('is-end', nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2);
-  };
-  syncNavFade();
-  nav.addEventListener('scroll', syncNavFade, { passive: true });
-  const activeLink = nav.querySelector('a[aria-current="page"]');
-  if (activeLink) {
-    const navRect = nav.getBoundingClientRect();
-    const linkRect = activeLink.getBoundingClientRect();
-    const visibleLeft = navRect.left + nav.clientLeft;
-    const visibleRight = visibleLeft + nav.clientWidth;
-    if (linkRect.left < visibleLeft) nav.scrollLeft -= visibleLeft - linkRect.left;
-    else if (linkRect.right > visibleRight) nav.scrollLeft += linkRect.right - visibleRight;
-  }
 }
 
 function renderViewContent(markup, viewName) {
