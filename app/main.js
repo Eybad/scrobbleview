@@ -624,6 +624,7 @@ function buildViewContext(viewName) {
     route,
     state,
     model,
+    calendarModel: current,
     previousTotals: currentPrev,
     detail: currentDetail,
     metric: activeMetric,

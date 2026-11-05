@@ -7,7 +7,7 @@ import { matchRangeShortcut, rangeChipLabel } from './filter-ui.js';
 import { civilFromDays } from '../src/aggregate/impl/derive.js';
 import { queryCatalog } from '../src/query.js';
 import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsPickerHTML } from './catalog-table.js';
-import { calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML } from './calendar-ui.js';
+import { buildCalendarMonthOptions, calendarInspectorHTML, calendarMonthViewHTML, calendarScaleToggleHTML } from './calendar-ui.js';
 import { compareView } from './compare-view.js';
 import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 import { describeCatalogQuery } from './catalog-query.js';
@@ -1489,15 +1489,22 @@ export function calendarView(model, year, ctx = {}) {
       const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
       return { date: iso, value: byMs ? v.ms : v.plays };
     });
-  const maxVal = Math.max(...days.map((d) => d.value), 1);
+  const maxVal = Math.max(...days.map((day) => day.value), 1);
   const zeroInYear = model.zeroDays.filter((d) => civilFromDays(d).y === year).length;
   const totalDays = days.length;
   const dataRange = model.meta.firstTs != null
     ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
     : null;
 
-  const daysMap = new Map(days.map((d) => [d.date, d]));
   const currentMonth = ctx.calMonth?.year === year ? ctx.calMonth.month : (ctx?.month ? Number(ctx.month) : 1);
+  const monthOptions = ctx.calendarMonthOptions ?? buildCalendarMonthOptions({
+    model,
+    year,
+    month: currentMonth,
+    metric: ctx.metric,
+    selectedDate: ctx.calDate,
+    normalizeYears: true
+  });
 
   return `
     <header class="view-header">
@@ -1506,7 +1513,7 @@ export function calendarView(model, year, ctx = {}) {
       <p class="view-meta">${fmtNum(totalDays)} días con actividad · ${fmtNum(zeroInYear)} días sin registros dentro del período observado · tocá un día para filtrar <span class="hint-shift">(shift+click = rango)</span></p>
     </header>
     ${calendarInspectorHTML({ year, byMs })}
-    ${calendarMonthViewHTML({ year, month: currentMonth, daysMap, colorScale: makeScale(maxVal), byMs, dataRange, selectedDate: ctx.calDate })}
+    ${calendarMonthViewHTML(monthOptions)}
     ${card('Actividad diaria', `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(year))}">${calendarGrid({
       days,
       year,
@@ -1557,20 +1564,17 @@ export function calendarIndexView(model, ctx = {}) {
   const allDailyValues = [...model.daily.values()].map((v) => (byMs ? v.ms : v.plays));
   const sharedMax = allDailyValues.length ? Math.max(...allDailyValues, 1) : 1;
 
-  const dataRange = model.meta.firstTs != null
-    ? { from: Math.floor(model.meta.firstTs / 86400), to: Math.floor(model.meta.lastTs / 86400) }
-    : null;
-
   const [last, ...prev] = years;
   const latestYear = ctx.calMonth?.year ?? last ?? (years.length ? years[0] : new Date().getFullYear());
-  const latestDaysMap = new Map([...model.daily.entries()]
-    .filter(([d]) => civilFromDays(d).y === latestYear)
-    .map(([d, v]) => {
-      const c = civilFromDays(d);
-      const iso = `${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
-      return [iso, { date: iso, value: byMs ? v.ms : v.plays, ms: v.ms, plays: v.plays }];
-    }));
   const currentMonth = ctx.calMonth?.month ?? (ctx?.month ? Number(ctx.month) : (new Date().getMonth() + 1));
+  const monthOptions = ctx.calendarMonthOptions ?? buildCalendarMonthOptions({
+    model,
+    year: latestYear,
+    month: currentMonth,
+    metric: ctx.metric,
+    selectedDate: ctx.calDate,
+    normalizeYears
+  });
 
   return `
     <header class="view-header">
@@ -1579,7 +1583,7 @@ export function calendarIndexView(model, ctx = {}) {
     </header>
     ${calendarScaleToggleHTML({ normalizeYears, maxValFormatted: valFmt(sharedMax) })}
     ${calendarInspectorHTML({ year: latestYear, byMs })}
-    ${calendarMonthViewHTML({ year: latestYear, month: currentMonth, daysMap: latestDaysMap, colorScale: normalizeYears ? makeScale(Math.max(...[...latestDaysMap.values()].map((d) => d.value), 1)) : makeScale(sharedMax), byMs, dataRange, selectedDate: ctx.calDate })}
+    ${calendarMonthViewHTML(monthOptions)}
     ${last != null ? card(`<a href="${esc(formatSemanticRoute('calendar', last, ctx.query))}">${esc(String(last))}</a>`, `<div class="chart-scroll chart-scroll--cal" tabindex="0" role="region" aria-label="Calendario de ${esc(String(last))}">${calendarYearGridHTML(model, last, ctx)}</div>`, '', true) : ''}
     ${prev.map((y) => {
       const yd = model.yearly.get(y);

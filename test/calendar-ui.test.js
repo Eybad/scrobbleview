@@ -1,11 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildCalendarMonthOptions,
   calendarInspectorHTML,
   calendarMonthViewHTML,
   calendarScaleToggleHTML
 } from '../app/calendar-ui.js';
 import { makeScale, NO_DATA } from '../src/charts.js';
+
+test('buildCalendarMonthOptions: prepara el mes y conserva la escala compartida o anual', () => {
+  const january = Math.floor(Date.UTC(2024, 0, 12) / 86400000);
+  const february = Math.floor(Date.UTC(2024, 1, 8) / 86400000);
+  const previousYear = Math.floor(Date.UTC(2023, 5, 4) / 86400000);
+  const model = {
+    daily: new Map([
+      [january, { ms: 100, plays: 10 }],
+      [february, { ms: 300, plays: 30 }],
+      [previousYear, { ms: 900, plays: 90 }]
+    ]),
+    meta: { firstTs: previousYear * 86400, lastTs: february * 86400 }
+  };
+  const shared = buildCalendarMonthOptions({
+    model, year: 2024, month: 1, metric: 'plays', selectedDate: '2024-01-12'
+  });
+  const normalized = buildCalendarMonthOptions({
+    model, year: 2024, month: 1, metric: 'plays', selectedDate: null, normalizeYears: true
+  });
+
+  assert.equal(shared.year, 2024);
+  assert.equal(shared.month, 1);
+  assert.equal(shared.byMs, false);
+  assert.equal(shared.selectedDate, '2024-01-12');
+  assert.deepEqual(shared.daysMap.get('2024-01-12'), {
+    date: '2024-01-12', value: 10, ms: 100, plays: 10
+  });
+  assert.equal(shared.daysMap.has('2023-06-04'), false);
+  assert.deepEqual(shared.dataRange, { from: previousYear, to: february });
+  assert.equal(shared.colorScale(10), makeScale(90)(10));
+  assert.equal(normalized.colorScale(10), makeScale(30)(10));
+  assert.notEqual(shared.colorScale(10), normalized.colorScale(10));
+});
 
 test('calendarInspectorHTML: renders inspector with explicit filter and range actions', () => {
   const html = calendarInspectorHTML({ year: 2024, byMs: true });

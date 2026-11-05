@@ -1,4 +1,4 @@
-import { esc, fmtNum, fmtMs, DOW_SHORT, NO_DATA } from '../src/charts.js';
+import { esc, fmtNum, fmtMs, DOW_SHORT, NO_DATA, makeScale } from '../src/charts.js';
 
 export const MONTHS_LONG = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -67,6 +67,35 @@ export function calendarQuery(query, calMonth, normalizeYears, selection = {}) {
   if (rangeTo) params.set('ct', rangeTo);
   else params.delete('ct');
   return params.toString();
+}
+
+export function buildCalendarMonthOptions({ model, year, month, metric, selectedDate, normalizeYears = false }) {
+  const byMs = metric == null || metric === 'ms';
+  const daysMap = new Map();
+  let sharedMax = 1;
+  let yearMax = 1;
+  for (const [epochDay, values] of model.daily ?? []) {
+    const date = new Date(epochDay * 86400000);
+    const iso = date.toISOString().slice(0, 10);
+    const value = byMs ? values.ms : values.plays;
+    sharedMax = Math.max(sharedMax, value);
+    if (date.getUTCFullYear() !== year) continue;
+    yearMax = Math.max(yearMax, value);
+    daysMap.set(iso, { date: iso, value, ms: values.ms, plays: values.plays });
+  }
+  const dataRange = model.meta?.firstTs == null ? null : {
+    from: Math.floor(model.meta.firstTs / 86400),
+    to: Math.floor(model.meta.lastTs / 86400)
+  };
+  return {
+    year,
+    month,
+    daysMap,
+    colorScale: makeScale(normalizeYears ? yearMax : sharedMax),
+    byMs,
+    dataRange,
+    selectedDate
+  };
 }
 
 export function calendarInspectorHTML({ year = null, byMs = true } = {}) {

@@ -1,7 +1,7 @@
 import { calculateCompareRange } from '../src/compare.js';
 import { filterParams, portableFilterParams } from './filter-ui.js';
 import { parseExploreState } from './catalog-query.js';
-import { calendarQuery } from './calendar-ui.js';
+import { buildCalendarMonthOptions, calendarQuery } from './calendar-ui.js';
 import { compareDateAt, compareDateRange } from './compare-state.js';
 import { serializeMetricParam } from './state-metric.js';
 
@@ -105,6 +105,23 @@ export function buildViewContext(viewName, snapshot) {
     : null;
   const isCurrentLongitudinal = longitudinalKey != null && longitudinal?.key === longitudinalKey;
   const detailRequested = viewName === 'day' || viewName === 'session' || viewName === 'track';
+  let calendarMonthOptions = null;
+  if (viewName === 'calendar') {
+    const calendarModel = snapshot.calendarModel ?? model;
+    const routeYear = route.id == null ? null : Number(route.id);
+    const yearlyRoute = Number.isInteger(routeYear) && routeYear >= 100 && routeYear <= 9999;
+    const latestYear = [...(calendarModel?.yearly?.keys?.() ?? [])].sort((a, b) => b - a)[0];
+    const year = yearlyRoute ? routeYear : state.calMonth?.year ?? latestYear ?? now.getFullYear();
+    const month = state.calMonth?.year === year ? state.calMonth.month : state.calMonth?.month ?? now.getMonth() + 1;
+    calendarMonthOptions = buildCalendarMonthOptions({
+      model: calendarModel,
+      year,
+      month,
+      metric,
+      selectedDate: state.calDate,
+      normalizeYears: yearlyRoute || Boolean(state.normalizeYears)
+    });
+  }
 
   return {
     years: state.years,
@@ -121,6 +138,7 @@ export function buildViewContext(viewName, snapshot) {
     normalizeYears: state.normalizeYears ?? false,
     calMonth: state.calMonth,
     calDate: state.calDate,
+    calendarMonthOptions,
     month: state.calMonth?.month ?? now.getMonth() + 1,
     comparePreset: compareView ? state.comparePreset : undefined,
     compareGranularity: compareView ? state.compareGranularity : undefined,

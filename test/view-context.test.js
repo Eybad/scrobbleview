@@ -68,6 +68,11 @@ test('calendar context carries the selected month, date and metric without readi
   assert.equal(query.get('cf'), '2024-03-10');
   assert.equal(query.get('ct'), '2024-03-12');
   assert.equal(query.get('m'), 'plays');
+  assert.equal(context.calendarMonthOptions.year, 2024);
+  assert.equal(context.calendarMonthOptions.month, 3);
+  assert.equal(context.calendarMonthOptions.byMs, false);
+  assert.equal(context.calendarMonthOptions.selectedDate, '2024-03-12');
+  assert.deepEqual(context.calendarMonthOptions.daysMap, new Map());
 });
 
 test('discovery state parser validates its values and serializer preserves surrounding query state', () => {
