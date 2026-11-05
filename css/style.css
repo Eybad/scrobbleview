@@ -375,19 +375,22 @@
 
 .home-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  align-items: center;
-  gap: clamp(2rem, 6vw, 5.5rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: var(--sp-3);
+  align-items: start;
 }
 
 
 .home-copy {
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
 }
 
 
 .home-copy h1 {
-  max-width: 13ch;
+  max-width: none;
   margin-bottom: var(--sp-4);
   font-size: clamp(2.4rem, 4vw, 3.6rem);
   letter-spacing: -0.055em;
@@ -406,7 +409,9 @@
 
 
 .home-help {
-  margin-top: var(--sp-6);
+  grid-column: 1;
+  grid-row: 2;
+  margin-top: 0;
   padding-inline: 0;
   background: transparent;
   border-width: 1px 0 0;
@@ -426,23 +431,36 @@
 
 
 .home-import {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
 }
 
 
-.home-import .cache-card {
-  margin-bottom: var(--sp-3);
+.home-import .cache-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
 }
 
 
-.home-import .actions {
-  justify-content: flex-start;
-  margin-top: var(--sp-3);
+.home-import .privacy-note,
+.home-import .status {
+  margin: 0;
+}
+
+
+.home-import #btn-demo {
+  align-self: flex-start;
 }
 
 
 .home-import .status {
-  margin-top: var(--sp-3);
   text-align: left;
 }
 
@@ -461,16 +479,28 @@
 }
 
 
-@media (max-width: 760px) {
+@media (max-width: 47.999rem) {
   .home-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-8);
+  }
+
+
+  .home-copy,
+  .home-import,
+  .home-help {
+    grid-column: 1;
+    grid-row: auto;
   }
 
 
   .home-copy h1 {
     max-width: 15ch;
     font-size: clamp(2.1rem, 9vw, 3rem);
+  }
+
+
+  .home-help {
+    width: 100%;
   }
 }
 

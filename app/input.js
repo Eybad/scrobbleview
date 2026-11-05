@@ -26,24 +26,19 @@ export function formatCacheMeta(summary) {
 export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCached }) {
   const zone = document.getElementById('drop-zone');
   const input = document.getElementById('file-input');
+  const btnUpload = document.getElementById('btn-upload');
   const btnDemo = document.getElementById('btn-demo');
   const btnUploadAlt = document.getElementById('btn-upload-alt');
+  const cacheChoice = document.getElementById('cache-choice');
   const cacheCard = document.getElementById('cache-card');
   const cacheMeta = document.getElementById('cache-meta');
   const btnCached = document.getElementById('btn-cached');
   const btnCachedClear = document.getElementById('btn-cached-clear');
-  const actions = document.querySelector('#view-home .actions');
   const status = document.getElementById('status');
   const viewHome = document.getElementById('view-home');
   const viewApp = document.getElementById('view-app');
 
   let busy = false;
-
-  if (window.matchMedia('(pointer: coarse)').matches) {
-    zone.querySelector('.drop-zone-title').textContent = 'Tocá para seleccionar tus archivos';
-    zone.querySelector('.drop-zone-hint').hidden = true;
-    zone.setAttribute('aria-label', 'Cargar archivos de historial de Spotify. Tocá para elegirlos.');
-  }
 
   function setStatus(msg, kind = '') {
     status.textContent = msg;
@@ -124,12 +119,8 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
     pickFiles(e.dataTransfer.files);
   });
 
-  zone.addEventListener('click', () => input.click());
-  zone.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      input.click();
-    }
+  viewHome.addEventListener('click', (event) => {
+    if (event.target.closest?.('[data-action="choose-files"]')) input.click();
   });
   input.addEventListener('change', () => {
     pickFiles(input.files);
@@ -137,7 +128,6 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   });
 
   btnDemo.addEventListener('click', () => run({ demo: true }));
-  if (btnUploadAlt) btnUploadAlt.addEventListener('click', () => input.click());
   if (btnCached) btnCached.addEventListener('click', runCached);
   if (btnCachedClear && onClearCached) {
     // Require a second action before deleting the saved history.
@@ -179,15 +169,15 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
     setStatus,
     reset(message) {
       viewApp.hidden = true; viewHome.hidden = false; setStatus(message);
-      (zone.hidden ? btnCached : zone)?.focus();
+      (zone.hidden ? btnCached : btnUpload)?.focus();
     },
     showCachedButtons(cacheInfo) {
       const active = Boolean(cacheInfo);
+      if (cacheChoice) cacheChoice.hidden = !active;
       if (cacheCard) cacheCard.hidden = !active;
       if (cacheMeta && active) cacheMeta.textContent = formatCacheMeta(cacheInfo);
       zone.hidden = active;
       if (btnUploadAlt) btnUploadAlt.hidden = !active;
-      actions?.classList.toggle('has-cache', active);
     }
   };
 }

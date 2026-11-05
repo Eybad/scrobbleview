@@ -154,26 +154,27 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-  padding: var(--sp-8) var(--sp-6);
+  background: var(--surface);
+  min-height: 176px;
+  padding: var(--sp-4);
   text-align: center;
-  cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 
 .drop-zone-badge {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--accent-soft);
   border: 1px solid var(--accent-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--sp-4);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
@@ -195,7 +196,6 @@
 
 
 .drop-zone:hover,
-.drop-zone:focus-visible,
 .drop-zone.is-dragover {
   border-color: var(--accent);
   background: var(--surface-2);
@@ -209,7 +209,6 @@
 
 
 .drop-zone.busy {
-  cursor: progress;
   pointer-events: none;
   border-color: var(--accent);
   border-style: solid;
@@ -217,20 +216,15 @@
 
 
 .drop-zone-title {
+  display: none;
   margin: 0;
-  font-size: var(--fs-lg);
-  font-weight: 600;
-}
-
-
-.drop-zone-hint {
-  margin: var(--sp-1) 0 0;
   color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
 
 
 .drop-zone-files {
-  margin: var(--sp-3) 0 0;
+  margin: 0;
   color: var(--text-faint-high);
   font-size: var(--fs-sm);
 }
@@ -305,26 +299,6 @@
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
-}
-
-
-.actions.has-cache {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--sp-3);
-}
-
-
-.actions.has-cache .btn {
-  width: 100%;
-  padding-inline: var(--sp-3);
-}
-
-
-@media (max-width: 480px) {
-  .actions.has-cache {
-    grid-template-columns: 1fr;
-  }
 }
 
 
@@ -871,35 +845,6 @@
 }
 
 
-.drop-zone {
-  min-height: 300px;
-  justify-content: center;
-  border-color: var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-
-.drop-zone-badge {
-  width: 52px;
-  height: 52px;
-  margin-bottom: var(--sp-4);
-}
-
-
-.drop-zone-title {
-  font-size: var(--fs-lg);
-  letter-spacing: -0.02em;
-}
-
-
-.drop-zone-hint {
-  font-size: var(--fs-sm);
-}
-
-
 .btn {
   background: var(--surface-2);
   border-color: var(--border-strong);
@@ -1062,11 +1007,6 @@
   }
 
 
-  .drop-zone {
-    min-height: 240px;
-  }
-
-
   .card {
     padding: var(--sp-3) var(--sp-4);
   }
@@ -1091,6 +1031,18 @@
 
   .cache-actions {
     justify-content: flex-end;
+  }
+}
+
+
+@media (min-width: 48rem) {
+  .drop-zone {
+    min-height: 224px;
+  }
+
+
+  .drop-zone-title {
+    display: block;
   }
 }
 

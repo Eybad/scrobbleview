@@ -1007,7 +1007,7 @@ test('all Top 10/25/50/100 tables include # column and tall scroll fits at least
   assert.ok(mainJs.includes('function syncTallTables') && mainJs.includes('rows?.[9]'), 'main.js measures the 10th row (rows[9]) so tall scroll always shows 10 rows');
 });
 
-test('home page UI: conditional storage hierarchy, cache card with metadata & trash icon, clean drop-zone badges, Spotify help details, and left-aligned privacy pill', async () => {
+test('home page UI: brief privacy-first copy, explicit file selection, cached session actions, and progressive Spotify help', async () => {
   const { summaryFromMetaAndT } = await import('../app/storage.js');
   const { formatCacheMeta } = await import('../app/input.js');
 
@@ -1026,24 +1026,33 @@ test('home page UI: conditional storage hierarchy, cache card with metadata & tr
   const inputJs = await readFile(new URL('../app/input.js', import.meta.url), 'utf8');
 
   assert.ok(html.includes('id="cache-card" class="cache-card" hidden'), 'cache-card hidden by default when no cached data exists');
-  const cacheCardChunk = html.slice(html.indexOf('id="cache-card"'), html.indexOf('id="drop-zone"'));
+  assert.ok(html.includes('id="cache-choice" class="cache-choice" hidden'), 'cached actions remain grouped and hidden before consented data exists');
+  const cacheCardChunk = html.slice(html.indexOf('id="cache-choice"'), html.indexOf('id="drop-zone"'));
   assert.ok(cacheCardChunk.includes('id="btn-cached"'), 'btn-cached lives inside cache-card');
   assert.ok(cacheCardChunk.includes('id="cache-meta"'), 'cache-meta lives inside cache-card');
   assert.ok(cacheCardChunk.includes('id="btn-cached-clear"'), 'trash delete button grouped inside cache-card on the right');
 
-  const dropZoneChunk = html.slice(html.indexOf('id="drop-zone"'), html.indexOf('<div class="actions">'));
-  assert.ok(dropZoneChunk.includes('Acepta <code>.zip</code> o múltiples <code>.json</code> de Spotify'), 'short single-line .zip and .json badges');
-  assert.ok(!dropZoneChunk.includes('Streaming_History_Audio_'), 'long literal filename moved out of drop-zone');
+  const dropZoneChunk = html.slice(html.indexOf('id="drop-zone"'), html.indexOf('</div>', html.indexOf('id="drop-zone"')));
+  assert.ok(dropZoneChunk.includes('id="btn-upload"') && dropZoneChunk.includes('Elegir archivos'), 'primary file selection action is inside the drop target');
+  assert.ok(dropZoneChunk.includes('ZIP o varios JSON del historial ampliado'), 'format support uses the exact onboarding copy');
+  assert.doesNotMatch(dropZoneChunk, /role="button"|tabindex=/, 'drop target is not an interactive control');
+  assert.ok(html.includes('id="file-input" accept=".json,.zip" multiple hidden'), 'file input accepts multiple JSON and ZIP files');
 
-  const actionsChunk = html.slice(html.indexOf('<div class="actions">'), html.indexOf('<p id="status"'));
-  assert.ok(actionsChunk.includes('id="btn-upload-alt"') && actionsChunk.includes('hidden'), 'secondary upload button hidden by default and shown when cache exists');
-  assert.ok(actionsChunk.includes('id="btn-demo"'), 'demo button in actions');
-  assert.ok(inputJs.includes('zone.hidden = active'), 'drop-zone hidden when cache card is active (Tarjeta arriba + 2 botones)');
+  assert.ok(cacheCardChunk.includes('id="btn-upload-alt"') && cacheCardChunk.includes('Elegir otros archivos'), 'cached sessions offer a neutral file-selection action beside cached metadata');
+  assert.ok(html.includes('id="btn-demo"') && html.includes('Probar con datos de ejemplo'), 'demo remains available as a secondary action');
+  assert.ok(inputJs.includes('cacheChoice.hidden = !active') && inputJs.includes('zone.hidden = active') && inputJs.includes('btnUploadAlt.hidden = !active'), 'cached sessions switch to the grouped cache and alternate chooser');
+  assert.ok(inputJs.includes("viewHome.addEventListener('click'") && inputJs.includes("input.click()"), 'file input is opened by one delegated button handler');
+  assert.doesNotMatch(inputJs, /zone\.addEventListener\(['"](?:click|keydown)/, 'drop target does not open the file input');
 
   assert.ok(html.includes('<details class="home-help">'), 'collapsible guide for downloading Spotify history');
-  assert.ok(html.includes('¿Cómo descargo mi historial de Spotify?'), 'onboarding summary text present');
+  assert.ok(html.includes('Cómo obtener tu historial'), 'onboarding summary text present');
   assert.ok(html.includes('Historial de reproducción ampliado'), 'guide mentions extended streaming history');
-  assert.ok(html.includes('100% local:') && html.includes('cargá antes la página o servila localmente'), 'concise privacy pill copy');
+  assert.ok(html.includes('Se procesa en tu dispositivo. Tus archivos nunca se suben'), 'privacy copy remains visible and concise');
+  assert.ok(html.includes('Para usarla sin internet, cargá antes la página o servila localmente.'), 'offline clarification remains in help without a guarantee');
+  assert.ok(html.indexOf('class="home-copy"') < html.indexOf('class="home-import"') && html.indexOf('class="home-import"') < html.indexOf('class="home-help"'), 'DOM order follows the mobile onboarding sequence');
+  assert.ok(html.includes('Tu historial de Spotify, en perspectiva') && html.includes('Explorá tus artistas, canciones y hábitos de escucha'), 'home title and description match the defined copy');
+  assert.doesNotMatch(html, /class="tagline"/, 'redundant home header tagline is removed');
+  assert.doesNotMatch(inputJs, /pointer: coarse|Tocá para seleccionar/, 'selection copy does not diverge on touch devices');
 });
 
 test('wrapped titles identify the selected year or effective period', async () => {

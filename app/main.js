@@ -27,7 +27,6 @@ const siteHeader = document.querySelector('.site-header');
 const headerActions = document.getElementById('header-actions');
 const siteFooter = document.querySelector('.site-footer');
 const footerMeta = document.getElementById('footer-meta');
-const tagline = document.querySelector('.tagline');
 
 const LIMITS_STORAGE_KEY = 'scrobbleview:tableLimits';
 const PROCESSING_INDICATOR_DELAY_MS = 180;
@@ -752,7 +751,6 @@ function render() {
     footerMeta.textContent = footerMetaText(model);
     footerMeta.hidden = false;
   }
-  tagline?.setAttribute('hidden', '');
   wireView();
 }
 
@@ -1427,7 +1425,6 @@ cancelProcessing.addEventListener('click', () => {
   headerActions?.setAttribute('hidden', '');
   siteFooter?.setAttribute('hidden', '');
   siteHeader?.classList.add('site-header--home');
-  tagline?.removeAttribute('hidden');
   inputApi.reset('Procesamiento cancelado. Volvé a seleccionar los archivos para continuar.');
 });
 
