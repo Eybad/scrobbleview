@@ -16,16 +16,20 @@ export function mountCalendar(root, { readState, dispatch }) {
     return snapshot;
   }
 
+  function selectedDate(snapshot) {
+    return snapshot.state.calDate ?? snapshot.context.calendarMonthOptions.selectedDate ?? null;
+  }
+
   function syncDaySelection(snapshot) {
-    const selectedDate = snapshot.state.calDate ?? null;
-    const selectedDay = selectedDate == null ? null : Math.floor(Date.parse(`${selectedDate}T00:00:00Z`) / 86400000);
+    const date = selectedDate(snapshot);
+    const selectedDay = date == null ? null : Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000);
     for (const day of root.querySelectorAll('[data-day]')) {
       day.classList.toggle('is-selected', selectedDay != null && Number(day.dataset.day) === selectedDay);
     }
 
     const wrap = root.querySelector('.calendar-month__grid-wrap');
     const days = [...(wrap?.querySelectorAll('[data-date]') ?? [])];
-    const selected = days.find((day) => day.dataset.date === selectedDate) ?? null;
+    const selected = days.find((day) => day.dataset.date === date) ?? null;
     const tabStop = selected ?? days[0] ?? null;
     for (const day of days) {
       const isSelected = day === selected;
@@ -47,8 +51,8 @@ export function mountCalendar(root, { readState, dispatch }) {
     const toInput = root.querySelector('#cal-range-to');
     if (fromInput) fromInput.value = state.calRangeFrom ?? '';
     if (toInput) toInput.value = state.calRangeTo ?? '';
-    const selectedDate = state.calDate ?? null;
-    if (!selectedDate) {
+    const date = selectedDate(snapshot);
+    if (!date) {
       dateOutput.textContent = 'Ningún día seleccionado';
       root.querySelector('#cal-selected-value')?.replaceChildren();
       root.querySelector('#btn-cal-filter-day')?.setAttribute('disabled', '');
@@ -59,7 +63,7 @@ export function mountCalendar(root, { readState, dispatch }) {
       return;
     }
 
-    const day = Math.floor(Date.parse(`${selectedDate}T00:00:00Z`) / 86400000);
+    const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000);
     const matches = [...root.querySelectorAll('[data-day]')]
       .filter((cell) => Number(cell.dataset.day) === day);
     const title = matches[0]?.dataset.label || matches[0]?.querySelector('title')?.textContent;
@@ -70,7 +74,7 @@ export function mountCalendar(root, { readState, dispatch }) {
     const byMs = context.metric === 'ms';
     const value = record?.[byMs ? 'ms' : 'plays'] ?? 0;
     const label = title || (isOutOfData ? 'sin datos' : (value > 0 ? (byMs ? fmtMs(value) : fmtNum(value)) : 'sin actividad'));
-    dateOutput.textContent = selectedDate;
+    dateOutput.textContent = date;
     const valueOutput = root.querySelector('#cal-selected-value');
     if (valueOutput) valueOutput.textContent = `· ${label}`;
     root.querySelector('#btn-cal-filter-day')?.removeAttribute('disabled');
@@ -79,11 +83,11 @@ export function mountCalendar(root, { readState, dispatch }) {
     const detailLink = root.querySelector('#cal-day-detail');
     if (detailLink) {
       const query = calendarQuery(context.query, state.calMonth, state.normalizeYears, {
-        date: selectedDate,
+        date,
         rangeFrom: state.calRangeFrom,
         rangeTo: state.calRangeTo
       });
-      detailLink.href = formatSemanticRoute('day', selectedDate, query);
+      detailLink.href = formatSemanticRoute('day', date, query);
       detailLink.removeAttribute('hidden');
     }
     syncDaySelection(snapshot);
@@ -137,6 +141,7 @@ export function mountCalendar(root, { readState, dispatch }) {
         type: 'select-day',
         date,
         day,
+        previousDate: selectedDate(snapshot),
         label: dayElement.dataset.label || dayElement.querySelector('title')?.textContent || dayElement.getAttribute('aria-label') || '',
         rangeFrom: fromInput?.value || null,
         rangeTo: toInput?.value || null,
@@ -148,7 +153,7 @@ export function mountCalendar(root, { readState, dispatch }) {
 
     const action = event.target.closest?.('[data-cal-action]');
     if (action && root.contains(action)) {
-      const date = snapshot.state.calDate;
+      const date = selectedDate(snapshot);
       const type = action.dataset.calAction;
       if (type === 'filter-day' && date) dispatch({ type: 'filter-day', date });
       else if ((type === 'set-start' || type === 'set-end') && date) {

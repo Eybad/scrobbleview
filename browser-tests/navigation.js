@@ -467,6 +467,14 @@ async function run() {
   const hourlyChart = appDocument.querySelector('.chart-card[data-chart-id="dashboard-day-hour"]');
   const hourlyPoints = JSON.parse(hourlyChart.dataset.chartPoints);
   assert(hourlyPoints.length === 168, 'El mapa horario debe exponer todos sus puntos');
+  const hourlyInspector = hourlyChart.querySelector('.chart-inspector');
+  const closeHourlyInspector = hourlyChart.querySelector('[data-action="close-inspector"]');
+  assert(!hourlyInspector.hidden && hourlyInspector.querySelector('.chart-inspector__label').textContent === 'Elegí un punto', 'El inspector permanece visible en su estado inicial');
+  assert(closeHourlyInspector.disabled && hourlyChart.querySelector('.chart-nav__status').textContent === '168 puntos', 'El estado inicial reserva cerrar e indica la cantidad de puntos');
+  assert(appWindow.getComputedStyle(hourlyInspector).minHeight === '60px', 'El inspector reserva 60px en el viewport móvil');
+  const chartHelp = appDocument.querySelector('.chart-keyboard-help');
+  assert(appDocument.querySelectorAll('.chart-keyboard-help').length === 1 && chartHelp.nextElementSibling?.classList.contains('grid-2'), 'La ayuda de teclado aparece una vez al inicio del bloque de visualizaciones');
+  assert(!hourlyInspector.hidden, 'El inspector conserva su espacio antes de seleccionar un punto');
   const nextHourlyPoint = hourlyChart.querySelector('[data-chart-step][data-dir="1"]');
   nextHourlyPoint.focus();
   nextHourlyPoint.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -480,7 +488,8 @@ async function run() {
     clientX: hourlyCellRect.left + hourlyCellRect.width / 2,
     clientY: hourlyCellRect.top + hourlyCellRect.height / 2
   }));
-  assert(!hourlyChart.querySelector('.chart-inspector').hidden, 'El toque/clic de un punto debe mantener abierto el inspector');
+  assert(hourlyChart.querySelector('.chart-inspector') === hourlyInspector && !hourlyInspector.hidden, 'La selección actualiza el inspector existente sin insertarlo');
+  assert(!closeHourlyInspector.disabled, 'La selección habilita cerrar el inspector');
   assert(hourlyCell.classList.contains('is-selected'), 'El punto tocado debe quedar seleccionado');
   const selectedHourlyIdentity = hourlyPoints[35].date || hourlyPoints[35].label;
 
@@ -500,9 +509,15 @@ async function run() {
   const restoredHourlyPoint = [...restoredHourlyChart.querySelectorAll('[data-chart-index]')]
     .find(point => (hourlyPoints[Number(point.dataset.chartIndex)].date || hourlyPoints[Number(point.dataset.chartIndex)].label) === selectedHourlyIdentity);
   assert(restoredHourlyPoint?.classList.contains('is-selected'), 'La selección debe restaurarse por identidad después de navegar');
-  assert(!restoredHourlyChart.querySelector('.chart-inspector').hidden, 'El inspector debe reabrirse al restaurar la selección');
-  restoredHourlyChart.querySelector('[data-action="close-inspector"]').click();
-  assert(restoredHourlyChart.querySelector('.chart-inspector').hidden, 'Cerrar debe ocultar el inspector');
+  assert(!restoredHourlyChart.querySelector('.chart-inspector').hidden, 'El inspector conserva su estado visible al restaurar la selección');
+  const restoredCloseButton = restoredHourlyChart.querySelector('[data-action="close-inspector"]');
+  restoredCloseButton.focus();
+  restoredCloseButton.click();
+  assert(!restoredHourlyChart.querySelector('.chart-inspector').hidden, 'Cerrar debe conservar el espacio del inspector');
+  assert(restoredHourlyChart.querySelector('.chart-inspector__label').textContent === 'Elegí un punto', 'Cerrar debe restaurar el estado inicial');
+  assert(restoredHourlyChart.querySelector('[data-action="close-inspector"]').disabled, 'Cerrar vuelve a quedar deshabilitado');
+  assert(restoredHourlyChart.querySelector('.chart-nav__status').textContent === '168 puntos', 'Cerrar restaura el conteo de puntos');
+  assert(appDocument.activeElement === restoredHourlyChart.querySelector('[data-chart-step][data-dir="1"]'), 'Cerrar devuelve el foco a la navegación del gráfico');
   assert(!restoredHourlyChart.querySelector('.is-selected'), 'Cerrar debe limpiar el punto seleccionado');
   assert(appDocument.getElementById('live-status').textContent === 'Inspector cerrado.', 'Cerrar debe anunciar el estado actualizado');
 
@@ -700,9 +715,21 @@ async function run() {
 
   navLink('Calendario').click();
   await waitFor(() => viewHeading().startsWith('Calendario'), 'abrir calendario');
+  appWindow.location.hash = '#/v1/calendar/2024?m=ms';
+  await waitFor(() => viewHeading() === 'Calendario 2024', 'abrir el calendario anual');
+  assert(element('#cal-selected-date').textContent === '2024-01-10', 'El calendario anual selecciona el inicio de su cobertura');
+  assert(!new URLSearchParams(appWindow.location.hash.split('?')[1] ?? '').has('cd'), 'La selección anual implícita no modifica la URL');
   appWindow.location.hash = '#/v1/calendar?cm=2024-02';
   await waitFor(() => element('.calendar-month__title').textContent === 'Febrero 2024', 'seleccionar febrero de 2024');
   await waitFor(() => Boolean(element('[data-date="2024-02-10"]')), 'abrir calendario');
+  assert(element('#cal-selected-date').textContent === '2024-02-01', 'El mes sin selección URL inicia en su primer día');
+  assert(element('[data-date="2024-02-01"]').classList.contains('is-selected'), 'La selección inicial se refleja en el calendario');
+  assert(!element('#btn-cal-filter-day').disabled && !element('#btn-cal-set-start').disabled && !element('#btn-cal-set-end').disabled, 'Las acciones del inspector están presentes y disponibles');
+  assert(!new URLSearchParams(appWindow.location.hash.split('?')[1] ?? '').has('cd'), 'La selección mensual implícita no modifica la URL');
+  appWindow.location.hash = '#/v1/calendar?cm=2024-02&cd=2024-02-11';
+  await waitFor(() => element('#cal-selected-date').textContent === '2024-02-11', 'restaurar la selección indicada por URL');
+  appWindow.location.hash = '#/v1/calendar?cm=2024-02';
+  await waitFor(() => element('#cal-selected-date').textContent === '2024-02-01', 'restaurar la selección inicial mensual');
   const selectedMonthDay = element('[data-date="2024-02-10"]');
   selectedMonthDay.focus();
   selectedMonthDay.click();
@@ -960,6 +987,7 @@ async function run() {
   }
   frame.style.width = '768px';
   await nextFrame();
+  assert(appWindow.getComputedStyle(element('.chart-inspector')).minHeight === '44px', 'El inspector reserva 44px desde 48rem');
   assert(appWindow.matchMedia('(min-width: 48rem)').matches && appWindow.getComputedStyle(element('.app-nav')).display === 'flex', 'La navegación cambia a desktop exactamente desde 48rem');
   const desktopContextInner = element('.context-bar-inner');
   assert(appWindow.getComputedStyle(desktopContextInner).gridTemplateColumns.trim().split(/\s+/).length === 2, 'El período y la métrica comparten una fila desde 48rem');

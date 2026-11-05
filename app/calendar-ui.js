@@ -32,6 +32,22 @@ export function parseCalendarSelection(query) {
   };
 }
 
+export function defaultCalendarDate({ model, year, month, yearly = false }) {
+  if (!yearly) return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+  if (model?.meta?.firstTs == null || model?.meta?.lastTs == null) return null;
+  const firstCoveredDay = Math.max(
+    Math.floor(Date.UTC(year, 0, 1) / 86400000),
+    Math.floor(model.meta.firstTs / 86400)
+  );
+  const lastCoveredDay = Math.min(
+    Math.floor(Date.UTC(year, 11, 31) / 86400000),
+    Math.floor(model.meta.lastTs / 86400)
+  );
+  return firstCoveredDay <= lastCoveredDay
+    ? new Date(firstCoveredDay * 86400000).toISOString().slice(0, 10)
+    : null;
+}
+
 export function calendarGridTargetDate(value, key) {
   const date = validCalendarDate(value);
   if (!date) return null;

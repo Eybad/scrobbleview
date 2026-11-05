@@ -1,7 +1,7 @@
 import { calculateCompareRange } from '../src/compare.js';
 import { filterParams, portableFilterParams } from './filter-ui.js';
 import { parseExploreState } from './catalog-query.js';
-import { buildCalendarMonthOptions, calendarQuery } from './calendar-ui.js';
+import { buildCalendarMonthOptions, calendarQuery, defaultCalendarDate } from './calendar-ui.js';
 import { compareDateAt, compareDateRange } from './compare-state.js';
 import { serializeMetricParam } from './state-metric.js';
 
@@ -113,12 +113,13 @@ export function buildViewContext(viewName, snapshot) {
     const latestYear = [...(calendarModel?.yearly?.keys?.() ?? [])].sort((a, b) => b - a)[0];
     const year = yearlyRoute ? routeYear : state.calMonth?.year ?? latestYear ?? now.getFullYear();
     const month = state.calMonth?.year === year ? state.calMonth.month : state.calMonth?.month ?? now.getMonth() + 1;
+    const selectedDate = state.calDate ?? defaultCalendarDate({ model: calendarModel, year, month, yearly: yearlyRoute });
     calendarMonthOptions = buildCalendarMonthOptions({
       model: calendarModel,
       year,
       month,
       metric,
-      selectedDate: state.calDate,
+      selectedDate,
       normalizeYears: yearlyRoute || Boolean(state.normalizeYears)
     });
   }

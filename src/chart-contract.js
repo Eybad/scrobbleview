@@ -177,18 +177,18 @@ export function renderChartWithContract(contract, chartSvg) {
     <div class="chart-card__body">
       <div class="chart-interactive-wrap" data-chart-target="${esc(id)}">
         ${chartSvg}
-        <div class="chart-inspector" id="inspector-${esc(id)}" aria-live="polite" data-chart-id="${esc(id)}" hidden>
+        <div class="chart-inspector" id="inspector-${esc(id)}" aria-live="polite" data-chart-id="${esc(id)}">
           <div class="chart-inspector__content">
-            <strong class="chart-inspector__label"></strong>:
+            <strong class="chart-inspector__label">Elegí un punto</strong>
             <span class="chart-inspector__value"></span>
             <span class="chart-inspector__pct"></span>
           </div>
-          <button type="button" class="btn-step btn-step--close" data-action="close-inspector" aria-label="Cerrar inspector">✕</button>
+          <button type="button" class="btn-step btn-step--close" data-action="close-inspector" aria-label="Cerrar inspector" disabled>✕</button>
         </div>
       </div>
       <div class="chart-nav" role="toolbar" aria-label="Navegación de puntos de ${esc(title)}">
         <button type="button" class="btn-step btn-step--prev" data-chart-step="${esc(id)}" data-dir="-1" aria-label="Punto anterior" disabled>‹</button>
-        <span class="chart-nav__status" id="nav-status-${esc(id)}">Tocar o usar flechas para inspeccionar</span>
+        <span class="chart-nav__status" id="nav-status-${esc(id)}">${points.length} puntos</span>
         <button type="button" class="btn-step btn-step--next" data-chart-step="${esc(id)}" data-dir="1" aria-label="Punto siguiente">›</button>
       </div>
     </div>

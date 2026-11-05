@@ -68,7 +68,7 @@ export function mountChartInteractions(root, { announce }) {
     inspector.querySelector('.chart-inspector__label').textContent = point.date || point.label;
     inspector.querySelector('.chart-inspector__value').textContent = point.valueText;
     inspector.querySelector('.chart-inspector__pct').textContent = point.shareText ? ` · ${point.shareText}` : '';
-    inspector.hidden = false;
+    inspector.querySelector('[data-action="close-inspector"]').disabled = false;
     const status = card.querySelector('.chart-nav__status');
     if (status) status.textContent = `${selectedIndex + 1} de ${points.length}: ${point.label}`;
     card.querySelectorAll('[data-chart-step]').forEach((button) => {
@@ -147,15 +147,19 @@ export function mountChartInteractions(root, { announce }) {
     const card = closeInspector.closest('.chart-card');
     const inspector = card?.querySelector('.chart-inspector');
     if (!inspector) return;
-    inspector.hidden = true;
+    inspector.querySelector('.chart-inspector__label').textContent = 'Elegí un punto';
+    inspector.querySelector('.chart-inspector__value').textContent = '';
+    inspector.querySelector('.chart-inspector__pct').textContent = '';
+    closeInspector.disabled = true;
     selections.delete(card.dataset.chartId);
     card.querySelectorAll('[data-chart-index]').forEach((item) => item.classList.remove('is-selected'));
     const points = chartPoints(card);
     const status = card.querySelector('.chart-nav__status');
-    if (status) status.textContent = `Tocar o usar flechas para inspeccionar (${points.length} puntos)`;
+    if (status) status.textContent = `${points.length} puntos`;
     card.querySelector('[data-chart-step][data-dir="-1"]')?.setAttribute('disabled', '');
     card.querySelector('[data-chart-step][data-dir="1"]')?.removeAttribute('disabled');
     announce('Inspector cerrado.');
+    card.querySelector('[data-chart-step][data-dir="1"]')?.focus({ preventScroll: true });
   }
 
   function handleKeydown(event) {

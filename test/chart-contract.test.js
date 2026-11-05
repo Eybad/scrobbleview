@@ -82,6 +82,10 @@ test('renderChartWithContract: generates chart markup with inspector, controls a
   assert.ok(html.includes('class="chart-card"'));
   assert.ok(html.includes('data-chart-id="hours-start"'));
   assert.ok(html.includes('class="chart-inspector"'));
+  assert.ok(html.includes('class="chart-inspector" id="inspector-hours-start" aria-live="polite" data-chart-id="hours-start">'));
+  assert.ok(html.includes('<strong class="chart-inspector__label">Elegí un punto</strong>'));
+  assert.ok(html.includes('aria-label="Cerrar inspector" disabled'));
+  assert.ok(html.includes('id="nav-status-hours-start">24 puntos</span>'));
   assert.ok(html.includes('class="chart-nav"'));
   assert.ok(html.includes('class="btn-step btn-step--prev"'));
   assert.ok(html.includes('class="btn-step btn-step--next"'));

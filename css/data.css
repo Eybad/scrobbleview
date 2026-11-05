@@ -897,6 +897,21 @@ details.calendar-year summary:hover {
   border-radius: var(--radius-sm);
   margin-top: var(--sp-2);
   font-size: var(--fs-sm);
+  min-height: 60px;
+}
+
+
+.chart-keyboard-help {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+
+@media (min-width: 48rem) {
+  .chart-inspector {
+    min-height: 44px;
+  }
 }
 
 

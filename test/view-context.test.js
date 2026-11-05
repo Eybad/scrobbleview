@@ -75,6 +75,30 @@ test('calendar context carries the selected month, date and metric without readi
   assert.deepEqual(context.calendarMonthOptions.daysMap, new Map());
 });
 
+test('calendar context displays a default date without serializing it', () => {
+  const state = { ...emptyFilterState(), calMonth: { year: 2024, month: 3 } };
+  const context = buildViewContext('calendar', createSnapshot({ view: 'calendar', state }));
+  const query = new URLSearchParams(context.query.replace(/^\?/, ''));
+
+  assert.equal(context.calendarMonthOptions.selectedDate, '2024-03-01');
+  assert.equal(query.has('cd'), false);
+});
+
+test('year calendar context selects the first day in that year coverage without changing the URL', () => {
+  const firstDay = Math.floor(Date.UTC(2024, 0, 10) / 86400000);
+  const lastDay = Math.floor(Date.UTC(2024, 1, 11) / 86400000);
+  const model = { meta: { firstTs: firstDay * 86400, lastTs: lastDay * 86400 }, daily: new Map(), yearly: new Map() };
+  const context = buildViewContext('calendar', createSnapshot({
+    view: 'calendar',
+    state: emptyFilterState(),
+    overrides: { route: { view: 'calendar', id: 2024, query: '' }, model }
+  }));
+  const query = new URLSearchParams(context.query.replace(/^\?/, ''));
+
+  assert.equal(context.calendarMonthOptions.selectedDate, '2024-01-10');
+  assert.equal(query.has('cd'), false);
+});
+
 test('discovery state parser validates its values and serializer preserves surrounding query state', () => {
   assert.deepEqual(parseDiscoveryState('?cb=90&lps=100&ctp=2&cap=0&ftp=4&fap=1'), {
     comebackThresholdDays: 90,

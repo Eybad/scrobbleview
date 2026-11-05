@@ -661,6 +661,13 @@ function renderViewContent(markup, viewName) {
   const content = document.createElement('div');
   content.dataset.viewContent = '';
   content.innerHTML = markup;
+  const firstChart = content.querySelector('.chart-card');
+  if (firstChart) {
+    const help = document.createElement('p');
+    help.className = 'chart-keyboard-help';
+    help.textContent = 'Seleccioná un gráfico; usá ←/→ para recorrer puntos e Inicio/Fin para ir a los extremos.';
+    (firstChart.closest('.grid-2') ?? firstChart).before(help);
+  }
   const placeholder = document.createElement('div');
   placeholder.className = 'view-placeholder';
   placeholder.dataset.viewPlaceholder = '';
@@ -1398,7 +1405,7 @@ function mountExploreController() {
 function dispatchCalendarAction(action) {
   if (action.type === 'select-day') {
     const [year, month] = action.date.split('-').map(Number);
-    const previousDate = state.calDate;
+    const previousDate = state.calDate ?? action.previousDate;
     state.calMonth = { year, month };
     state.calDate = action.date;
     if (action.shiftKey && previousDate) {

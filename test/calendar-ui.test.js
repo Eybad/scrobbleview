@@ -2,12 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildCalendarMonthOptions,
+  defaultCalendarDate,
   calendarInspectorHTML,
   calendarMonthDaysHTML,
   calendarMonthViewHTML,
   calendarScaleToggleHTML
 } from '../app/calendar-ui.js';
 import { makeScale, NO_DATA } from '../src/charts.js';
+
+test('defaultCalendarDate: uses the displayed month or the annual coverage start', () => {
+  const firstDay = Math.floor(Date.UTC(2024, 0, 10) / 86400000);
+  const lastDay = Math.floor(Date.UTC(2024, 1, 11) / 86400000);
+  const model = { meta: { firstTs: firstDay * 86400, lastTs: lastDay * 86400 } };
+
+  assert.equal(defaultCalendarDate({ model, year: 2024, month: 2 }), '2024-02-01');
+  assert.equal(defaultCalendarDate({ model, year: 2024, month: 2, yearly: true }), '2024-01-10');
+  assert.equal(defaultCalendarDate({ model, year: 2023, month: 6, yearly: true }), null);
+});
 
 test('buildCalendarMonthOptions: prepara el mes y conserva la escala compartida o anual', () => {
   const january = Math.floor(Date.UTC(2024, 0, 12) / 86400000);
