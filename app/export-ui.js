@@ -14,13 +14,14 @@ function captureContext(context) {
     },
     exploreState: exploreState ? {
       tab: exploreState.tab,
-      query: exploreState.query,
-      sortBy: exploreState.sortBy,
-      sortDir: exploreState.sortDir,
+      query: exploreState.q ?? exploreState.query,
+      sortBy: exploreState.sort ?? exploreState.sortBy,
+      sortDir: exploreState.dir ?? exploreState.sortDir,
       page: exploreState.page,
       pageSize: exploreState.pageSize,
       minPlays: exploreState.minPlays,
-      minMonths: exploreState.minMonths
+      minMonths: exploreState.minMonths,
+      ...(exploreState.minKnownSkips === undefined ? {} : { minKnownSkips: exploreState.minKnownSkips })
     } : null
   };
 }

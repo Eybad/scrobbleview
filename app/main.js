@@ -9,6 +9,7 @@ import { esc, fmtNum, fmtMs, lineChart, barChart } from '../src/charts.js';
 import { filterBarHTML, isFilterActive, BLOCKS, chipsHTML, isoDateToDay, locToISODate, rangeFromYear, rangeFromMonth, syncRangeShortcuts, normalizeRangeDays, filterStatusMessage, filterParams, portableFilterParams, resolvePortableFilters, advancedFilterCount } from './filter-ui.js';
 import { clear as cacheClear, cacheSummary, isAvailable as cacheAvailable, persist as cachePersist } from './storage.js';
 import { resolveMetric, parseQueryParams, serializeMetricParam, METRIC_STORAGE_KEY, DEFAULT_METRIC } from './state-metric.js';
+import { parseExploreState } from './catalog-query.js';
 import { parseRoute, resolveRoute, formatSemanticRoute, mergeExploreParams } from './routes.js';
 import { captureHistoryState, restoreHistoryState } from './history-state.js';
 import { resetPresentationPreferences } from './presentation-preferences.js';
@@ -728,29 +729,14 @@ function buildViewContext(viewName) {
 
   let exploreState = null;
   if (viewName === 'explore') {
-    const [, , rawQ] = parseHash();
-    const cleanQ = (rawQ || '').replace(/^\?/, '');
-    const p = new URLSearchParams(cleanQ);
-    const tab = p.get('tab') || 'artists';
+    const tab = parseExploreState(rawQuery).tab;
     const storedDensity = typeof localStorage !== 'undefined' ? localStorage.getItem('scrobbleview:density') : null;
     const storedColsRaw = typeof localStorage !== 'undefined' ? localStorage.getItem(`scrobbleview:cols:${tab}`) : null;
     let visibleCols = null;
     if (storedColsRaw) {
       try { visibleCols = new Set(JSON.parse(storedColsRaw)); } catch (_) {}
     }
-
-    exploreState = {
-      tab,
-      query: p.get('q') || '',
-      sortBy: p.get('sort') || 'metric',
-      sortDir: p.get('dir') || null,
-      page: Number(p.get('page')) || 1,
-      pageSize: p.get('pageSize') === 'all' ? 'all' : Number(p.get('pageSize')) || 25,
-      minPlays: p.get('minPlays') != null ? Number(p.get('minPlays')) : null,
-      minMonths: p.get('minMonths') != null ? Number(p.get('minMonths')) : null,
-      density: storedDensity || 'comfortable',
-      visibleCols
-    };
+    exploreState = parseExploreState(rawQuery, { density: storedDensity, visibleCols });
   }
 
   const contextQuery = viewName === 'calendar' || viewName === 'day'

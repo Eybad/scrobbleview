@@ -1,9 +1,54 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeCatalogQuery } from '../app/catalog-query.js';
+import { describeCatalogQuery, parseExploreState, patchExploreQuery } from '../app/catalog-query.js';
 import { queryCatalog } from '../src/query.js';
 import { exportExploreTableCSV } from '../src/export.js';
 import { exploreView } from '../app/views.js';
+
+test('Explore query parsing validates owned fields and reads presentation preferences', () => {
+  const visibleCols = ['name', 'plays'];
+  const state = parseExploreState(
+    '?tab=tracks&q=Echo&sort=skipRate&dir=asc&page=3&pageSize=all&minPlays=12&minMonths=5&x=keep',
+    { density: 'compact', visibleCols }
+  );
+
+  assert.deepEqual(state, {
+    tab: 'tracks', q: 'Echo', sort: 'skipRate', dir: 'asc', page: 3, pageSize: 'all',
+    minPlays: 12, minMonths: 5, minKnownSkips: 12, density: 'compact',
+    visibleCols: new Set(visibleCols)
+  });
+  const { options } = describeCatalogQuery({ totals: { ms: 20, records: 4 }, tracks: { byId: new Map() } }, { metric: 'plays', exploreState: state });
+  assert.equal(options.query, 'Echo');
+  assert.equal(options.sortBy, 'skipRate');
+  assert.equal(options.sortDir, 'asc');
+  assert.equal(options.minKnownSkips, 12);
+
+  const fallback = parseExploreState('?tab=invalid&sort=invalid&dir=sideways&page=0&pageSize=10&minPlays=0&minMonths=121', {
+    density: 'spacious', visibleCols: 'invalid'
+  });
+  assert.deepEqual(fallback, {
+    tab: 'artists', q: '', sort: 'metric', dir: null, page: 1, pageSize: 25,
+    minPlays: null, minMonths: null, minKnownSkips: null, density: 'comfortable', visibleCols: null
+  });
+});
+
+test('Explore query patching changes only owned fields and preserves unrelated query state', () => {
+  const original = 'artist=8&tab=artists&q=Old&future=a+b&sort=metric';
+  const patched = patchExploreQuery(original, { q: 'New search', sort: 'name', page: 2, minMonths: null });
+  const params = new URLSearchParams(patched);
+
+  assert.equal(params.get('artist'), '8');
+  assert.equal(params.get('future'), 'a b');
+  assert.equal(params.get('q'), 'New search');
+  assert.equal(params.get('sort'), 'name');
+  assert.equal(params.get('page'), '2');
+  assert.equal(params.has('minMonths'), false);
+  assert.equal(original, 'artist=8&tab=artists&q=Old&future=a+b&sort=metric');
+
+  const legacy = new URLSearchParams(patchExploreQuery('?sort=skipRate&minPlays=8', { minKnownSkips: 16 }));
+  assert.equal(legacy.get('minKnownSkips'), '16');
+  assert.equal(legacy.has('minPlays'), false);
+});
 
 test('B20: screen, count and export share the eligible skip-rate ranking and denominator', () => {
   const artists = [

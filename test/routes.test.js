@@ -145,9 +145,10 @@ test('track links carry a reversible album origin by identity', () => {
 });
 
 test('explore query keeps presentation controls without restoring removed filters', () => {
-  const merged = new URLSearchParams(mergeExploreParams('?m=ms', '?m=plays&filterArtist=Old&q=hello&page=2'));
+  const merged = new URLSearchParams(mergeExploreParams('?m=ms', '?m=plays&filterArtist=Old&q=hello&page=2&minKnownSkips=12'));
   assert.equal(merged.get('m'), 'ms');
   assert.equal(merged.has('filterArtist'), false);
   assert.equal(merged.get('q'), 'hello');
   assert.equal(merged.get('page'), '2');
+  assert.equal(merged.get('minKnownSkips'), '12');
 });
