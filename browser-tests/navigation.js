@@ -251,11 +251,14 @@ async function run() {
   assert([...appDocument.styleSheets].length === expectedStylesheets.length, 'Las siete hojas deben estar cargadas antes del primer render');
   assert([...appDocument.styleSheets].every(sheet => sheet.cssRules.length > 0), 'Cada hoja local debe parsearse sin errores');
   const homePrivacy = element('.privacy-note');
-  assert(homePrivacy.getClientRects().length > 0 && homePrivacy.textContent.includes('nunca se suben'), 'El aviso de privacidad permanece visible en el inicio');
+  assert(homePrivacy.getClientRects().length > 0 && homePrivacy.textContent.trim() === 'Se procesa en tu dispositivo. Tus archivos nunca se suben', 'El aviso de privacidad breve permanece visible en el inicio');
   assert(appWindow.getComputedStyle(homePrivacy).textAlign === 'left', 'El aviso conserva su lectura alineada');
   assert(appWindow.getComputedStyle(element('.drop-zone-badge')).backgroundColor === 'rgb(26, 48, 42)', 'El badge de carga usa el fondo de acento suave');
   assert(appWindow.getComputedStyle(element('.drop-zone-icon')).color === 'rgb(120, 184, 146)', 'El icono de carga usa el acento de la paleta');
   assert(appWindow.getComputedStyle(element('.drop-zone-files')).borderTopWidth === '0px', 'La zona de carga no agrega un separador interno');
+  assert(element('#home-title').textContent.trim() === 'Tu historial de Spotify, en perspectiva', 'El inicio conserva el título definido');
+  assert(element('#drop-zone').getAttribute('role') === null && !element('#drop-zone').hasAttribute('tabindex'), 'La zona de carga no se presenta como control interactivo');
+  assert(element('#file-input').multiple && element('#btn-upload').textContent.trim() === 'Elegir archivos', 'La selección múltiple se activa mediante el botón explícito');
   const syntheticEvents = ['2024-01-10', '2024-02-10', '2024-02-11'].map(date => ({
     ts: `${date}T12:00:00Z`, ms_played: 180000,
     master_metadata_track_name: 'Synthetic track',
@@ -274,8 +277,17 @@ async function run() {
   const transfer = new appWindow.DataTransfer();
   transfer.items.add(new appWindow.File([json], 'Streaming_History_Audio_synthetic.json', { type: 'application/json' }));
   const input = element('#file-input');
-  input.files = transfer.files;
-  input.dispatchEvent(new appWindow.Event('change', { bubbles: true }));
+  let pickerOpens = 0;
+  const nativeInputClick = input.click.bind(input);
+  input.click = () => { pickerOpens++; };
+  element('#drop-zone').click();
+  assert(pickerOpens === 0, 'Hacer click en el área de drop no abre el selector');
+  element('#btn-upload').click();
+  assert(pickerOpens === 1, 'El botón explícito abre el selector una sola vez');
+  input.click = nativeInputClick;
+  const dropEvent = new appWindow.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer });
+  element('#drop-zone').dispatchEvent(dropEvent);
+  assert(dropEvent.defaultPrevented, 'El drop mantiene la carga por arrastre');
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
   assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
   const persistentAppRoot = appDocument.getElementById('app-root');
@@ -398,8 +410,9 @@ async function run() {
   const savedCache = await readIndexedDbCache(appWindow);
   assert(savedCache.eventCount === 8 && savedCache.schemaVersion === 2 && savedCache.timestampCount === 8, 'IndexedDB real debe guardar el esquema y las ocho reproducciones');
 
-  auxiliaryTab.location.href = new URL('../index.html#/v1/track/Artist%20A/Echo?s=unknown&m=plays', window.location.href).href;
+  auxiliaryTab.location.href = new URL(`../index.html?cache-test=${Date.now()}#/v1/track/Artist%20A/Echo?s=unknown&m=plays`, window.location.href).href;
   await waitInWindow(auxiliaryTab, (doc) => doc.readyState === 'complete' && doc.getElementById('cache-card') && !doc.getElementById('cache-card').hidden, 'mostrar la caché en una pestaña nueva');
+  assert(!auxiliaryTab.document.getElementById('cache-choice').hidden && auxiliaryTab.document.getElementById('drop-zone').hidden && !auxiliaryTab.document.getElementById('btn-upload-alt').hidden, 'La caché agrupa los datos guardados y la alternativa para elegir otros archivos');
   assert(auxiliaryTab.location.hash.includes('s=unknown') && auxiliaryTab.location.hash.includes('m=plays'), 'La pestaña nueva debe conservar el filtro y la métrica del enlace');
   assert(auxiliaryTab.document.getElementById('cache-meta').textContent.includes('8 reproducciones'), 'La pestaña nueva debe resumir las ocho reproducciones guardadas');
   auxiliaryTab.document.getElementById('btn-cached').click();
@@ -573,6 +586,8 @@ async function run() {
   sourceTableScroll.scrollLeft = 180;
   const expectedTableScroll = sourceTableScroll.scrollLeft;
   assert(expectedTableScroll > 0, 'La tabla real debe desplazarse horizontalmente antes de navegar');
+  const pageScrollBehavior = appDocument.documentElement.style.scrollBehavior;
+  appDocument.documentElement.style.scrollBehavior = 'auto';
   appWindow.scrollTo(0, 250);
   await waitForWindowScroll(appWindow, 250);
   const expectedPageScroll = appWindow.scrollY;
@@ -585,6 +600,7 @@ async function run() {
   assert(appWindow.scrollY === expectedPageScroll, 'Atrás debe restaurar el scroll real de página');
   const restoredTableScroll = element('.table-scroll[aria-label="Tabla de catálogo"]').scrollLeft;
   assert(restoredTableScroll === expectedTableScroll, `Atrás debe restaurar el scroll real de la tabla: ${restoredTableScroll}/${expectedTableScroll}; ${JSON.stringify(appWindow.history.state?.returnState?.tableScrolls)}`);
+  appDocument.documentElement.style.scrollBehavior = pageScrollBehavior;
   scrollStyle.remove();
   scrollSpacer.remove();
 
