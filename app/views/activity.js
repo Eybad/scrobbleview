@@ -81,6 +81,16 @@ function eventDetailView(model, id, ctx, type) {
     fmtNum(item.plays), fmtMs(item.ms)
   ]);
   const pages = Math.max(1, Math.ceil(detail.total / detail.pageSize));
+  const reproductions = card('Reproducciones', `${table(['Final local', 'Canción', 'Álbum', 'Tiempo'], rows, '', ['', '', '', 'n'], null, 'Reproducciones por orden UTC')}
+      <nav class="pagination" aria-label="Paginación de reproducciones">
+        <div class="pagination-info" aria-live="polite">Mostrando ${fmtNum(detail.startRow)}–${fmtNum(detail.endRow)} de ${fmtNum(detail.total)}</div>
+        <div class="pagination-actions">
+          <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page - 1}"${detail.page <= 1 ? ' disabled' : ''}>Anterior</button>
+          <span class="pagination-current">Página ${fmtNum(detail.page)} de ${fmtNum(pages)}</span>
+          <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page + 1}"${detail.page >= pages ? ' disabled' : ''}>Siguiente</button>
+          <label class="pagination-size-label">Por página <select class="pagination-select" data-detail-size>${[25, 50, 100].map(size => `<option value="${size}"${size === detail.pageSize ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
+        </div>
+      </nav>`);
   return `
     <header class="view-header">
       <p><a href="#/${previous}${esc(ctx.query ?? '')}">← Volver</a></p>
@@ -94,22 +104,13 @@ function eventDetailView(model, id, ctx, type) {
       { label: 'Artistas distintos', value: fmtNum(detail.distinctArtists) },
       { label: isSession ? 'Reproducciones repetidas' : 'Sesiones relacionadas', value: fmtNum(isSession ? detail.repeatedPlays : detail.sessionCount) }
     ])}
+    ${reproductions}
     <div class="grid-2">
       ${card('Canciones principales', table(['Canción', 'Reproducciones', 'Tiempo'], topRows(detail.tracks, 'track'), '', ['', 'n', 'n'], null, 'Canciones principales'))}
       ${card('Artistas principales', table(['Artista', 'Reproducciones', 'Tiempo'], topRows(detail.artists, 'artist'), '', ['', 'n', 'n'], null, 'Artistas principales'))}
       ${card('Álbumes principales', table(['Álbum', 'Reproducciones', 'Tiempo'], topRows(detail.albums, 'album'), '', ['', 'n', 'n'], null, 'Álbumes principales'))}
       ${!isSession && detail.sessions.length ? card('Sesiones relacionadas', table(['Inicio estimado', 'Reproducciones', 'Tiempo'], detail.sessions.map(session => [`<a href="#/session/${session.id}${esc(ctx.query ?? '')}">${fmtLocal(session.start)}</a>`, fmtNum(session.plays), fmtMs(session.ms)]), '', ['', 'n', 'n'], null, 'Sesiones relacionadas')) : ''}
     </div>
-    ${card('Reproducciones', `${table(['Final local', 'Canción', 'Álbum', 'Tiempo'], rows, '', ['', '', '', 'n'], null, 'Reproducciones por orden UTC')}
-      <nav class="pagination" aria-label="Paginación de reproducciones">
-        <div class="pagination-info" aria-live="polite">Mostrando ${fmtNum(detail.startRow)}–${fmtNum(detail.endRow)} de ${fmtNum(detail.total)}</div>
-        <div class="pagination-actions">
-          <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page - 1}"${detail.page <= 1 ? ' disabled' : ''}>Anterior</button>
-          <span class="pagination-current">Página ${fmtNum(detail.page)} de ${fmtNum(pages)}</span>
-          <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page + 1}"${detail.page >= pages ? ' disabled' : ''}>Siguiente</button>
-          <label class="pagination-size-label">Por página <select class="pagination-select" data-detail-size>${[25, 50, 100].map(size => `<option value="${size}"${size === detail.pageSize ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
-        </div>
-      </nav>`)}
   `;
 }
 

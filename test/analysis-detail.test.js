@@ -68,6 +68,11 @@ test('loaded detail reaches the rendered day through the analysis controller', a
   assert.ok(!html.includes('<Track>'));
   assert.ok(html.includes('Mostrando 1–1 de 1'));
   assert.ok(html.includes('Album'));
+  assert.ok(html.indexOf('Reproducciones por orden UTC') < html.indexOf('Canciones principales'));
+
+  const session = await state.update(emptyFilterState(), { view: 'session', id: 0 });
+  const sessionHtml = renderView('session', session.model, 0, { detail: session.detail, detailRequested: true });
+  assert.ok(sessionHtml.indexOf('Reproducciones por orden UTC') < sessionHtml.indexOf('Canciones principales'));
 });
 
 test('track detail attributes plays to albums within the selected history', async () => {
