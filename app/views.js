@@ -13,13 +13,12 @@ import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 import { describeCatalogQuery } from './catalog-query.js';
 import { createChartContract, renderChartWithContract } from '../src/chart-contract.js';
 import { scrollChart, contractedLineChart, contractedBarChart, contractedClockChart } from './chart-view.js';
+import { card, entityLinks, kpis, pctOf, table, topEntityInMap } from './views/shared.js';
+import { hoursView } from './views/patterns.js';
+
+export { hoursView };
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
-
-function card(title, body, cls = '', titleHtml = false, headingTag = 'h2') {
-  const h = title ? `<${headingTag}>${titleHtml ? title : esc(title)}</${headingTag}>` : '';
-  return `<section class="card ${cls}">${h}${body}</section>`;
-}
 
 function limitSelect(key, currentLimit, label) {
   return `<select class="table-limit" name="limit-${esc(key)}" autocomplete="off" data-table-limit="${esc(key)}" aria-label="${esc(label)}">${[10, 25, 50, 100].map((n) => `<option value="${n}"${currentLimit === n ? ' selected' : ''}>Top ${n}</option>`).join('')}</select>`;
@@ -47,15 +46,6 @@ function resolveLimit(ctx, key, fallback = 10) {
   if (!store) return fallback;
   const val = store instanceof Map ? store.get(key) : store[key];
   return Number.isFinite(val) && val > 0 ? val : fallback;
-}
-
-// Escape user strings before interpolation; `value` is trusted HTML.
-function kpis(items, layout = '') {
-  return `<dl class="kpis${layout ? ` ${layout}` : ''}">${items.map((it) => {
-    if (it.heading) return `<div class="kpi-group-heading" role="presentation"><span>${esc(it.heading)}</span></div>`;
-    return `
-    <div class="kpi${it.text ? ' kpi-text' : ''}${it.className ? ` ${esc(it.className)}` : ''}"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`;
-  }).join('')}</dl>`;
 }
 
 function fmtLocal(loc) {
@@ -121,17 +111,6 @@ function calendarTable(days, year, byMs = true) {
   });
 }
 
-// Escape data before adding markup to rows; captions keep tables named on scroll.
-function table(headers, rows, cls = '', colClasses = [], rowAttrs = null, caption = '', scrollCls = '', emptyNotice = '') {
-  const th = (h, i) => `<th scope="col"${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${esc(h)}</th>`;
-  const td = (c, i) => `<td${colClasses[i] ? ` class="${colClasses[i]}"` : ''}>${c}</td>`;
-  const cap = caption ? `<caption class="visually-hidden">${esc(caption)}</caption>` : '';
-  const wrapCls = scrollCls ? `table-scroll ${scrollCls}` : 'table-scroll';
-  const emptyHTML = rows.length === 0 && emptyNotice ? `<p class="empty">${esc(emptyNotice)}</p>` : '';
-  return `<div class="${wrapCls}"><table class="${cls}">${cap}<thead><tr>${headers.map(th).join('')}</tr></thead>
-    <tbody>${rows.map((r, i) => `<tr${rowAttrs ? rowAttrs(r, i) : ''}>${r.map(td).join('')}</tr>`).join('')}</tbody></table>${emptyHTML}</div>`;
-}
-
 function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valueLabel = 'Reproducciones', caption = '', spark = null, tall = false }) {
   const cell = (r) => {
     const full = r.sub ? `${r.name} — ${r.sub}` : r.name;
@@ -167,37 +146,6 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
     const w = max > 0 ? ((rows[i].value / max) * 100).toFixed(1) : '0';
     return ` style="--bar-w:${w}%"`;
   }, caption, tall ? 'table-scroll--tall' : '');
-}
-
-// The link title exposes truncated text when hover tooltips are unavailable.
-function entityLinks(model, query = '') {
-  function entity(type, id) {
-    const group = type === 'artist' ? model.artists : type === 'track' ? model.tracks : model.albums;
-    return group.byId.get(id);
-  }
-  function entityLink(type, id, name) {
-    const item = entity(type, id);
-    if (!item) return esc(name);
-    const href = formatSemanticRoute(type, item, query);
-    return `<a class="cell-name" href="${esc(href)}" title="${esc(name)}">${esc(name)}</a>`;
-  }
-  function trackSubLink(tk, name, artist) {
-    const item = entity('track', tk);
-    if (!item) return esc(name);
-    const full = artist ? `${name} — ${artist}` : name;
-    const href = formatSemanticRoute('track', item, query);
-    return `<a class="cell-link" href="${esc(href)}" title="${esc(full)}"><span class="cell-name">${esc(name)}</span>${artist ? ` <span class="cell-sub">${esc(artist)}</span>` : ''}</a>`;
-  }
-  return { entityLink, trackSubLink };
-}
-
-function topEntityInMap(map, ignoreZero = false) {
-  let best = null;
-  for (const entry of map.entries()) {
-    if (ignoreZero && entry[0] === 0) continue;
-    if (!best || entry[1] > best[1]) best = entry;
-  }
-  return best;
 }
 
 function paretoShare(list, n, byMs, total) {
@@ -261,10 +209,6 @@ function rowSeries(model, tab, metric, id) {
     ? (metric === 'ms' ? model.monthlyArtistMs : model.monthlyArtistPlays)
     : (metric === 'ms' ? model.monthlyTrackMs : model.monthlyTrackPlays);
   return monthlySeries(map, id).map((p) => p.y);
-}
-
-function pctOf(part, total) {
-  return total > 0 ? fmtPct(part / total) : '—';
 }
 
 function deltaSub(now, before) {
@@ -1647,118 +1591,6 @@ export function calendarIndexView(model, ctx = {}) {
 function calendarYearSummaryHTML(y, yd) {
   const meta = yd ? `${fmtNum(yd.plays)} reproducciones · ${fmtMs(yd.ms)}` : '';
   return `${CHEVRON_SVG}<span>${esc(String(y))}</span>${meta ? `<span class="calendar-year-meta">${esc(meta)}</span>` : ''}`;
-}
-
-export function hoursView(model, ctx = {}) {
-  const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
-  const byMs = ctx?.metric === 'ms';
-  const valFmt = byMs ? fmtMs : fmtNum;
-  const valLabel = byMs ? 'Tiempo' : 'Reproducciones';
-  const totalVal = byMs ? model.totals.ms : model.totals.records;
-
-  let peakHour = 0;
-  let valleyHour = 0;
-  for (let h = 1; h < 24; h++) {
-    const cur = byMs ? model.hour[h].ms : model.hour[h].plays;
-    const best = byMs ? model.hour[peakHour].ms : model.hour[peakHour].plays;
-    const worst = byMs ? model.hour[valleyHour].ms : model.hour[valleyHour].plays;
-    if (cur > best) peakHour = h;
-    if (cur < worst) valleyHour = h;
-  }
-
-  let peakDow = 0;
-  for (let d = 1; d < 7; d++) {
-    const cur = byMs ? model.weekday[d].ms : model.weekday[d].plays;
-    const best = byMs ? model.weekday[peakDow].ms : model.weekday[peakDow].plays;
-    if (cur > best) peakDow = d;
-  }
-
-  const blockNames = ['Madrugada (0–5h)', 'Mañana (6–11h)', 'Tarde (12–17h)', 'Noche (18–23h)'];
-  let peakBlock = 0;
-  for (let b = 1; b < 4; b++) {
-    const cur = byMs ? model.blocks[b].ms : model.blocks[b].plays;
-    const best = byMs ? model.blocks[peakBlock].ms : model.blocks[peakBlock].plays;
-    if (cur > best) peakBlock = b;
-  }
-
-  const weekendVal = (byMs ? model.weekday[5].ms + model.weekday[6].ms : model.weekday[5].plays + model.weekday[6].plays);
-  const weekdayVal = totalVal - weekendVal;
-
-  const hourChart = contractedBarChart({
-    id: 'hours-by-hour', title: `Actividad por hora del día (${valLabel.toLowerCase()})`,
-    data: model.hour.map((h, i) => ({
-      label: String(i).padStart(2, '0'),
-      value: byMs ? h.ms : h.plays
-    })),
-    format: valFmt,
-    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
-    base: byMs ? 'duración conocida' : 'eventos registrados',
-    showValue: false
-  });
-
-  const dowChart = contractedBarChart({
-    id: 'hours-by-weekday', title: `Actividad por día de la semana (${valLabel.toLowerCase()})`,
-    data: DOW_LONG.map((label, d) => ({
-      label,
-      value: byMs ? model.weekday[d].ms : model.weekday[d].plays
-    })),
-    format: valFmt,
-    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
-    base: byMs ? 'duración conocida' : 'eventos registrados',
-    orientation: 'horizontal'
-  });
-
-  const blockRows = model.blocks.map((b, i) => {
-    const topArEntry = topEntityInMap(b.artists, true);
-    const topAr = topArEntry ? model.artists.byId.get(topArEntry[0]) : null;
-    const topTkEntry = topEntityInMap(b.tracks, false);
-    const topTr = topTkEntry ? model.tracks.byId.get(topTkEntry[0]) : null;
-    const bVal = byMs ? b.ms : b.plays;
-    return [
-      esc(blockNames[i]),
-      fmtNum(b.plays),
-      fmtMs(b.ms),
-      pctOf(bVal, totalVal),
-      topAr ? entityLink('artist', topAr.id, topAr.name) : '—',
-      topTr ? trackSubLink(topTkEntry[0], topTr.name, topTr.artist) : '—'
-    ];
-  });
-
-  const hourTrackRows = Array.from({ length: 24 }, (_, h) => {
-    const label = `${String(h).padStart(2, '0')}:00`;
-    const hStat = model.hour[h];
-    const map = byMs ? model.hourTracksMs[h] : model.hourTracks[h];
-    const topEntry = topEntityInMap(map, false);
-    const topTk = topEntry ? topEntry[0] : null;
-    const topTr = topTk != null ? model.tracks.byId.get(topTk) : null;
-    const topPlays = topTk != null ? (model.hourTracks[h].get(topTk) ?? 0) : 0;
-    const topMs = topTk != null ? (model.hourTracksMs[h].get(topTk) ?? 0) : 0;
-    return [
-      esc(label),
-      `<div class="cell-metric-stack"><span class="cell-metric-val">${fmtNum(hStat.plays)} rep.</span><span class="cell-metric-sub">${fmtMs(hStat.ms)}</span></div>`,
-      topTr ? trackSubLink(topTk, topTr.name, `${topTr.artist} · ${fmtNum(topPlays)} rep. (${fmtMs(topMs)})`) : '—'
-    ];
-  });
-
-  return `
-    <header class="view-header">
-      <h1>Horarios y ritmo diario</h1>
-      <p class="view-meta">Distribución atribuida al momento de finalización registrado de cada evento (no a una reconstrucción minuto a minuto de escuchas que cruzan horas o días).</p>
-    </header>
-    ${kpis([
-      { label: 'Hora pico', value: `${String(peakHour).padStart(2, '0')}:00`, sub: `${fmtNum(model.hour[peakHour].plays)} rep. · ${fmtMs(model.hour[peakHour].ms)}` },
-      { label: 'Hora valle', value: `${String(valleyHour).padStart(2, '0')}:00`, sub: `${fmtNum(model.hour[valleyHour].plays)} rep. · ${fmtMs(model.hour[valleyHour].ms)}` },
-      { label: 'Día más activo', value: esc(DOW_LONG[peakDow]), sub: `${fmtNum(model.weekday[peakDow].plays)} rep. · ${fmtMs(model.weekday[peakDow].ms)}`, text: true },
-      { label: 'Franja dominante', value: esc(blockNames[peakBlock].split(' ')[0]), sub: `${pctOf(byMs ? model.blocks[peakBlock].ms : model.blocks[peakBlock].plays, totalVal)} · ${fmtMs(model.blocks[peakBlock].ms)}`, text: true },
-      { label: 'Fin de semana', value: pctOf(weekendVal, totalVal), sub: `${fmtNum(model.weekday[5].plays + model.weekday[6].plays)} rep. · ${fmtMs(model.weekday[5].ms + model.weekday[6].ms)}` },
-      { label: 'Lunes a viernes', value: pctOf(weekdayVal, totalVal), sub: `${fmtNum(model.totals.records - (model.weekday[5].plays + model.weekday[6].plays))} rep. · ${fmtMs(model.totals.ms - (model.weekday[5].ms + model.weekday[6].ms))}` }
-    ])}
-    <div class="grid-2">
-      ${hourChart}
-      ${dowChart}
-    </div>
-    ${card('Las 4 franjas del día', table(['Franja', 'Reproducciones', 'Tiempo', '%', 'Artista #1', 'Canción #1'], blockRows, '', ['', 'n', 'n', 'n', '', ''], null, 'Comparación de las 4 franjas del día'))}
-    ${card('Detalle por hora (00:00–23:00)', table(['Hora', 'Total de la hora', 'Canción #1'], hourTrackRows, '', ['c', 'n', ''], null, 'Actividad total y canción más escuchada en cada una de las 24 horas del día'))}`;
 }
 
 export function habitsView(model, ctx = {}) {
