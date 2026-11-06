@@ -551,6 +551,12 @@ async function run() {
   await nextFrame();
   const hoursKpiColumns = appWindow.getComputedStyle(element('.hours-kpis')).gridTemplateColumns.trim().split(/\s+/).length;
   assert(hoursKpiColumns === 3, 'Horarios distribuye sus seis KPIs en dos filas completas a 768px');
+  const tabletPanelColumns = appWindow.getComputedStyle(element('.grid-2')).gridTemplateColumns.trim().split(/\s+/).length;
+  assert(tabletPanelColumns === 1, 'Los paneles se apilan antes de 72rem');
+  frame.style.width = '1152px';
+  await nextFrame();
+  const desktopPanelColumns = appWindow.getComputedStyle(element('.grid-2')).gridTemplateColumns.trim().split(/\s+/).length;
+  assert(desktopPanelColumns === 2, 'Los paneles usan dos columnas desde 72rem');
   frame.style.width = originalHoursFrameWidth;
   await nextFrame();
   navLink('Resumen').click();

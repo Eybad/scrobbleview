@@ -236,13 +236,6 @@ main.container {
 }
 
 
-@media (max-width: 720px) {
-  .grid-2 {
-    grid-template-columns: 1fr;
-  }
-}
-
-
 .footer-actions {
   margin-bottom: var(--sp-2);
 }
@@ -330,6 +323,13 @@ main.container {
 }
 
 
+@media (max-width: 71.999rem) {
+  .grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
 .site-footer {
   margin-top: var(--sp-8);
   background: var(--surface);
@@ -339,10 +339,5 @@ main.container {
 @media (max-width: 47.999rem) {
   #view-home {
     padding-top: 24px;
-  }
-
-
-  .grid-2 {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
