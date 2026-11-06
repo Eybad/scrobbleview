@@ -3,7 +3,6 @@ import {
   listeningClock, NO_DATA,
   esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, DOW_LONG, PALETTE
 } from '../src/charts.js';
-import { matchRangeShortcut, rangeChipLabel } from './filter-ui.js';
 import { queryCatalog } from '../src/query.js';
 import { catalogTableHTML, paginationControlsHTML, densityControlsHTML, columnsPickerHTML } from './catalog-table.js';
 import { compareView } from './compare-view.js';
@@ -11,13 +10,13 @@ import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 import { describeCatalogQuery } from './catalog-query.js';
 import { createChartContract, renderChartWithContract } from '../src/chart-contract.js';
 import { scrollChart, contractedLineChart, contractedBarChart, contractedClockChart } from './chart-view.js';
-import { card, cardWithLimit, catalogHref, dayHourHeatChart, entityLinks, fillMonths, fmtDay, fmtLocal, kpis, monthLabel, pctOf, resolveLimit, sortedMonths, table, topEntityInMap } from './views/shared.js';
+import { card, cardWithLimit, catalogHref, dayHourHeatChart, entityLinks, fillMonths, fmtDay, fmtLocal, kpis, monthLabel, monthlySeries, pctOf, resolveLimit, sortedMonths, table, topEntityInMap } from './views/shared.js';
 import { discoveryView, habitsView, hoursView } from './views/patterns.js';
 import { dayView, sessionView, sessionsView } from './views/activity.js';
-import { calendarIndexView, calendarView, calendarYearGridHTML, yearlyView } from './views/periods.js';
+import { calendarIndexView, calendarView, calendarYearGridHTML, listenerArchetype, receiptText, receiptTextFromConfirmed, wrappedView, yearlyView } from './views/periods.js';
 
 export { discoveryView, habitsView, hoursView, dayView, sessionView, sessionsView };
-export { calendarIndexView, calendarView, calendarYearGridHTML, yearlyView };
+export { calendarIndexView, calendarView, calendarYearGridHTML, listenerArchetype, receiptText, receiptTextFromConfirmed, wrappedView, yearlyView };
 
 function thresholdLabel(ms) {
   if (ms < 1000) return `${ms} ms`;
@@ -60,14 +59,6 @@ function rankTable(rows, { valueFmt = fmtNum, subValue = null, link = null, valu
     const w = max > 0 ? ((rows[i].value / max) * 100).toFixed(1) : '0';
     return ` style="--bar-w:${w}%"`;
   }, caption, tall ? 'table-scroll--tall' : '');
-}
-
-function monthlySeries(monthMap, key) {
-  if (!monthMap) return [];
-  return fillMonths(sortedMonths(monthMap)).map((mi) => ({
-    label: monthLabel(mi),
-    y: monthMap.get(mi)?.get(key) ?? 0
-  }));
 }
 
 function albumSeries(model, monthly, metric) {
@@ -148,22 +139,6 @@ function recordsGridHTML(model, ctx = {}) {
   return `<div class="records-grid">${tiles.map((t) => `<div class="record-item"><span class="record-label">${esc(t.label)}</span><span class="record-value">${t.val}</span><span class="record-sub">${t.meta}</span></div>`).join('')}</div>`;
 }
 
-export function listenerArchetype(model) {
-  const t = model.totals;
-  if (!t || t.records === 0) return null;
-  const skipRate = t.skippedKnown ? t.skipped / t.skippedKnown : 0;
-  const c = model.concentration.artists;
-  if (!c.knownEntities) return null;
-  const repeatRate = model.intraSession.repeatedPlays / t.records;
-  let dom = 0;
-  model.blocks.forEach((b, i) => { if (b.plays > model.blocks[dom].plays) dom = i; });
-  const base = skipRate >= 0.35 ? 'Explorador' : c.hhi >= 0.08 ? 'Devoto' : 'Equilibrado';
-  const when = dom === 0 || dom === 3 ? 'nocturno' : dom === 1 ? 'matutino' : 'vespertino';
-  return {
-    label: `${base} ${when}`,
-    detail: `${pctOf(t.skipped, t.skippedKnown)} de saltos · ${fmtPct(c.hhi)} de concentración · ${fmtPct(repeatRate)} de repeticiones`
-  };
-}
 
 export function rankCardHTML(model, opts = {}) {
   const tab = opts.tab ?? 'artists';
@@ -757,183 +732,6 @@ export function albumView(model, ak, ctx = {}) {
       : '<p class="empty">Sin canciones registradas.</p>')}`;
 }
 
-export function wrappedView(model, id, ctx) {
-  const { entityLink } = entityLinks(model, ctx?.query);
-  const t = model.totals;
-  const byMs = ctx?.metric === 'ms';
-  const evoByMs = (ctx?.metric ?? 'ms') === 'ms';
-  const topArtist = model.artists.top[evoByMs ? 'byMs' : 'byPlays'][0];
-  const topTrack = model.tracks.top[evoByMs ? 'byMs' : 'byPlays'][0];
-  const c = model.concentration.artists;
-  const archetype = listenerArchetype(model);
-  const onlyYear = ctx?.range ? matchRangeShortcut(ctx.range).year
-    : ctx?.years?.size === 1 ? [...ctx.years][0] : null;
-  const period = ctx?.range ? rangeChipLabel(ctx.range) : `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`;
-  const title = onlyYear != null ? `Tu ${onlyYear} en resumen` : 'Tu período en resumen';
-
-  const sprint = topArtist
-    ? monthlySeries(evoByMs ? model.monthlyArtistMs : model.monthlyArtistPlays, topArtist.id)
-    : [];
-  const sprintChart = topArtist
-    ? contractedLineChart({
-      id: 'wrapped-artist-monthly', title: `Evolución de ${topArtist.name}`, points: sprint,
-      format: evoByMs ? fmtMs : fmtNum,
-      unit: evoByMs ? 'tiempo escuchado' : 'reproducciones',
-      base: evoByMs ? 'duración conocida del artista' : 'reproducciones del artista'
-    })
-    : '';
-
-  // Show effective artists prominently; raw HHI values are hard to interpret.
-  const eff = c.knownEntities ? Math.max(1, Math.round(c.effective)) : 0;
-  const effNoun = eff === 1 ? 'artista base' : 'artistas base';
-  const hhiPct = c.knownEntities ? `${(c.hhi * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %` : '—';
-
-  const clockSrc = byMs ? model.dayHourMs : model.dayHour;
-  const clockCells = [];
-  let maxVal = 0;
-  for (let d = 0; d < 7; d++) {
-    for (let h = 0; h < 24; h++) {
-      const v = clockSrc[d * 24 + h];
-      if (v > maxVal) maxVal = v;
-      clockCells.push({ hour: h, dow: d, value: v });
-    }
-  }
-  const clockChart = contractedClockChart({
-    id: 'wrapped-week-clock',
-    title: 'Tu semana típica',
-    cells: clockCells,
-    format: byMs ? fmtMs : fmtNum,
-    byMs,
-    base: byMs ? 'duración conocida del período' : 'reproducciones del período',
-    svg: listeningClock({
-      cells: clockCells,
-      colorScale: makeScale(maxVal),
-      cellTitle: (cell) => `${DOW_LONG[cell.dow]} ${cell.hour}:00 — ${byMs ? fmtMs(cell.value) : `${fmtNum(cell.value)} reproducciones`}`
-    })
-  });
-
-  const unknownFlagsNote = (t.records - t.skippedKnown > 0)
-    ? ` Nota: ${fmtNum(t.records - t.skippedKnown)} eventos tienen bandera de salto desconocida.`
-    : '';
-  const heroHTML = archetype
-    ? `<section class="card hero-archetype">
-        <p class="hero-eyebrow">Perfil de escucha</p>
-        <h2 class="hero-title">${esc(archetype.label)}</h2>
-        <p class="hero-detail">${esc(archetype.detail)}</p>
-        <details class="archetype-rules">
-          <summary>Patrón heurístico: reglas descriptivas</summary>
-          <p class="view-meta">Clasificación descriptiva basada en umbrales estadísticos de tus datos locales: Explorador (saltos conocidos ≥ 35%), Devoto (concentración HHI ≥ 8%), o Equilibrado; combinado con la franja horaria más frecuente. No constituye diagnóstico psicológico ni de personalidad.${unknownFlagsNote}</p>
-        </details>
-      </section>`
-    : '';
-
-  return `
-    <header class="view-header">
-      <h1>${esc(title)}</h1>
-      <p class="view-meta">${esc(period)} · generado ${new Date(model.meta.generatedAt * 1000).toLocaleString('es-ES')}</p>
-    </header>
-    ${heroHTML}
-    ${kpis([
-      { label: onlyYear != null ? 'Artista del año' : 'Artista del período', value: topArtist ? entityLink('artist', topArtist.id, topArtist.name) : '—', text: true },
-      { label: onlyYear != null ? 'Canción del año' : 'Canción del período', value: topTrack ? entityLink('track', topTrack.tk, topTrack.name) : '—', text: true },
-      { label: 'Tiempo total', value: fmtMs(t.ms) },
-      { label: 'Reproducciones', value: fmtNum(t.records) },
-      { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—' },
-      { label: 'Artistas efectivos', value: eff ? `~${eff} ${effNoun}` : '—', sub: eff ? `Equivale a repartir tu tiempo en partes iguales entre ${eff} ${eff === 1 ? 'artista' : 'artistas'}` : 'Sin duraciones conocidas', text: true },
-      { label: 'Concentración (HHI)', value: hhiPct }
-    ])}
-    <div class="grid-2">
-      ${sprintChart}
-      ${clockChart}
-    </div>
-    <div class="grid-2">
-      ${card('Así empezó', `<ul class="receipt">
-        <li><span>Primera escucha</span><span>${esc(fmtLocal(model.meta.firstEventLocal ?? model.cols?.loc[0] ?? null))}</span></li>
-        ${topArtist ? `<li><span>Primera vez con ${esc(topArtist.name)}</span><span>${esc(fmtLocal(topArtist.firstTs))}</span></li>` : ''}
-        ${topTrack ? `<li><span>Primera vez con ${esc(topTrack.name)}</span><span>${esc(fmtLocal(topTrack.firstTs))}</span></li>` : ''}
-      </ul>`)}
-      ${card('Resumen', `<ul class="receipt">
-        <li><span>Reproducciones</span><span>${fmtNum(t.records)}</span></li>
-        <li><span>Tiempo escuchado</span><span>${fmtMs(t.ms)}</span></li>
-        <li><span>Artistas distintos</span><span>${fmtNum(model.artists.byId.size)}</span></li>
-        <li><span>Canciones distintas</span><span>${fmtNum(model.tracks.byId.size)}</span></li>
-        <li><span>Álbumes distintos</span><span>${fmtNum(model.albums.byId.size)}</span></li>
-        <li><span>Sesiones de escucha</span><span>${fmtNum(model.sessionsStats.count)}</span></li>
-        <li><span>Saltadas</span><span>${fmtNum(t.skipped)} (${pctOf(t.skipped, t.skippedKnown)})</span></li>
-        <li><span>En aleatorio</span><span>${fmtNum(t.shuffle)} (${pctOf(t.shuffle, t.shuffleKnown)})</span></li>
-        <li><span>Sin conexión</span><span>${fmtNum(t.offline)} (${pctOf(t.offline, t.offlineKnown)})</span></li>
-        <li><span>Repetidas dentro de sesión</span><span>${fmtNum(model.intraSession.repeatedPlays)}</span></li>
-        <li><span>Mismo artista seguido</span><span>${fmtNum(model.transitions.auto)}</span></li>
-      </ul>
-      <div class="receipt-actions"><button type="button" class="btn btn-secondary" data-action="copy-receipt">Copiar resumen en texto</button></div>
-      <pre id="receipt-text" class="receipt-plain" hidden></pre>`)}
-    </div>`;
-}
-
-export function receiptText(model, ctx = {}) {
-  const t = model.totals;
-  const evoByMs = (ctx?.metric ?? 'ms') === 'ms';
-  const topArtist = model.artists.top[evoByMs ? 'byMs' : 'byPlays']?.[0];
-  const topTrack = model.tracks.top[evoByMs ? 'byMs' : 'byPlays']?.[0];
-  const onlyYear = ctx?.range ? matchRangeShortcut(ctx.range)?.year
-    : ctx?.years?.size === 1 ? [...ctx.years][0] : null;
-  const isFullYear = onlyYear != null;
-  const periodLabel = ctx?.range ? rangeChipLabel(ctx.range)
-    : ctx?.years?.size ? [...ctx.years].sort((a, b) => a - b).join(', ')
-      : (model.meta.firstTs != null ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}` : '—');
-  const tzLabel = model.meta.tzId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC');
-  const metricLabel = evoByMs ? 'Tiempo escuchado' : 'Reproducciones';
-  const filters = ctx?.filters ?? {};
-  const filterParts = [];
-  if (filters.months?.size) filterParts.push(`meses: ${[...filters.months].sort((a, b) => a - b).map(monthLabel).join(', ')}`);
-  if (filters.dows?.size) {
-    const weekdays = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
-    filterParts.push(`días: ${[...filters.dows].sort((a, b) => a - b).map((day) => weekdays[day]).join(', ')}`);
-  }
-  if (filters.hours?.size) filterParts.push(`horas: ${[...filters.hours].sort((a, b) => a - b).map((hour) => String(hour).padStart(2, '0')).join(', ')}`);
-  for (const [id, kind, label] of [
-    [filters.artistId, 'artists', 'Artista'],
-    [filters.trackId, 'tracks', 'Canción'],
-    [filters.albumId, 'albums', 'Álbum']
-  ]) {
-    if (id == null) continue;
-    const entity = model[kind].byId.get(id);
-    filterParts.push(`${label}: ${entity ? `${entity.name}${entity.artist ? ` — ${entity.artist}` : ''}` : id}`);
-  }
-  for (const [key, label] of [['skip', 'Saltada'], ['shuffle', 'Aleatoria'], ['offline', 'Sin conexión']]) {
-    if (filters[key] != null) filterParts.push(`${label}: ${filters[key] === 'unknown' ? 'desconocida' : filters[key] ? 'sí' : 'no'}`);
-  }
-
-  const lines = [
-    isFullYear ? `Mi resumen Scrobbleview (año ${onlyYear})` : 'Mi resumen Scrobbleview (del período)',
-    `Período: ${periodLabel}`,
-    `Zona horaria: ${tzLabel}`,
-    `Criterio principal: ${metricLabel}`,
-    ...(filterParts.length ? [`Filtros: ${filterParts.join('; ')}`] : []),
-    `Reproducciones: ${t.records}`,
-    `Tiempo escuchado: ${fmtMs(t.ms)}`,
-    `Artistas distintos: ${model.artists.byId.size}`,
-    `Canciones distintas: ${model.tracks.byId.size}`,
-    `Sesiones: ${model.sessionsStats.count}`,
-    `${isFullYear ? 'Artista del año' : 'Artista del período'}: ${topArtist ? topArtist.name : '—'}`,
-    `${isFullYear ? 'Canción del año' : 'Canción del período'}: ${topTrack ? `${topTrack.name} — ${topTrack.artist}` : '—'}`,
-    `Saltadas: ${t.skipped}`,
-    `Racha más larga: ${model.streak.len} días`
-  ];
-  return lines.join('\n');
-}
-
-export function receiptTextFromConfirmed({ confirmed, fallbackModel, fallbackState = {}, fallbackMetric = 'ms' }) {
-  const model = confirmed?.model ?? fallbackModel;
-  if (!model) return '';
-  const state = confirmed?.context?.state ?? fallbackState;
-  return receiptText(model, {
-    range: state.range,
-    years: state.years,
-    filters: state,
-    metric: confirmed?.context?.metric ?? fallbackMetric
-  });
-}
 
 export function exploreView(model, ctx = {}) {
   const exp = ctx.exploreState || {};

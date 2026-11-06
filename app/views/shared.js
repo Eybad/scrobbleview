@@ -188,6 +188,14 @@ function nextMonth(mi) {
   return m === 12 ? (y + 1) * 100 + 1 : mi + 1;
 }
 
+export function monthlySeries(monthMap, key) {
+  if (!monthMap) return [];
+  return fillMonths(sortedMonths(monthMap)).map((mi) => ({
+    label: monthLabel(mi),
+    y: monthMap.get(mi)?.get(key) ?? 0
+  }));
+}
+
 // Preserve elapsed time on the x-axis when months have no activity.
 export function fillMonths(keys) {
   if (keys.length === 0) return [];
