@@ -1,4 +1,8 @@
-import { esc, fmtPct } from '../../src/charts.js';
+import {
+  DOW_LONG, DOW_SHORT, esc, fmtMs, fmtNum, fmtPct,
+  heatLegend, heatmap, heatmapTable, makeScale
+} from '../../src/charts.js';
+import { createChartContract, renderChartWithContract } from '../../src/chart-contract.js';
 import { formatSemanticRoute } from '../routes.js';
 
 export function card(title, body, cls = '', titleHtml = false, headingTag = 'h2') {
@@ -56,4 +60,54 @@ export function topEntityInMap(map, ignoreZero = false) {
 
 export function pctOf(part, total) {
   return total > 0 ? fmtPct(part / total) : '—';
+}
+
+export function dayHourHeatChart(model, { id, title, metric }) {
+  const byMs = metric === 'ms';
+  const format = byMs ? fmtMs : fmtNum;
+  const source = byMs ? model.dayHourMs : model.dayHour;
+  const cells = [];
+  let maxValue = 0;
+  for (let day = 0; day < 7; day++) {
+    for (let hour = 0; hour < 24; hour++) {
+      const value = source[day * 24 + hour];
+      if (value > maxValue) maxValue = value;
+      cells.push({ x: hour, y: day, value });
+    }
+  }
+
+  const heat = heatmap({
+    cells,
+    width: 640,
+    height: 190,
+    colorScale: makeScale(maxValue),
+    xLabels: [0, 3, 6, 9, 12, 15, 18, 21].map((hour) => `${hour}`),
+    yLabels: DOW_SHORT,
+    cellTitle: (cell) => `${DOW_LONG[cell.y]} ${cell.x}:00 — ${format(cell.value)}`,
+    ariaLabel: `Actividad por hora del día y día de la semana (${byMs ? 'tiempo escuchado' : 'reproducciones'})`
+  });
+  const fallbackTable = heatmapTable({
+    cells,
+    xLabels: Array.from({ length: 24 }, (_, hour) => `${hour}`),
+    yLabels: DOW_SHORT,
+    cellText: (cell) => format(cell.value),
+    caption: byMs ? 'Tiempo escuchado por hora y día' : 'Reproducciones por hora y día'
+  });
+  const contract = createChartContract({
+    id,
+    title,
+    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
+    base: byMs ? 'eventos con duración conocida' : 'eventos registrados',
+    data: cells.map((cell) => ({
+      label: `${DOW_LONG[cell.y]} ${cell.x}:00`,
+      value: cell.value,
+      extra: { x: cell.x, y: cell.y }
+    })),
+    format,
+    showShare: false,
+    chartType: 'grid',
+    fallbackTable
+  });
+  const chart = `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>${heatLegend()}`;
+  return renderChartWithContract(contract, chart);
 }

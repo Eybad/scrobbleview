@@ -1,5 +1,5 @@
 import {
-  barChart, lineChart, heatmap, heatmapTable, sparkline,
+  barChart, lineChart, heatmapTable, sparkline,
   calendarGrid, listeningClock, stackedBar, heatLegend, NO_DATA,
   esc, fmtNum, fmtMs, fmtPct, fmtBytes, makeScale, MONTHS_SHORT, DOW_SHORT, DOW_LONG, PALETTE
 } from '../src/charts.js';
@@ -13,7 +13,7 @@ import { formatSemanticRoute, formatTrackFromAlbum } from './routes.js';
 import { describeCatalogQuery } from './catalog-query.js';
 import { createChartContract, renderChartWithContract } from '../src/chart-contract.js';
 import { scrollChart, contractedLineChart, contractedBarChart, contractedClockChart } from './chart-view.js';
-import { card, entityLinks, kpis, pctOf, table, topEntityInMap } from './views/shared.js';
+import { card, dayHourHeatChart, entityLinks, kpis, pctOf, table, topEntityInMap } from './views/shared.js';
 import { hoursView } from './views/patterns.js';
 
 export { hoursView };
@@ -410,47 +410,11 @@ export function dashboard(model, ctx = {}) {
     ? `${fmtLocal(model.meta.firstTs)} → ${fmtLocal(model.meta.lastTs)}`
     : '—';
 
-  const heatCells = [];
-  let maxVal = 0;
-  const heatSrc = byMs ? model.dayHourMs : model.dayHour;
-  for (let d = 0; d < 7; d++) {
-    for (let h = 0; h < 24; h++) {
-      const v = heatSrc[d * 24 + h];
-      if (v > maxVal) maxVal = v;
-      heatCells.push({ x: h, y: d, value: v });
-    }
-  }
-  const heat = heatmap({
-    cells: heatCells,
-    width: 640, height: 190,
-    colorScale: makeScale(maxVal),
-    xLabels: [0, 3, 6, 9, 12, 15, 18, 21].map((h) => `${h}`),
-    yLabels: DOW_SHORT,
-    cellTitle: (c) => `${DOW_LONG[c.y]} ${c.x}:00 — ${valFmt(c.value)}`,
-    ariaLabel: `Actividad por hora del día y día de la semana (${byMs ? 'tiempo escuchado' : 'reproducciones'})`
-  });
-  const heatTable = heatmapTable({
-    cells: heatCells,
-    xLabels: Array.from({ length: 24 }, (_, h) => `${h}`),
-    yLabels: DOW_SHORT,
-    cellText: (c) => valFmt(c.value),
-    caption: byMs ? 'Tiempo escuchado por hora y día' : 'Reproducciones por hora y día'
-  });
-  const heatChart = renderChartWithContract(createChartContract({
+  const heatChart = dayHourHeatChart(model, {
     id: 'dashboard-day-hour',
     title: 'Cuándo escuchás (día y hora)',
-    unit: byMs ? 'tiempo escuchado' : 'reproducciones',
-    base: byMs ? 'eventos con duración conocida' : 'eventos registrados',
-    data: heatCells.map((cell) => ({
-      label: `${DOW_LONG[cell.y]} ${cell.x}:00`,
-      value: cell.value,
-      extra: { x: cell.x, y: cell.y }
-    })),
-    format: valFmt,
-    showShare: false,
-    chartType: 'grid',
-    fallbackTable: heatTable
-  }), `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>${heatLegend()}`);
+    metric: byMs ? 'ms' : 'plays'
+  });
 
   const monthly = fillMonths(sortedMonths(model.monthly)).map((mi) => ({
     label: monthLabel(mi),
