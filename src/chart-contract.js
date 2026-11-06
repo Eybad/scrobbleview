@@ -137,13 +137,14 @@ export function chartDataTableHTML(contract) {
   </details>`;
 }
 
-export function renderChartWithContract(contract, chartSvg) {
+export function renderChartWithContract(contract, chartSvg, { headingLevel = 3 } = {}) {
   const { id, title, unit, base, range, isEmpty, emptyNotice, points, format, total, showShare, chartType } = contract;
+  const headingTag = headingLevel === 2 ? 'h2' : 'h3';
 
   if (isEmpty) {
     return `<div class="chart-card" data-chart-id="${esc(id)}">
       <div class="chart-card__header">
-        <h3 class="chart-card__title">${esc(title)}</h3>
+        <${headingTag} class="chart-card__title">${esc(title)}</${headingTag}>
       </div>
       <p class="empty">${esc(emptyNotice)}</p>
     </div>`;
@@ -171,7 +172,7 @@ export function renderChartWithContract(contract, chartSvg) {
 
   return `<div class="chart-card" data-chart-id="${esc(id)}" data-chart-type="${esc(chartType)}" data-chart-unit="${esc(unit)}" data-chart-points="${esc(pointData)}">
     <div class="chart-card__header">
-      <h3 class="chart-card__title">${esc(title)}</h3>
+      <${headingTag} class="chart-card__title">${esc(title)}</${headingTag}>
       ${metaHtml}
     </div>
     <div class="chart-card__body">

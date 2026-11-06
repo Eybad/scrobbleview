@@ -219,7 +219,8 @@ export function discoveryView(model, ctx = {}) {
     })),
     format: fmtNum,
     unit: 'primeras apariciones',
-    base: 'canciones cuya primera aparición histórica ocurrió en el mes'
+    base: 'canciones cuya primera aparición histórica ocurrió en el mes',
+    headingLevel: 2
   });
   const absLimit = resolveLimit(ctx, 'disc-abs', 10);
   const relLimit = resolveLimit(ctx, 'disc-rel', 10);

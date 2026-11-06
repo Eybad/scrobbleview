@@ -190,6 +190,7 @@ test('dashboard exposes its topic index and observed period in quality while kee
 test('discovery: constancia y longevidad', async () => {
   const model = await demoModel();
   const html = renderView('discovery', model);
+  assert.ok(html.includes('<h2 class="chart-card__title">Canciones nuevas por mes</h2>'));
   assert.ok(html.includes('Constancia'), 'tabla de constancia');
   assert.ok(html.includes('Longevidad'), 'tabla de longevidad');
 });

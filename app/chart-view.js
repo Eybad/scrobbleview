@@ -18,7 +18,7 @@ export function scrollChart(svg, label) {
   return svg ? `<div class="chart-scroll chart-scroll--bar" tabindex="0" role="region" aria-label="${esc(label)}">${svg}</div>` : '';
 }
 
-export function contractedLineChart({ id, title, points, format, unit, base }) {
+export function contractedLineChart({ id, title, points, format, unit, base, headingLevel = 3 }) {
   const range = points.length ? `${points[0].label} → ${points[points.length - 1].label}` : '';
   const contract = createChartContract({
     id,
@@ -31,7 +31,7 @@ export function contractedLineChart({ id, title, points, format, unit, base }) {
     showShare: false,
     chartType: 'line'
   });
-  return renderChartWithContract(contract, scrollChart(lineChart({ points, format }), title));
+  return renderChartWithContract(contract, scrollChart(lineChart({ points, format }), title), { headingLevel });
 }
 
 export function contractedBarChart({ id, title, data, format = fmtNum, unit, base, orientation = 'vertical', showValue = true }) {
