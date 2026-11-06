@@ -16,8 +16,8 @@ import { scrollChart, contractedLineChart, contractedBarChart, contractedClockCh
 
 const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>';
 
-function card(title, body, cls = '', titleHtml = false) {
-  const h = title ? `<h2>${titleHtml ? title : esc(title)}</h2>` : '';
+function card(title, body, cls = '', titleHtml = false, headingTag = 'h2') {
+  const h = title ? `<${headingTag}>${titleHtml ? title : esc(title)}</${headingTag}>` : '';
   return `<section class="card ${cls}">${h}${body}</section>`;
 }
 
@@ -25,12 +25,12 @@ function limitSelect(key, currentLimit, label) {
   return `<select class="table-limit" name="limit-${esc(key)}" autocomplete="off" data-table-limit="${esc(key)}" aria-label="${esc(label)}">${[10, 25, 50, 100].map((n) => `<option value="${n}"${currentLimit === n ? ' selected' : ''}>Top ${n}</option>`).join('')}</select>`;
 }
 
-function cardWithLimit(title, key, limit, body, cls = '', catalogHref = '') {
+function cardWithLimit(title, key, limit, body, cls = '', catalogHref = '', headingTag = 'h2') {
   const content = limit >= 25
     ? body.replace('class="table-scroll"', 'class="table-scroll table-scroll--tall"')
     : body;
   const catalog = catalogHref ? `<p><a href="${esc(catalogHref)}">Ver todos en Explorar</a></p>` : '';
-  return `<section class="card ${cls}"><div class="card-head"><h2>${esc(title)}</h2>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${content}${catalog}</section>`;
+  return `<section class="card ${cls}"><div class="card-head"><${headingTag}>${esc(title)}</${headingTag}>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${content}${catalog}</section>`;
 }
 
 function catalogHref(ctx, tab, sort, thresholdKey, threshold) {
@@ -54,7 +54,7 @@ function kpis(items, layout = '') {
   return `<dl class="kpis${layout ? ` ${layout}` : ''}">${items.map((it) => {
     if (it.heading) return `<div class="kpi-group-heading" role="presentation"><span>${esc(it.heading)}</span></div>`;
     return `
-    <div class="kpi${it.text ? ' kpi-text' : ''}"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`;
+    <div class="kpi${it.text ? ' kpi-text' : ''}${it.className ? ` ${esc(it.className)}` : ''}"><dt>${esc(it.label)}</dt><dd>${it.value}${it.sub ? `<span class="kpi-sub">${esc(it.sub)}</span>` : ''}</dd></div>`;
   }).join('')}</dl>`;
 }
 
@@ -420,11 +420,8 @@ const WARNING_LABELS = {
   BAD_MS: ['evento con duración inválida', 'eventos con duración inválida']
 };
 
-export function footerMetaText(model) {
-  const sourcesCount = model.meta.sources.length;
-  const filesLabel = sourcesCount === 1 ? 'archivo' : 'archivos';
-  const parts = [`${fmtNum(sourcesCount)} ${filesLabel}`, fmtBytes(model.meta.bytesRead)];
-  const warnings = model.meta.warnings ?? [];
+function warningSummaryParts(warnings) {
+  const parts = [];
   const ignored = warnings.filter((warning) => warning.code !== 'OVERLAPPING_SOURCES' && warning.code !== 'BAD_MS');
   const invalidDurations = warnings.filter((warning) => warning.code === 'BAD_MS').length;
   if (invalidDurations) parts.push(`${fmtNum(invalidDurations)} duraciones inválidas tratadas como desconocidas`);
@@ -440,6 +437,14 @@ export function footerMetaText(model) {
   if (warnings.some((warning) => warning.code === 'OVERLAPPING_SOURCES')) {
     parts.push('Aviso: hay archivos con períodos solapados; se concatenan sin eliminar posibles duplicados.');
   }
+  return parts;
+}
+
+export function footerMetaText(model) {
+  const sourcesCount = model.meta.sources.length;
+  const filesLabel = sourcesCount === 1 ? 'archivo' : 'archivos';
+  const parts = [`${fmtNum(sourcesCount)} ${filesLabel}`, fmtBytes(model.meta.bytesRead)];
+  parts.push(...warningSummaryParts(model.meta.warnings ?? []));
   return parts.join(' · ');
 }
 
@@ -541,114 +546,139 @@ export function dashboard(model, ctx = {}) {
   const firstLimit = resolveLimit(ctx, 'dash-first', 10);
   const lastLimit = resolveLimit(ctx, 'dash-last', 10);
 
-  const qualityPanel = `
+  const primaryKpis = kpis([
+    { label: 'Tiempo escuchado', value: fmtMs(t.ms), sub: prev ? deltaSub(t.ms, prev.ms) : undefined, className: `kpi--metric-primary${byMs ? ' is-emphasized' : ''}` },
+    { label: 'Reproducciones', value: fmtNum(t.records), sub: prev ? deltaSub(t.records, prev.records) : undefined, className: `kpi--metric-primary${byMs ? '' : ' is-emphasized'}` },
+    { label: 'Artistas', value: fmtNum(model.artists.byId.size) },
+    { label: 'Canciones', value: fmtNum(model.tracks.byId.size) }
+  ], 'overview-kpis--primary');
+  const continuityKpis = kpis([
+    { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
+    { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
+    { label: 'Duración promedio', value: avgDuration == null ? '—' : fmtMs(avgDuration), sub: `mediana ${t.medianMs == null ? '—' : fmtMs(t.medianMs)}` }
+  ], 'overview-kpis--continuity');
+  const patternKpis = kpis([
+    { label: 'Reproducciones significativas', value: fmtNum(t.playsSignificant), sub: `≥${thresholdLabel(model.meta.minMs)}` },
+    { label: 'Reproducciones cortas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` },
+    { label: 'Final con código trackdone', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} otros finales · ${fmtNum(t.endReasonUnknown)} desconocidos` },
+    { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
+    { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
+    { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate }
+  ], 'overview-kpis--patterns');
+
+  const skipRateCard = (kind, low = false) => {
+    const tracks = kind === 'tracks';
+    const key = low ? (tracks ? 'dash-lowskip-trk' : 'dash-lowskip-art') : (tracks ? 'dash-skip-trk' : 'dash-skip-art');
+    const title = `${low ? 'Menor' : 'Mayor'} tasa de salto — ${tracks ? 'Canciones' : 'Artistas'}`;
+    const limit = low
+      ? (tracks ? lowSkipTrkLimit : lowSkipArtLimit)
+      : (tracks ? skipTrkLimit : skipArtLimit);
+    const source = low
+      ? (tracks ? model.tables.lowSkipRate?.tracks ?? [] : model.tables.lowSkipRate?.artists ?? [])
+      : (tracks ? model.tables.skipRate.tracks : model.tables.skipRate.artists);
+    const rows = source.slice(0, limit).map((item, index) => [
+      String(index + 1),
+      tracks ? trackSubLink(item.tk, item.name, item.artist) : entityLink('artist', item.id, item.name),
+      `${fmtNum(item.skips)} / ${fmtNum(item.skipKnown)}`,
+      fmtNum(item.plays),
+      fmtNum(item.plays - item.skipKnown),
+      fmtPct(item.skips / item.skipKnown)
+    ]);
+    const subject = tracks ? 'canciones' : 'artistas';
+    const caption = `${subject[0].toUpperCase()}${subject.slice(1)} con ${low ? 'menor' : 'mayor'} tasa de salto (mínimo 20 banderas conocidas)`;
+    const empty = `Sin ${subject} con al menos 20 reproducciones conocidas (mínimo de muestra elegible).`;
+    const sort = low ? 'lowSkipRate' : 'skipRate';
+    return cardWithLimit(title, key, limit, table(
+      ['#', tracks ? 'Canción' : 'Artista', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'],
+      rows, '', ['c', '', 'n', 'n', 'n', 'n'], null, caption, '', empty
+    ), '', catalogHref(ctx, kind, sort, 'minPlays', 20), 'h3');
+  };
+
+  const obsessionCard = cardWithLimit('Obsesión (reproducciones por día activo)', 'dash-obsession', obsLimit, table(['#', 'Canción', 'Intensidad', 'Días', 'Reproducciones', 'Tiempo'], model.tables.obsession.slice(0, obsLimit).map((o, i) => [
+    String(i + 1),
+    trackSubLink(o.tk, o.name, o.artist),
+    o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
+    fmtNum(o.days.size),
+    fmtNum(o.plays),
+    fmtMs(o.ms)
+  ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'), '', catalogHref(ctx, 'tracks', 'intensity', 'minPlays', 15), 'h3');
+  const bingeCard = cardWithLimit('Rachas (misma canción seguida)', 'dash-binge', bingeLimit, table(['#', 'Canción', 'Racha', 'Reproducciones'], model.tables.binge.slice(0, bingeLimit).map((b, i) => [
+    String(i + 1),
+    trackSubLink(b.tk, b.track.name, b.track.artist),
+    fmtNum(b.run),
+    fmtNum(b.track.plays)
+  ]), '', ['c', '', 'n', 'n'], null, 'Canciones repetidas en racha'), '', '', 'h3');
+  const firstCard = cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['#', 'Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d, i) => [
+    String(i + 1),
+    trackSubLink(d.tk, d.track.name, d.track.artist),
+    fmtNum(d.count)
+  ]), '', ['c', '', 'n'], null, 'Canción con la que arranca cada día'), '', '', 'h3');
+  const lastCard = cardWithLimit('Última canción del día', 'dash-last', lastLimit, table(['#', 'Canción', 'Días'], model.tables.dayLast.slice(0, lastLimit).map((d, i) => [
+    String(i + 1),
+    trackSubLink(d.tk, d.track.name, d.track.artist),
+    fmtNum(d.count)
+  ]), '', ['c', '', 'n'], null, 'Canción con la que cierra cada día'), '', '', 'h3');
+  const continuityTables = `<div class="grid-2">${obsessionCard}${bingeCard}</div><div class="grid-2">${firstCard}${lastCard}</div>`;
+  const skipRateTables = `<div class="grid-2">${skipRateCard('artists')}${skipRateCard('tracks')}</div><div class="grid-2">${skipRateCard('artists', true)}${skipRateCard('tracks', true)}</div>`;
+
+  const sources = model.meta.sources || [];
+  const warnings = model.meta.warnings || [];
+  const sourceLabel = sources.length === 1 ? 'archivo' : 'archivos';
+  const warningSummary = warningSummaryParts(warnings).join('; ') || 'Sin advertencias.';
+  const qualityFacts = `
+    <p class="view-meta"><strong>Rango observado:</strong> ${esc(range)}. La ausencia de registros entre fechas no garantiza cobertura continua de escucha.</p>
+    <p class="view-meta"><strong>Fuentes:</strong> ${fmtNum(sources.length)} ${sourceLabel} — ${esc(sources.join(', ') || 'Sin archivo especificado')} (${fmtNum(model.meta.records)} registros). <strong>Zona horaria:</strong> ${esc(model.meta.tzId)}.</p>
+    <p class="view-meta"><strong>Advertencias:</strong> ${esc(warningSummary)}</p>
+    <p class="view-meta"><strong>Datos excluidos o desconocidos:</strong> ${fmtNum(t.durationUnknown)} duraciones desconocidas, excluidas de medias, umbrales y distribución; banderas desconocidas — saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan solo banderas conocidas.</p>`;
+  const qualityDetails = `
     <details class="card quality-panel">
-      <summary class="quality-summary"><strong>Panel de calidad y cobertura de datos</strong></summary>
+      <summary class="quality-summary"><h3>Metodología y atribución temporal</h3></summary>
       <div class="quality-body">
-        <p class="view-meta">Fuentes: ${esc((model.meta.sources || []).join(', ') || 'Sin archivo especificado')} (${fmtNum(model.meta.records)} registros). Zona horaria: ${esc(model.meta.tzId)}.</p>
-        <p class="view-meta">Rango observado: ${esc(range)}. La ausencia de registros entre fechas no garantiza cobertura continua de escucha.</p>
-        <p class="view-meta">Duración desconocida: ${fmtNum(t.durationUnknown)} registros excluidos de medias, umbrales y distribución. Banderas desconocidas: saltadas ${fmtNum(t.records - t.skippedKnown)}, aleatorio ${fmtNum(t.records - t.shuffleKnown)}, sin conexión ${fmtNum(t.records - t.offlineKnown)}. Las tasas usan únicamente valores con banderas conocidas. Mínimo de 20 eventos conocidos para calificar en rankings de saltos.</p>
-        <p class="view-meta">Atribución temporal: Toda actividad horaria o diaria se asigna al timestamp de finalización del evento; no representa una reconstrucción minuto a minuto de reproducciones que cruzan horas o días.</p>
-        ${model.meta.warnings && model.meta.warnings.length > 0 ? `<p class="view-meta">Advertencias: ${esc(model.meta.warnings.map((w) => w.message || w.code).join('; '))}</p>` : ''}
+        <p class="view-meta">Los rankings de saltos requieren un mínimo de 20 eventos con bandera conocida.</p>
+        <p class="view-meta">Toda actividad horaria o diaria se asigna al timestamp de finalización del evento; no representa una reconstrucción minuto a minuto de reproducciones que cruzan horas o días.</p>
       </div>
     </details>`;
 
   return `
-    <header class="view-header view-header--compact">
-      <h1>Resumen</h1>
-      <p class="view-meta view-range">${esc(range)}</p>
-    </header>
-    ${kpis([
-      { heading: 'Actividad' },
-      { label: 'Reproducciones', value: fmtNum(t.records), sub: prev ? deltaSub(t.records, prev.records) : undefined },
-      { label: 'Tiempo escuchado', value: fmtMs(t.ms), sub: prev ? deltaSub(t.ms, prev.ms) : undefined },
-      { label: 'Artistas', value: fmtNum(model.artists.byId.size) },
-      { label: 'Canciones', value: fmtNum(model.tracks.byId.size) },
-      { label: 'Álbumes', value: fmtNum(model.albums.byId.size) },
-      { label: 'Sesiones', value: fmtNum(model.sessionsStats.count) },
-      { heading: 'Continuidad' },
-      { label: 'Racha más larga', value: model.streak.len > 0 ? `${model.streak.len} días` : '—', sub: model.streak.start != null ? `${fmtDay(model.streak.start)} → ${fmtDay(model.streak.end)}` : undefined },
-      { label: 'Duración promedio', value: avgDuration == null ? '—' : fmtMs(avgDuration), sub: `mediana ${t.medianMs == null ? '—' : fmtMs(t.medianMs)}` },
-      { label: 'Reproducciones significativas', value: fmtNum(t.playsSignificant), sub: `≥${thresholdLabel(model.meta.minMs)}` },
-      { label: 'Reproducciones cortas', value: fmtNum(t.playsSkipped), sub: `<${thresholdLabel(model.meta.skipThresholdMs)}` },
-      { heading: 'Comportamiento' },
-      { label: 'Final con código trackdone', value: fmtNum(t.completed), sub: `${fmtNum(t.interrupted)} otros finales · ${fmtNum(t.endReasonUnknown)} desconocidos` },
-      { label: 'Saltadas', value: fmtNum(t.skipped), sub: skipRate },
-      { label: 'En aleatorio', value: fmtNum(t.shuffle), sub: shuffleRate },
-      { label: 'Sin conexión', value: fmtNum(t.offline), sub: offlineRate }
-    ])}
-    ${qualityPanel}
-    ${card('Récords', recordsGridHTML(model, ctx))}
-    ${card('Rankings', rankings)}
-    <div class="grid-2">
-      ${evolution}
-      ${dist}
-    </div>
-    ${heatChart}
-    <div class="grid-2">
-      ${cardWithLimit('Obsesión (reproducciones por día activo)', 'dash-obsession', obsLimit, table(['#', 'Canción', 'Intensidad', 'Días', 'Reproducciones', 'Tiempo'], model.tables.obsession.slice(0, obsLimit).map((o, i) => [
-        String(i + 1),
-        trackSubLink(o.tk, o.name, o.artist),
-        o.intensity.toLocaleString('es-ES', { maximumFractionDigits: 1 }),
-        fmtNum(o.days.size),
-        fmtNum(o.plays),
-        fmtMs(o.ms)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones más escuchadas por día activo'), '', catalogHref(ctx, 'tracks', 'intensity', 'minPlays', 15))}
-      ${cardWithLimit('Rachas (misma canción seguida)', 'dash-binge', bingeLimit, table(['#', 'Canción', 'Racha', 'Reproducciones'], model.tables.binge.slice(0, bingeLimit).map((b, i) => [
-        String(i + 1),
-        trackSubLink(b.tk, b.track.name, b.track.artist),
-        fmtNum(b.run),
-        fmtNum(b.track.plays)
-      ]), '', ['c', '', 'n', 'n'], null, 'Canciones repetidas en racha'))}
-    </div>
-    <div class="grid-2">
-      ${cardWithLimit('Mayor tasa de salto — Artistas', 'dash-skip-art', skipArtLimit, table(['#', 'Artista', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], model.tables.skipRate.artists.slice(0, skipArtLimit).map((a, i) => [
-        String(i + 1),
-        entityLink('artist', a.id, a.name),
-        `${fmtNum(a.skips)} / ${fmtNum(a.skipKnown)}`,
-        fmtNum(a.plays),
-        fmtNum(a.plays - a.skipKnown),
-        fmtPct(a.skips / a.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'artists', 'skipRate', 'minPlays', 20))}
-      ${cardWithLimit('Mayor tasa de salto — Canciones', 'dash-skip-trk', skipTrkLimit, table(['#', 'Canción', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], model.tables.skipRate.tracks.slice(0, skipTrkLimit).map((tr, i) => [
-        String(i + 1),
-        trackSubLink(tr.tk, tr.name, tr.artist),
-        `${fmtNum(tr.skips)} / ${fmtNum(tr.skipKnown)}`,
-        fmtNum(tr.plays),
-        fmtNum(tr.plays - tr.skipKnown),
-        fmtPct(tr.skips / tr.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con mayor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'tracks', 'skipRate', 'minPlays', 20))}
-    </div>
-    <div class="grid-2">
-      ${cardWithLimit('Menor tasa de salto — Artistas', 'dash-lowskip-art', lowSkipArtLimit, table(['#', 'Artista', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], (model.tables.lowSkipRate?.artists ?? []).slice(0, lowSkipArtLimit).map((a, i) => [
-        String(i + 1),
-        entityLink('artist', a.id, a.name),
-        `${fmtNum(a.skips)} / ${fmtNum(a.skipKnown)}`,
-        fmtNum(a.plays),
-        fmtNum(a.plays - a.skipKnown),
-        fmtPct(a.skips / a.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Artistas con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin artistas con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'artists', 'lowSkipRate', 'minPlays', 20))}
-      ${cardWithLimit('Menor tasa de salto — Canciones', 'dash-lowskip-trk', lowSkipTrkLimit, table(['#', 'Canción', 'Saltadas / Conocidas', 'Total', 'Desconocidas', 'Tasa'], (model.tables.lowSkipRate?.tracks ?? []).slice(0, lowSkipTrkLimit).map((tr, i) => [
-        String(i + 1),
-        trackSubLink(tr.tk, tr.name, tr.artist),
-        `${fmtNum(tr.skips)} / ${fmtNum(tr.skipKnown)}`,
-        fmtNum(tr.plays),
-        fmtNum(tr.plays - tr.skipKnown),
-        fmtPct(tr.skips / tr.skipKnown)
-      ]), '', ['c', '', 'n', 'n', 'n', 'n'], null, 'Canciones con menor tasa de salto (mínimo 20 banderas conocidas)', '', 'Sin canciones con al menos 20 reproducciones conocidas (mínimo de muestra elegible).'), '', catalogHref(ctx, 'tracks', 'lowSkipRate', 'minPlays', 20))}
-    </div>
-    <div class="grid-2">
-      ${cardWithLimit('Primera canción del día', 'dash-first', firstLimit, table(['#', 'Canción', 'Días'], model.tables.dayFirst.slice(0, firstLimit).map((d, i) => [
-        String(i + 1),
-        trackSubLink(d.tk, d.track.name, d.track.artist),
-        fmtNum(d.count)
-      ]), '', ['c', '', 'n'], null, 'Canción con la que arranca cada día'))}
-      ${cardWithLimit('Última canción del día', 'dash-last', lastLimit, table(['#', 'Canción', 'Días'], model.tables.dayLast.slice(0, lastLimit).map((d, i) => [
-        String(i + 1),
-        trackSubLink(d.tk, d.track.name, d.track.artist),
-        fmtNum(d.count)
-      ]), '', ['c', '', 'n'], null, 'Canción con la que cierra cada día'))}
-    </div>`;
+    <header class="view-header view-header--compact"><h1>Resumen</h1></header>
+    <nav class="overview-index" aria-label="Secciones del resumen">
+      <button type="button" class="btn btn-secondary btn-sm" data-overview-target="overview-activity" aria-controls="overview-activity">Actividad</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-overview-target="overview-catalog" aria-controls="overview-catalog">Catálogo</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-overview-target="overview-patterns" aria-controls="overview-patterns">Patrones</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-overview-target="overview-continuity" aria-controls="overview-continuity">Continuidad</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-overview-target="overview-records" aria-controls="overview-records">Récords</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-overview-target="overview-quality" aria-controls="overview-quality">Calidad</button>
+    </nav>
+    <section class="overview-section" id="overview-activity" aria-labelledby="overview-activity-heading">
+      <h2 id="overview-activity-heading" tabindex="-1">Actividad</h2>
+      ${primaryKpis}
+      <div class="grid-2">${evolution}${dist}</div>
+    </section>
+    <section class="overview-section" id="overview-catalog" aria-labelledby="overview-catalog-heading">
+      <h2 id="overview-catalog-heading" tabindex="-1">Catálogo</h2>
+      ${kpis([{ label: 'Álbumes', value: fmtNum(model.albums.byId.size) }], 'overview-kpis--secondary')}
+      ${card('Rankings', rankings, '', false, 'h3')}
+    </section>
+    <section class="overview-section" id="overview-patterns" aria-labelledby="overview-patterns-heading">
+      <h2 id="overview-patterns-heading" tabindex="-1">Patrones</h2>
+      ${patternKpis}
+      ${heatChart}
+      ${skipRateTables}
+    </section>
+    <section class="overview-section" id="overview-continuity" aria-labelledby="overview-continuity-heading">
+      <h2 id="overview-continuity-heading" tabindex="-1">Continuidad</h2>
+      ${continuityKpis}
+      ${continuityTables}
+    </section>
+    <section class="overview-section" id="overview-records" aria-labelledby="overview-records-heading">
+      <h2 id="overview-records-heading" tabindex="-1">Récords</h2>
+      ${card('Datos destacados', recordsGridHTML(model, ctx), '', false, 'h3')}
+    </section>
+    <section class="overview-section" id="overview-quality" aria-labelledby="overview-quality-heading">
+      <h2 id="overview-quality-heading" tabindex="-1">Calidad y cobertura</h2>
+      ${card('Cobertura observada', qualityFacts, '', false, 'h3')}
+      ${qualityDetails}
+    </section>`;
 }
 
 export function artistView(model, ar, ctx = {}) {

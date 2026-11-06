@@ -1127,8 +1127,30 @@
 }
 
 
+.card h3,
+.card-head h3 {
+  font-size: var(--fs-lg);
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+
+.quality-summary h3 {
+  display: inline;
+  font-size: var(--fs-lg);
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+
 .card-head {
   align-items: center;
+}
+
+
+.kpi--metric-primary.is-emphasized {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
 }
 
 

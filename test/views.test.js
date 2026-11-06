@@ -136,16 +136,26 @@ test('rankings: barra proporcional translúcida por fila', async () => {
   assert.ok(/--bar-w:\d+(?:\.\d+)?%/.test(html), 'filas proporcionales al máximo');
 });
 
-test('dashboard exposes its heading and period while keeping load metadata in the footer', async () => {
+test('dashboard exposes its topic index and observed period in quality while keeping byte metadata in the footer', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);
   assert.ok(!dash.includes('>Tu resumen<'), 'sin título visible redundante "Tu resumen"');
   const headings = [...dash.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)];
   assert.equal(headings.length, 1);
   assert.equal(headings[0][1].trim(), 'Resumen');
-  const firstMeta = dash.match(/view-range">([^<]*)</)[1];
-  assert.ok(firstMeta.includes('→') && !firstMeta.includes('·'), 'primera línea: solo el rango de fechas con hora y minuto');
-  assert.ok(!dash.includes('archivos ·') && !dash.includes('Se ignoraron:'), 'metadatos de archivos y warnings retirados del encabezado de Resumen');
+  assert.ok(!dash.includes('view-range'), 'el rango no se duplica junto al encabezado del Resumen');
+  const topicIds = ['activity', 'catalog', 'patterns', 'continuity', 'records', 'quality'];
+  const topicPositions = topicIds.map((topic) => dash.indexOf(`id="overview-${topic}"`));
+  assert.ok(topicPositions.every((position) => position >= 0));
+  assert.deepEqual(topicPositions, [...topicPositions].sort((a, b) => a - b), 'secciones en el orden solicitado');
+  assert.equal((dash.match(/data-overview-target=/g) || []).length, 6, 'índice con seis botones nativos');
+  assert.equal((dash.match(/<h2 id="overview-[^"]+" tabindex="-1">/g) || []).length, 6, 'cada destino enfoca su H2');
+  const qualitySection = dash.slice(topicPositions.at(-1));
+  assert.ok(qualitySection.includes('Rango observado:') && qualitySection.includes('→'), 'rango observado visible en Calidad');
+  assert.ok(qualitySection.includes('Zona horaria:') && qualitySection.includes('Fuentes:</strong> 1 archivo'), 'fuentes y zona horaria visibles');
+  assert.ok(qualitySection.includes('Sin advertencias.'), 'el estado de advertencias queda visible');
+  assert.ok(qualitySection.includes('Datos excluidos o desconocidos:') && qualitySection.includes('duraciones desconocidas'), 'las exclusiones que afectan métricas quedan visibles');
+  assert.ok(qualitySection.includes('<details class="card quality-panel">'), 'la metodología extensa sigue siendo ampliable');
 
   const meta1 = footerMetaText(model);
   assert.ok(meta1.startsWith('1 archivo · '), 'singular con una sola fuente en footer');
@@ -163,6 +173,9 @@ test('dashboard exposes its heading and period while keeping load metadata in th
   const meta2 = footerMetaText(twoWithWarnings);
   assert.ok(meta2.includes('2 archivos · '), 'plural con dos fuentes');
   assert.ok(meta2.includes(' · 2 episodios de podcast ignorados'), 'warnings integrados con punto medio en el footer');
+  const warningDashboard = renderView('dashboard', twoWithWarnings);
+  const warningQuality = warningDashboard.slice(warningDashboard.indexOf('id="overview-quality"'));
+  assert.ok(warningQuality.includes('Advertencias:') && warningQuality.includes('episodios de podcast ignorados'), 'advertencias de análisis visibles sin abrir metodología');
 
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const footerIdx = html.indexOf('<footer class="site-footer"');
@@ -848,7 +861,7 @@ test('sessions, discovery, yearly, and calendar enrichments and metric switching
   assert.ok(calPlays.includes('Reproducciones por día en 2024'));
 });
 
-test('dashboard: unified KPIs, records grid, separated skip rate tables, and metric switching', async () => {
+test('dashboard: topic KPIs, records grid, separated skip rate tables, and metric emphasis', async () => {
   const model = await demoModel();
   const dash = renderView('dashboard', model);
   assert.ok(dash.includes('Duración promedio'));
@@ -858,10 +871,18 @@ test('dashboard: unified KPIs, records grid, separated skip rate tables, and met
   assert.ok(dash.includes('Mayor tasa de salto — Canciones'));
   assert.ok(dash.includes('Menor tasa de salto'));
   assert.ok(dash.includes('data-table-limit="dash-obsession"'));
-  assert.equal((dash.match(/<dl class="kpis">/g) || []).length, 1, 'single unified KPI grid in dashboard');
+  assert.equal((dash.match(/<div class="kpi(?: [^"]*)?">/g) || []).length, 14, 'dashboard preserves all 14 KPIs');
+  assert.equal((dash.match(/<dl class="kpis[^"]*">/g) || []).length, 4, 'KPIs stay with their topic sections');
+  assert.equal((dash.match(/<h2\b/g) || []).length, 6, 'topic sections use H2 and dashboard cards use H3');
+  assert.match(dash, /<div class="kpi kpi--metric-primary is-emphasized"><dt>Tiempo escuchado/);
+  assert.equal((dash.match(/kpi--metric-primary is-emphasized/g) || []).length, 1, 'one primary metric is emphasized');
 
   const dashPlays = renderView('dashboard', model, null, { metric: 'plays' });
   assert.ok(dashPlays.includes('Reproducciones por hora y día'));
+  assert.match(dashPlays, /<div class="kpi kpi--metric-primary is-emphasized"><dt>Reproducciones/);
+  const dashMs = renderView('dashboard', model, null, { metric: 'ms' });
+  assert.match(dashMs, /<div class="kpi kpi--metric-primary is-emphasized"><dt>Tiempo escuchado/);
+  assert.ok(dashMs.indexOf('<dt>Tiempo escuchado') < dashMs.indexOf('<dt>Reproducciones'), 'metric emphasis does not reorder KPI cards');
 });
 
 test('wrapped: hero archetype card and unified receipt with share button', async () => {

@@ -1203,6 +1203,16 @@ function wireView(exploreReturnState = null) {
       heading.scrollIntoView({ block: 'start' });
     });
   });
+  appRoot.querySelectorAll('[data-overview-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const section = document.getElementById(button.dataset.overviewTarget);
+      const heading = section?.querySelector(':scope > h2[tabindex="-1"]');
+      if (!heading || !appRoot.contains(section)) return;
+      heading.focus({ preventScroll: true });
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+      heading.scrollIntoView({ behavior, block: 'start' });
+    });
+  });
   compareForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     const fromA = compareForm.querySelector('[data-compare-field="fromA"]')?.value;

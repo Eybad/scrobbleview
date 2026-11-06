@@ -139,6 +139,45 @@ main.container {
 }
 
 
+.overview-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-8);
+}
+
+
+.overview-section {
+  margin-block: var(--sp-8);
+}
+
+
+.overview-section > h2 {
+  font-size: var(--fs-xl);
+  line-height: 1.25;
+  margin: 0 0 var(--sp-4);
+  scroll-margin-top: var(--sp-6);
+}
+
+
+.overview-section > .grid-2:last-child,
+.overview-section > .card:last-child,
+.overview-section > details:last-child {
+  margin-bottom: 0;
+}
+
+
+.overview-kpis--secondary .kpi {
+  max-width: 16rem;
+}
+
+
+.overview-quality-facts p + p,
+.quality-body p + p {
+  margin-top: var(--sp-3);
+}
+
+
 .app-frame-slot {
   display: contents;
 }
