@@ -1,6 +1,6 @@
 import { DOW_LONG, esc, fmtMs, fmtNum } from '../../src/charts.js';
 import { contractedBarChart } from '../chart-view.js';
-import { card, entityLinks, kpis, pctOf, table, topEntityInMap } from './shared.js';
+import { card, dayHourHeatChart, entityLinks, kpis, pctOf, table, topEntityInMap } from './shared.js';
 
 export function hoursView(model, ctx = {}) {
   const { entityLink, trackSubLink } = entityLinks(model, ctx.query);
@@ -63,6 +63,12 @@ export function hoursView(model, ctx = {}) {
     orientation: 'horizontal'
   });
 
+  const dayHourChart = dayHourHeatChart(model, {
+    id: 'hours-day-hour',
+    title: 'Actividad por día y hora',
+    metric: byMs ? 'ms' : 'plays'
+  });
+
   const blockRows = model.blocks.map((block, index) => {
     const topArtistEntry = topEntityInMap(block.artists, true);
     const topArtist = topArtistEntry ? model.artists.byId.get(topArtistEntry[0]) : null;
@@ -112,6 +118,7 @@ export function hoursView(model, ctx = {}) {
       ${hourChart}
       ${dowChart}
     </div>
+    ${dayHourChart}
     ${card('Las 4 franjas del día', table(['Franja', 'Reproducciones', 'Tiempo', '%', 'Artista #1', 'Canción #1'], blockRows, '', ['', 'n', 'n', 'n', '', ''], null, 'Comparación de las 4 franjas del día'))}
     ${card('Detalle por hora (00:00–23:00)', table(['Hora', 'Total de la hora', 'Canción #1'], hourTrackRows, '', ['c', 'n', ''], null, 'Actividad total y canción más escuchada en cada una de las 24 horas del día'))}`;
 }

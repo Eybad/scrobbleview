@@ -523,6 +523,32 @@ async function run() {
   assert(!restoredHourlyChart.querySelector('.is-selected'), 'Cerrar debe limpiar el punto seleccionado');
   assert(appDocument.getElementById('live-status').textContent === 'Inspector cerrado.', 'Cerrar debe anunciar el estado actualizado');
 
+  navLink('Horarios').click();
+  await waitFor(() => viewHeading() === 'Horarios y ritmo diario', 'abrir Horarios');
+  const dayHourChart = element('.chart-card[data-chart-id="hours-day-hour"]');
+  const dayHourPoints = JSON.parse(dayHourChart.dataset.chartPoints);
+  assert(dayHourPoints.length === 168, 'Horarios debe conservar los 168 puntos del mapa día y hora');
+  assert(dayHourPoints[0].label === 'Lunes 0:00' && dayHourPoints[0].value === 0, 'El mapa conserva la primera posición semanal vacía como un cero real');
+  assert(dayHourChart.querySelector('.chart-inspector__label').textContent === 'Elegí un punto', 'El mapa de Horarios muestra el inspector desde el inicio');
+  assert(dayHourChart.querySelector('.chart-nav__status').textContent === '168 puntos', 'El mapa de Horarios anuncia todos sus puntos');
+  assert(dayHourChart.querySelector('.table-fallback table caption').textContent === 'Tiempo escuchado por hora y día', 'El mapa de Horarios conserva su tabla accesible');
+  const firstDayHourStep = dayHourChart.querySelector('[data-chart-step][data-dir="1"]');
+  firstDayHourStep.focus();
+  firstDayHourStep.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  assert(dayHourChart.querySelector('.chart-inspector__label').textContent === 'Lunes 0:00', 'La navegación por teclado selecciona el primer punto semanal');
+  assert(dayHourChart.querySelector('.chart-inspector__value').textContent === '0 ms', 'El inspector anuncia el cero del mapa sin convertirlo en ausencia');
+  const wednesdayHourPoint = dayHourChart.querySelector('svg.chart [data-chart-index="56"]');
+  const wednesdayHourRect = wednesdayHourPoint.getBoundingClientRect();
+  wednesdayHourPoint.dispatchEvent(new appWindow.MouseEvent('click', {
+    bubbles: true,
+    clientX: wednesdayHourRect.left + wednesdayHourRect.width / 2,
+    clientY: wednesdayHourRect.top + wednesdayHourRect.height / 2
+  }));
+  assert(dayHourChart.querySelector('.chart-inspector__label').textContent === 'Miércoles 8:00', 'El mapa atribuye la celda seleccionada al día y hora correctos');
+  assert(dayHourChart.querySelector('.chart-inspector__value').textContent === '3 min 0 s', 'El mapa refleja la duración de la celda seleccionada');
+  navLink('Resumen').click();
+  await waitFor(() => viewHeading() === 'Resumen', 'volver al Resumen tras inspeccionar el mapa de Horarios');
+
   element('[data-preset="4w"]').click();
   await waitFor(() => !element('#view-root').hidden && kpiValue('Reproducciones') === '4', 'filtro de 4 semanas');
   assert(kpiValue('Reproducciones') === '4', 'El rango de 4 semanas debe mostrar 4 reproducciones');

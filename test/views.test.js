@@ -839,6 +839,14 @@ test('rankings offer Top 100, the page has a skip link, and spacing tokens are d
 test('hours view: 24-hour grouped detail table, 4 blocks comparison, and metric switching', async () => {
   const model = await demoModel();
   const playsHtml = renderView('hours', model, null, { metric: 'plays' });
+  assert.ok(playsHtml.includes('data-chart-id="hours-day-hour"'));
+  assert.ok(playsHtml.includes('data-chart-unit="reproducciones"'));
+  assert.ok(playsHtml.includes('aria-label="Actividad por hora y día de la semana"'));
+  assert.ok(playsHtml.includes('<caption>Reproducciones por hora y día'));
+  assert.ok(playsHtml.includes('>168 puntos</span>'));
+  assert.ok(playsHtml.indexOf('data-chart-id="hours-by-hour"') < playsHtml.indexOf('data-chart-id="hours-by-weekday"'));
+  assert.ok(playsHtml.indexOf('data-chart-id="hours-by-weekday"') < playsHtml.indexOf('data-chart-id="hours-day-hour"'));
+  assert.ok(playsHtml.indexOf('data-chart-id="hours-day-hour"') < playsHtml.indexOf('Las 4 franjas del día'));
   assert.ok(playsHtml.includes('Detalle por hora (00:00–23:00)'));
   assert.ok(playsHtml.includes('Total de la hora'));
   assert.ok(playsHtml.includes('00:00') && playsHtml.includes('23:00'));
@@ -847,6 +855,8 @@ test('hours view: 24-hour grouped detail table, 4 blocks comparison, and metric 
 
   const msHtml = renderView('hours', model, null, { metric: 'ms' });
   assert.ok(msHtml.includes('Tiempo'));
+  assert.ok(msHtml.includes('data-chart-unit="tiempo escuchado"'));
+  assert.ok(msHtml.includes('<caption>Tiempo escuchado por hora y día'));
 });
 
 test('habits view: concentration, Pareto curve, monthly behavior, transitions, pairs, and catalog curiosities', async () => {
