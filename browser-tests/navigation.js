@@ -1050,6 +1050,11 @@ async function run() {
   for (const width of viewportWidths) {
     frame.style.width = `${width}px`;
     await nextFrame();
+    assert(appWindow.getComputedStyle(element('.view-header h1')).fontSize === '24px', `El H1 de vista mide 24px a ${width}px`);
+    assert(appWindow.getComputedStyle(element('.overview-section > h2')).fontSize === '18px', `El H2 de sección mide 18px a ${width}px`);
+    assert(appWindow.getComputedStyle(element('.overview-kpis--primary .kpi dd')).fontSize === '24px', `El KPI principal mide 24px a ${width}px`);
+    assert(appWindow.getComputedStyle(element('.overview-kpis--secondary .kpi dd')).fontSize === '20px', `El KPI secundario mide 20px a ${width}px`);
+    assert(appWindow.getComputedStyle(element('#view-root th')).fontSize === '13px', `Las etiquetas de tabla miden 13px a ${width}px`);
     const navigation = element('.app-nav');
     assert(appWindow.getComputedStyle(navigation).display === 'grid', `La navegación móvil usa grid a ${width}px`);
     assert(appWindow.getComputedStyle(navigation).gridTemplateColumns.trim().split(/\s+/).length === 4, `La navegación tiene cuatro celdas iguales a ${width}px`);
@@ -1087,6 +1092,11 @@ async function run() {
   }
   frame.style.width = '768px';
   await nextFrame();
+  assert(appWindow.getComputedStyle(element('.view-header h1')).fontSize === '28px', 'El H1 de vista mide 28px desde 48rem');
+  assert(appWindow.getComputedStyle(element('.overview-section > h2')).fontSize === '20px', 'El H2 de sección mide 20px desde 48rem');
+  assert(appWindow.getComputedStyle(element('.overview-kpis--primary .kpi dd')).fontSize === '28px', 'El KPI principal mide 28px desde 48rem');
+  assert(appWindow.getComputedStyle(element('.overview-kpis--secondary .kpi dd')).fontSize === '24px', 'El KPI secundario mide 24px desde 48rem');
+  assert(appWindow.getComputedStyle(element('#view-root th')).fontSize === '13px', 'Las etiquetas de tabla miden 13px desde 48rem');
   assert(appWindow.getComputedStyle(element('.chart-inspector')).minHeight === '44px', 'El inspector reserva 44px desde 48rem');
   assert(appWindow.matchMedia('(min-width: 48rem)').matches && appWindow.getComputedStyle(element('.app-nav')).display === 'flex', 'La navegación cambia a desktop exactamente desde 48rem');
   const desktopContextInner = element('.context-bar-inner');

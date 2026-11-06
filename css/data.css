@@ -1028,7 +1028,7 @@ details.calendar-year summary:hover {
 
 
 .chart-card__title {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h3);
   margin: 0 0 var(--sp-1);
 }
 
@@ -1141,7 +1141,7 @@ details.calendar-year summary:hover {
 
 
 .calendar-inspector__head h2 {
-  font-size: var(--fs-md);
+  font-size: var(--fs-h2);
   margin-bottom: var(--sp-1);
 }
 
@@ -1364,7 +1364,7 @@ details.calendar-year summary:hover {
 
 
 .compare-series h2 {
-  font-size: var(--fs-md);
+  font-size: var(--fs-h2);
   margin: 0 0 var(--sp-2);
 }
 
@@ -1437,8 +1437,13 @@ details.calendar-year summary:hover {
 
 
 .chart-card__title {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h3);
   letter-spacing: -0.015em;
+}
+
+
+h2.chart-card__title {
+  font-size: var(--fs-h2);
 }
 
 

@@ -547,7 +547,7 @@
 
 
 .kpi.kpi-text dd {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-kpi-secondary);
   line-height: 1.25;
 }
 
@@ -640,12 +640,12 @@
 
 
   .kpi dd {
-    font-size: clamp(1.1rem, 4vw, 1.35rem);
+    font-size: var(--fs-kpi);
   }
 
 
   .kpi.kpi-text dd {
-    font-size: var(--fs-md);
+    font-size: var(--fs-kpi-secondary);
   }
 
 
@@ -678,7 +678,7 @@
 
 
 .card h2 {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h2);
   margin-bottom: var(--sp-4);
 }
 
@@ -825,7 +825,7 @@
 .export-dialog h2 {
   margin-top: 0;
   margin-bottom: var(--sp-2);
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h2);
 }
 
 
@@ -1080,7 +1080,7 @@
 
 
 .kpi.kpi-text dd {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-kpi-secondary);
 }
 
 
@@ -1122,14 +1122,14 @@
 
 
 .card h2 {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h2);
   letter-spacing: -0.015em;
 }
 
 
 .card h3,
 .card-head h3 {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h3);
   letter-spacing: -0.015em;
   margin: 0;
 }
@@ -1137,7 +1137,7 @@
 
 .quality-summary h3 {
   display: inline;
-  font-size: var(--fs-lg);
+  font-size: var(--fs-h3);
   letter-spacing: -0.015em;
   margin: 0;
 }
@@ -1151,6 +1151,11 @@
 .kpi--metric-primary.is-emphasized {
   border-color: var(--accent-border);
   background: var(--accent-soft);
+}
+
+
+.overview-kpis--secondary .kpi dd {
+  font-size: var(--fs-kpi-secondary);
 }
 
 

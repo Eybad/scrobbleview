@@ -89,7 +89,7 @@
 
 
 .hero-title {
-  font-size: var(--fs-h1);
+  font-size: var(--fs-h2);
   font-weight: 700;
   margin: 0 0 var(--sp-1);
 }
@@ -473,7 +473,7 @@
 .home-copy h1 {
   max-width: none;
   margin-bottom: var(--sp-4);
-  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  font-size: var(--fs-home-h1);
   letter-spacing: -0.055em;
   line-height: 1.05;
   text-wrap: balance;
@@ -621,7 +621,7 @@
 
   .home-copy h1 {
     max-width: 15ch;
-    font-size: clamp(2.1rem, 9vw, 3rem);
+    font-size: var(--fs-home-h1);
   }
 
 
