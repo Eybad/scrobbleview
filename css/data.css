@@ -1293,8 +1293,9 @@ details.calendar-year summary:hover {
 
 .calendar-month__table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
-  border-spacing: 4px;
+  border-spacing: 0;
 }
 
 
@@ -1314,8 +1315,8 @@ details.calendar-year summary:hover {
 
 .cal-month-cell {
   width: 100%;
-  min-width: 38px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   display: flex;
@@ -1326,6 +1327,15 @@ details.calendar-year summary:hover {
   font-size: var(--fs-sm);
   font-weight: 500;
   transition: transform 0.1s ease, border-color 0.1s ease;
+}
+
+
+@media (max-width: 47.999rem) {
+  .calendar-month__grid-wrap {
+    margin-inline-start: calc(6px + env(safe-area-inset-left, 0px) - var(--sp-4) - var(--sp-4) - 1px);
+    margin-inline-end: calc(6px + env(safe-area-inset-right, 0px) - var(--sp-4) - var(--sp-4) - 1px);
+    max-width: none;
+  }
 }
 
 

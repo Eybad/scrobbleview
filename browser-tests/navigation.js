@@ -865,6 +865,17 @@ async function run() {
   const monthRangeInput = element('#cal-range-from');
   const monthDaysWrap = element('.calendar-month__grid-wrap');
   const calendarHashBeforeResize = appWindow.location.hash;
+  frame.style.width = '320px';
+  await waitFor(() => appWindow.innerWidth === 320, 'ajustar cuadrícula a 320 px');
+  await nextFrame();
+  const calendarTargets320 = [...appDocument.querySelectorAll('.calendar-month__table [data-date]')];
+  assert(monthDaysWrap.dataset.layout === 'grid', '320 px debe conservar la cuadrícula');
+  assert(monthDaysWrap.clientWidth === 308, 'La cuadrícula a 320 px debe dejar 308 px útiles');
+  assert(calendarTargets320.every((day) => {
+    const rect = day.getBoundingClientRect();
+    return rect.width >= 44 && rect.height >= 44;
+  }), 'Las celdas deben medir al menos 44×44 px a 320 px');
+  assert(appDocument.documentElement.scrollWidth === appDocument.documentElement.clientWidth, 'La cuadrícula a 320 px no debe desbordar la página');
   frame.style.width = '300px';
   await waitFor(() => element('.calendar-month__grid-wrap').dataset.layout === 'list', 'mostrar la lista mensual bajo 308 px');
   assert(monthDaysWrap === element('.calendar-month__grid-wrap'), 'El cambio responsive debe conservar el wrapper de días');
