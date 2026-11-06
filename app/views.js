@@ -2128,21 +2128,26 @@ export function exploreView(model, ctx = {}) {
 
   const toolbar = `
     <div class="explore-toolbar">
-      <div class="explore-toolbar-left">
+      <div class="explore-toolbar-primary">
         <div class="tabs" role="tablist" aria-label="Explorar catálogo">
           ${tabBtn('artists', 'Artistas')}${tabBtn('tracks', 'Canciones')}${tabBtn('albums', 'Álbumes')}
         </div>
+        <div class="explore-search-wrap">
+          <label class="explore-search-label" for="explore-search">
+            <span>Buscar en ${tabName}</span>
+            <span class="explore-match-count" aria-live="polite">${fmtNum(queryResult.totalMatches)} ${queryResult.totalMatches === 1 ? 'coincidencia' : 'coincidencias'}</span>
+          </label>
+          <input type="search" id="explore-search" class="explore-search" data-explore-search placeholder="Buscar en ${tabName}…" value="${esc(query)}" aria-label="Buscar en ${tabName}">
+        </div>
       </div>
-      <div class="explore-toolbar-right">
+      <div class="explore-toolbar-secondary">
         ${thresholdControl}
         ${densityControlsHTML(density)}
         ${columnsPickerHTML(tab, visibleCols)}
         <button type="button" class="btn btn-secondary btn-sm" data-action="export-table" data-total-matches="${queryResult.totalMatches}" data-sort-direction="${queryResult.effectiveDir}" title="Preparar ZIP con las ${queryResult.totalMatches} coincidencias y su metadata">Exportar tabla (${queryResult.totalMatches})</button>
       </div>
     </div>
-    <div class="explore-search-wrap">
-      <input type="search" class="explore-search" data-explore-search placeholder="Buscar en ${tabName}…" value="${esc(query)}" aria-label="Buscar en catálogo">
-    </div>`;
+  `;
 
   const routeParams = new URLSearchParams((ctx.query ?? '').replace(/^\?/, ''));
   const routeState = [

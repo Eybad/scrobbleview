@@ -262,8 +262,8 @@ td a:focus-visible {
 }
 
 
-.table-scroll table th:first-child,
-.table-scroll table td:first-child {
+.table-scroll table:where(:not(.catalog-table)) th:first-child,
+.table-scroll table:where(:not(.catalog-table)) td:first-child {
   position: sticky;
   left: 0;
   background: var(--surface);
@@ -282,7 +282,12 @@ td a:focus-visible {
 
 
 @media (hover: hover) and (pointer: fine) {
-  .table-scroll table tbody tr:hover td:first-child {
+  .table-scroll table:where(:not(.catalog-table)) tbody tr:hover td:first-child {
+    background-color: var(--surface-2);
+  }
+
+
+  .catalog-table tbody tr:hover td.col-name {
     background-color: var(--surface-2);
   }
 }
@@ -632,15 +637,86 @@ details.calendar-year summary:hover {
 
 
 .catalog-table-wrap {
-  margin-top: var(--sp-2);
+  --catalog-table-outset: calc(var(--sp-5) + 1px);
+  max-width: none;
+  margin: var(--sp-2) calc(-1 * var(--catalog-table-outset)) 0;
+  scrollbar-gutter: auto;
 }
 
 
 .catalog-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-variant-numeric: tabular-nums;
+}
+
+
+.catalog-table th,
+.catalog-table td {
+  box-sizing: border-box;
+}
+
+
+.catalog-table th {
+  padding-block: 0;
+}
+
+
+.catalog-table .col-rank {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+}
+
+
+.catalog-table .col-name-head,
+.catalog-table .col-name {
+  width: 140px;
+  min-width: 140px;
+}
+
+
+.catalog-table .col-time {
+  width: 104px;
+  min-width: 104px;
+}
+
+
+.catalog-table .col-plays {
+  width: 128px;
+  min-width: 128px;
+}
+
+
+.catalog-table .col-share {
+  width: 88px;
+  min-width: 88px;
+}
+
+
+.catalog-table th.col-name-head,
+.catalog-table td.col-name {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background-color: var(--surface);
+  background-clip: padding-box;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+
+.catalog-table th.col-name-head {
+  z-index: 2;
+}
+
+
+.catalog-table-wrap--no-sticky .catalog-table th.col-name-head,
+.catalog-table-wrap--no-sticky .catalog-table td.col-name {
+  position: static;
+  inset-inline-start: auto;
+  box-shadow: none;
 }
 
 
@@ -653,9 +729,12 @@ details.calendar-year summary:hover {
   font-weight: inherit;
   cursor: pointer;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-1);
-  padding: 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--sp-1);
   width: 100%;
 }
 
@@ -675,6 +754,25 @@ details.calendar-year summary:hover {
 .sort-icon {
   font-size: 0.75rem;
   color: var(--accent);
+}
+
+
+.catalog-table-wrap .col-rank .btn-sort {
+  justify-content: center;
+}
+
+
+.catalog-table-wrap .col-name-head .btn-sort {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+
+.catalog-scroll-hint {
+  margin: 0;
+  padding: var(--sp-2) 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
 }
 
 
@@ -729,9 +827,55 @@ details.calendar-year summary:hover {
 }
 
 
-.cell-name.is-expanded {
-  white-space: normal !important;
-  max-width: none !important;
+.catalog-table .cell-entity {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  min-height: 44px;
+}
+
+
+.catalog-table .cell-link {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+
+.catalog-table td .cell-name,
+.catalog-table td .cell-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+}
+
+
+.catalog-table .cell-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+
+.catalog-table .cell-sub {
+  white-space: nowrap;
+}
+
+
+.catalog-table .cell-entity.is-expanded .cell-name,
+.catalog-table .cell-entity.is-expanded .cell-sub {
+  display: block;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
   word-break: break-word;
 }
 
@@ -741,6 +885,27 @@ details.calendar-year summary:hover {
   padding-block: var(--sp-1) !important;
   padding-inline: var(--sp-2) !important;
   font-size: var(--fs-sm);
+}
+
+
+@media (min-width: 48rem) {
+  .catalog-table-wrap {
+    --catalog-table-outset: calc(var(--sp-5) + 1px);
+  }
+
+
+  .catalog-table .col-name-head,
+  .catalog-table .col-name {
+    width: 240px;
+    min-width: 240px;
+  }
+}
+
+
+@media (max-width: 760px) {
+  .catalog-table-wrap {
+    --catalog-table-outset: calc(var(--sp-4) + 1px);
+  }
 }
 
 
@@ -829,12 +994,6 @@ details.calendar-year summary:hover {
   padding-top: var(--sp-2);
   border-top: 1px solid var(--border);
   text-align: right;
-}
-
-
-.col-rank .rank-badge {
-  font-weight: 600;
-  color: var(--text-muted);
 }
 
 

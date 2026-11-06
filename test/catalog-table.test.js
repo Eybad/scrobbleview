@@ -33,7 +33,10 @@ test('catalogTableHTML: renders table with sortable headers and aria-sort', () =
   assert.ok(html.includes('aria-sort="descending"'));
   assert.ok(html.includes('Daft Punk'));
   assert.ok(html.includes('25%'));
-  assert.ok(html.includes('#1'));
+  assert.match(html, /<td class="c col-rank" data-label="#">1<\/td>/);
+  assert.ok(!html.includes('rank-badge'));
+  assert.ok(html.includes('aria-label="Artistas del catálogo"'));
+  assert.ok(html.includes('Deslizá para ver más columnas'));
 });
 
 test('catalogTableHTML: disambiguates homonym tracks by artist and provides distinct links', () => {
@@ -72,8 +75,8 @@ test('catalogTableHTML: disambiguates homonym tracks by artist and provides dist
   assert.ok(html.includes('The Kid LAROI'));
   assert.ok(html.includes('#/v1/track/Rihanna/Stay'));
   assert.ok(html.includes('#/v1/track/The%20Kid%20LAROI/Stay'));
-  assert.ok(html.includes('#5'));
-  assert.ok(html.includes('#8'));
+  assert.match(html, /<td class="c col-rank" data-label="#">5<\/td>/);
+  assert.match(html, /<td class="c col-rank" data-label="#">8<\/td>/);
 });
 
 test('paginationControlsHTML: renders accessible pagination with current page and counts', () => {
@@ -126,4 +129,6 @@ test('metric ordering marks only one table column as sorted', () => {
   };
   const html = catalogTableHTML(result, { tab: 'artists', metric: 'plays', sortBy: 'metric', sortDir: 'asc' });
   assert.equal((html.match(/aria-sort="ascending"/g) ?? []).length, 1);
+  assert.match(html, /<th[^>]*class="n col-plays" aria-sort="ascending"/);
+  assert.match(html, /<th[^>]*class="n col-time" aria-sort="none"/);
 });

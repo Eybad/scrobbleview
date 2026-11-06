@@ -75,7 +75,19 @@ test('exploreView: renders tabs and catalog table for artists', () => {
   assert.ok(html.includes('data-explore-tab="albums"'));
   assert.ok(html.includes('data-explore-search'));
   assert.ok(html.includes('catalog-table'));
+  assert.ok(html.includes('30 coincidencias'));
+  assert.ok(html.includes('aria-live="polite"'));
   assert.ok(html.includes('Artist 01'));
+
+  const toolbar = html.slice(html.indexOf('class="explore-toolbar"'), html.indexOf('<div role="tabpanel"'));
+  const controlOrder = [
+    'role="tablist"',
+    'id="explore-search"',
+    'role="group" aria-label="Densidad de tabla"',
+    'class="col-picker"',
+    'data-action="export-table"'
+  ].map((selector) => toolbar.indexOf(selector));
+  assert.ok(controlOrder.every((position, index) => position >= 0 && (index === 0 || position > controlOrder[index - 1])));
 });
 
 test('exploreView: semantic entity links preserve active catalog query and filters', () => {

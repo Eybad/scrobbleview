@@ -17,6 +17,14 @@ function measureExploreTable(card) {
   wrap.style.maxHeight = `${tenthRow.offsetTop + tenthRow.offsetHeight + horizontalScrollbar}px`;
 }
 
+function updateCatalogScrollHint(card) {
+  const wrap = card.querySelector('.catalog-table-wrap');
+  const hint = card.querySelector('[data-catalog-scroll-hint]');
+  if (!wrap || !hint) return;
+  hint.hidden = wrap.scrollWidth <= wrap.clientWidth;
+  wrap.classList.toggle('catalog-table-wrap--no-sticky', wrap.clientWidth < 244);
+}
+
 export function mountExplore(root, { readSnapshot, commitQuery, savePreference, exportTable }) {
   const windowObject = root.ownerDocument.defaultView;
   const composingInputs = new WeakSet();
@@ -123,9 +131,9 @@ export function mountExplore(root, { readSnapshot, commitQuery, savePreference, 
     const expandName = findExploreControl(root, event, '[data-expand-name]');
     if (expandName) {
       event.preventDefault();
-      const name = expandName.closest('.col-name')?.querySelector('.cell-name');
-      if (!name) return;
-      const expanded = name.classList.toggle('is-expanded');
+      const identity = expandName.closest('.cell-entity');
+      if (!identity) return;
+      const expanded = identity.classList.toggle('is-expanded');
       const label = expanded ? 'Contraer nombre' : 'Expandir nombre';
       expandName.classList.toggle('is-expanded', expanded);
       expandName.setAttribute('aria-expanded', String(expanded));
@@ -215,6 +223,7 @@ export function mountExplore(root, { readSnapshot, commitQuery, savePreference, 
     const card = root.querySelector('#explore-card');
     if (!card) return;
     measureExploreTable(card);
+    updateCatalogScrollHint(card);
     if (!returnState) return;
 
     const tableScroll = card.querySelector('.table-scroll');
@@ -236,7 +245,10 @@ export function mountExplore(root, { readSnapshot, commitQuery, savePreference, 
     const snapshot = readSnapshot();
     if (snapshot?.route.view === 'explore') {
       const card = root.querySelector('#explore-card');
-      if (card) measureExploreTable(card);
+      if (card) {
+        measureExploreTable(card);
+        updateCatalogScrollHint(card);
+      }
     }
   }
 

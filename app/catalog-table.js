@@ -101,7 +101,7 @@ export function columnsPickerHTML(tab, visibleCols) {
 
   return `
     <details class="col-picker">
-      <summary class="btn btn-sm btn-secondary">Columnas visibles</summary>
+      <summary class="btn btn-sm btn-secondary" aria-label="Columnas visibles"><span>Columnas</span><span class="col-picker-summary-detail"> visibles</span></summary>
       <div class="col-picker-menu">
         <fieldset>
           <legend class="sr-only">Selección de columnas secundarias</legend>
@@ -161,8 +161,11 @@ export function catalogTableHTML(queryResult, {
     if (!col.sortKey) {
       return `<th scope="col" class="${col.key === 'trend' ? 'col-trend' : ''}">${esc(col.label)}</th>`;
     }
-    const isSorted = (col.key === 'rank' && (sortBy === 'rank' || sortBy === 'metric')) ||
-      (col.key !== 'share' && col.key !== 'rank' && (sortBy === col.sortKey || (col.key === 'skipRate' && sortBy === 'lowSkipRate')));
+    const isMetricSort = sortBy === 'metric';
+    const isSorted = (col.key === 'rank' && sortBy === 'rank') ||
+      (col.key === 'ms' && ((isMetricSort && metric === 'ms') || sortBy === 'ms')) ||
+      (col.key === 'plays' && ((isMetricSort && metric === 'plays') || sortBy === 'plays')) ||
+      (col.key !== 'share' && col.key !== 'rank' && col.key !== 'ms' && col.key !== 'plays' && (sortBy === col.sortKey || (col.key === 'skipRate' && sortBy === 'lowSkipRate')));
 
     const currentAriaSort = isSorted
       ? (sortDir === 'asc' ? 'ascending' : 'descending')
@@ -175,7 +178,15 @@ export function catalogTableHTML(queryResult, {
     const sortIndicator = isSorted ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
     const numericClass = ['ms', 'plays', 'share', 'days', 'months', 'intensity', 'skipRate', 'constancy', 'longevity'].includes(col.key) ? 'n' : '';
 
-    return `<th scope="col" class="${numericClass} ${col.key === 'name' ? 'col-name-head' : ''}" aria-sort="${currentAriaSort}">
+    const sizingClass = {
+      rank: 'col-rank',
+      name: 'col-name-head',
+      ms: 'col-time',
+      plays: 'col-plays',
+      share: 'col-share'
+    }[col.key] ?? '';
+
+    return `<th scope="col" class="${numericClass} ${sizingClass}" aria-sort="${currentAriaSort}">
       <button type="button" class="btn-sort" data-sort="${col.sortKey}" data-dir="${nextDir}" aria-label="Ordenar por ${esc(col.label)}">
         <span>${esc(col.label)}</span><span class="sort-icon" aria-hidden="true">${sortIndicator}</span>
       </button>
@@ -220,13 +231,13 @@ export function catalogTableHTML(queryResult, {
     const cells = activeCols.map((col) => {
       switch (col.key) {
         case 'rank':
-          return `<td class="c col-rank" data-label="#"><span class="rank-badge">#${r.metricRank}</span></td>`;
+          return `<td class="c col-rank" data-label="#">${r.metricRank}</td>`;
         case 'name':
           return `<td class="col-name" data-label="Nombre">${nameCellContent}</td>`;
         case 'ms':
-          return `<td class="n col-metric" data-label="Tiempo">${fmtMs(it.ms ?? 0)}</td>`;
+          return `<td class="n col-time" data-label="Tiempo">${fmtMs(it.ms ?? 0)}</td>`;
         case 'plays':
-          return `<td class="n col-metric" data-label="Reproducciones">${fmtNum(it.plays ?? 0)}</td>`;
+          return `<td class="n col-plays" data-label="Reproducciones">${fmtNum(it.plays ?? 0)}</td>`;
         case 'share':
           return `<td class="n col-share" data-label="Cuota">${fmtPct(r.share)}</td>`;
         case 'days':
@@ -279,7 +290,7 @@ export function catalogTableHTML(queryResult, {
   const matchLabel = totalMatches === 1 ? 'coincidencia' : 'coincidencias';
 
   return `
-    <div class="table-scroll catalog-table-wrap ${densityClass}" tabindex="0" role="region" aria-label="Tabla de catálogo">
+    <div class="table-scroll catalog-table-wrap ${densityClass}" tabindex="0" role="region" aria-label="${tableName} del catálogo" aria-describedby="catalog-scroll-hint">
       <table class="catalog-table">
         <caption class="visually-hidden">${tableName}: ${totalMatches} ${matchLabel}</caption>
         <thead>
@@ -289,5 +300,6 @@ export function catalogTableHTML(queryResult, {
           ${bodyRows}
         </tbody>
       </table>
-    </div>`;
+    </div>
+    <p class="catalog-scroll-hint" id="catalog-scroll-hint" data-catalog-scroll-hint hidden>Deslizá para ver más columnas</p>`;
 }

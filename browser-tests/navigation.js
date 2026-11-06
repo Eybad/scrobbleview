@@ -393,24 +393,26 @@ async function run() {
   assert(tabButtonStyle.flexGrow === '1' && tabButtonStyle.flexBasis === '0px' && tabButtonStyle.justifyContent === 'center', 'Las pestañas distribuyen y centran sus botones');
   const tableScroll = element('.table-scroll');
   assert(appWindow.getComputedStyle(tableScroll).paddingBottom === '12px', 'La tabla reserva espacio para su barra de desplazamiento');
-  const stickyHeader = element('.table-scroll table th:first-child');
-  assert(appWindow.getComputedStyle(stickyHeader).position === 'sticky' && appWindow.getComputedStyle(stickyHeader).zIndex === '1', 'La columna inicial conserva su fijación y capa');
   const rankTable = element('.table-scroll table.rank-table');
   assert(appWindow.getComputedStyle(rankTable).tableLayout === 'fixed', 'La tabla de ranking conserva el layout fijo');
+  const stickyHeader = rankTable.querySelector('th:first-child');
+  assert(appWindow.getComputedStyle(stickyHeader).position === 'sticky' && appWindow.getComputedStyle(stickyHeader).zIndex === '1', 'La columna inicial de ranking conserva su fijación y capa');
   const cssRules = [...appDocument.styleSheets].flatMap(sheet => collectCssRules(sheet.cssRules));
   const finePointerHoverRules = cssRules.filter(rule => rule.parentRule?.conditionText?.includes('(hover: hover)')
     && rule.parentRule.conditionText.includes('(pointer: fine)'));
   const rowHoverRule = finePointerHoverRules.find(rule => rule.selectorText === 'tbody tr:hover td');
-  const stickyHoverRule = finePointerHoverRules.find(rule => rule.selectorText === '.table-scroll table tbody tr:hover td:first-child');
+  const stickyHoverRule = finePointerHoverRules.find(rule => rule.selectorText === '.table-scroll table:where(:not(.catalog-table)) tbody tr:hover td:first-child');
+  const catalogStickyHoverRule = finePointerHoverRules.find(rule => rule.selectorText === '.catalog-table tbody tr:hover td.col-name');
   assert(rowHoverRule?.style.getPropertyValue('background-color') === 'var(--surface-2)', 'El hover de filas cambia solo el color de fondo');
-  assert(stickyHoverRule?.style.getPropertyValue('background-color') === 'var(--surface-2)', 'El hover conserva el color de la primera celda fija');
+  assert(stickyHoverRule?.style.getPropertyValue('background-color') === 'var(--surface-2)', 'El hover conserva la primera celda fija de las tablas no catalogadas');
+  assert(catalogStickyHoverRule?.style.getPropertyValue('background-color') === 'var(--surface-2)', 'El hover conserva la identidad fija del catálogo');
   assert(finePointerHoverRules.every(rule => !rule.style.getPropertyValue('background')), 'El hover no reemplaza fondos compuestos');
   assert(typeof appWindow.matchMedia('(hover: hover) and (pointer: fine)').matches === 'boolean', 'El estado hover debe depender de las capacidades reales del puntero');
   const coarseHintRule = cssRules.find(rule => rule.selectorText === '.hint-shift' && rule.parentRule?.conditionText === '(pointer: coarse)');
   assert(coarseHintRule?.style.display === 'none', 'El hint de Shift se oculta en dispositivos táctiles');
-  const viewRangeStyle = appWindow.getComputedStyle(element('.view-range'));
+  const viewRangeStyle = appWindow.getComputedStyle(element('.context-period'));
   const recordStyle = appWindow.getComputedStyle(element('.record-item'));
-  assert(viewRangeStyle.borderLeftColor === viewRangeStyle.borderColor, 'El rango no agrega un borde lateral de acento');
+  assert(viewRangeStyle.borderLeftColor === viewRangeStyle.borderColor, 'El período conserva un borde uniforme en el contexto');
   assert(recordStyle.borderLeftColor === recordStyle.borderColor, 'Los récords conservan un borde uniforme');
   const tableFixture = appDocument.createElement('div');
   tableFixture.className = 'table-scroll table-scroll--tall';
@@ -627,6 +629,65 @@ async function run() {
   const updatedSearch = element('[data-explore-search]');
   assert(frame.contentDocument.activeElement === updatedSearch, 'La búsqueda debe conservar el foco');
   assert(updatedSearch.selectionStart === 4 && updatedSearch.selectionEnd === 4, 'La búsqueda debe conservar la posición del cursor');
+  assert(element('.explore-match-count').textContent.trim() === '1 coincidencia', 'La búsqueda debe actualizar la cantidad visible de coincidencias');
+  const originalExploreWidth = frame.style.width || '640px';
+  frame.style.width = '320px';
+  await waitFor(() => {
+    const wrap = frame.contentDocument.querySelector('.catalog-table-wrap');
+    const hint = frame.contentDocument.querySelector('[data-catalog-scroll-hint]');
+    return wrap && hint && wrap.clientWidth >= 288 && wrap.scrollWidth > wrap.clientWidth && !hint.hidden;
+  }, 'medir el ancho útil y mostrar la indicación de scroll a 320px');
+  const catalogScroll = element('.catalog-table-wrap');
+  const catalogHint = element('[data-catalog-scroll-hint]');
+  const catalogWidths = {
+    rank: catalogScroll.querySelector('th.col-rank').getBoundingClientRect().width,
+    name: catalogScroll.querySelector('th.col-name-head').getBoundingClientRect().width,
+    time: catalogScroll.querySelector('th.col-time').getBoundingClientRect().width,
+    plays: catalogScroll.querySelector('th.col-plays').getBoundingClientRect().width,
+    share: catalogScroll.querySelector('th.col-share').getBoundingClientRect().width
+  };
+  assert(catalogScroll.clientWidth >= 288, `La tabla conserva el gutter de página a 320px: ${catalogScroll.clientWidth}px`);
+  assert(catalogWidths.rank >= 44 && catalogWidths.name >= 140 && catalogWidths.time >= 104 && catalogWidths.plays >= 128 && catalogWidths.share >= 88, `Las columnas cumplen sus mínimos móviles: ${JSON.stringify(catalogWidths)}`);
+  assert(appWindow.getComputedStyle(catalogScroll.querySelector('th.col-rank')).position === 'static', 'El ordinal no queda fijo');
+  assert(appWindow.getComputedStyle(catalogScroll.querySelector('td.col-name')).position === 'sticky', 'La identidad queda fija dentro de la tabla');
+  assert(appWindow.getComputedStyle(catalogScroll.querySelector('td.col-name')).insetInlineStart === '0px', 'La identidad sticky empieza en el borde inline');
+  assert(catalogScroll.getAttribute('role') === 'region' && catalogScroll.tabIndex === 0 && catalogScroll.getAttribute('aria-describedby') === catalogHint.id, 'El scroll de catálogo tiene foco y un nombre/instrucción accesibles');
+  assert(catalogScroll.scrollWidth > catalogScroll.clientWidth && !catalogHint.hidden, 'La indicación aparece cuando hay más columnas para consultar');
+  assert(appDocument.documentElement.scrollWidth <= appWindow.innerWidth, 'El catálogo no desplaza horizontalmente la página a 320px');
+  const mobileToolbar = element('.explore-toolbar');
+  const mobileTabs = element('.explore-toolbar-primary > .tabs').getBoundingClientRect();
+  const mobileSearch = element('.explore-search-wrap').getBoundingClientRect();
+  const mobileDensity = element('.explore-toolbar-secondary .density-controls').getBoundingClientRect();
+  const mobileColumns = element('.explore-toolbar-secondary .col-picker').getBoundingClientRect();
+  const mobileExport = element('[data-action="export-table"]').getBoundingClientRect();
+  assert(mobileTabs.width >= mobileToolbar.clientWidth - 1 && mobileSearch.width >= mobileToolbar.clientWidth - 1 && mobileTabs.top < mobileSearch.top, 'Tabs y búsqueda ocupan filas completas en móvil');
+  assert(Math.abs(mobileDensity.top - mobileColumns.top) < 1, 'Densidad y columnas comparten fila en móvil');
+  assert(Math.abs(mobileExport.width - element('.explore-toolbar-secondary').clientWidth) < 1, 'Exportar ocupa una fila completa en móvil');
+  const expandButton = catalogScroll.querySelector('[data-expand-name]');
+  expandButton.click();
+  assert(expandButton.getAttribute('aria-expanded') === 'true' && expandButton.closest('.cell-entity').classList.contains('is-expanded'), 'Expandir muestra la identidad completa sin navegar');
+  expandButton.click();
+  assert(expandButton.getAttribute('aria-expanded') === 'false', 'Contraer restaura la identidad sin navegar');
+  frame.style.width = '270px';
+  await waitFor(() => element('.catalog-table-wrap').classList.contains('catalog-table-wrap--no-sticky'), 'desactivar sticky bajo 244px útiles');
+  assert(element('.catalog-table-wrap').clientWidth < 244 && appWindow.getComputedStyle(element('.catalog-table-wrap td.col-name')).position === 'static', 'El sticky se desactiva solo en una tabla angosta');
+  assert(appDocument.documentElement.scrollWidth <= appWindow.innerWidth, 'La tabla angosta conserva scroll interno sin overflow de página');
+  frame.style.width = '768px';
+  await nextFrame();
+  const desktopTabs = element('.explore-toolbar-primary > .tabs').getBoundingClientRect();
+  const desktopSearch = element('.explore-search-wrap').getBoundingClientRect();
+  const desktopSecondary = element('.explore-toolbar-secondary').getBoundingClientRect();
+  assert(desktopTabs.left < desktopSearch.left && desktopTabs.top < desktopSecondary.top && desktopSearch.top < desktopSecondary.top, 'Desde 48rem tabs y búsqueda preceden a los controles secundarios');
+  assert(element('.catalog-table-wrap th.col-name-head').getBoundingClientRect().width >= 240, 'La identidad ocupa al menos 240px desde 48rem');
+  frame.style.width = '1440px';
+  await waitFor(() => {
+    const wrap = frame.contentDocument.querySelector('.catalog-table-wrap');
+    const hint = frame.contentDocument.querySelector('[data-catalog-scroll-hint]');
+    return wrap && hint && wrap.scrollWidth <= wrap.clientWidth && hint.hidden;
+  }, 'ocultar la indicación cuando la tabla cabe a 1440px');
+  assert(element('.catalog-table-wrap').scrollWidth <= element('.catalog-table-wrap').clientWidth && catalogHint.hidden, 'La indicación se oculta cuando la tabla ya cabe');
+  frame.style.width = originalExploreWidth;
+  await nextFrame();
   element('[data-sort="name"]').click();
   assert(frame.contentDocument.activeElement === element('[data-sort="name"]'), 'Ordenar debe conservar el foco');
   assert(element('[data-sort="name"]').closest('th').getAttribute('aria-sort'), 'El orden de tabla debe anunciar aria-sort');
@@ -676,13 +737,13 @@ async function run() {
   assert(homonymHrefs.some(href => href.includes('/Artist A/Echo')) && homonymHrefs.some(href => href.includes('/Artist B/Echo')), 'Las rutas deben separar canciones por artista');
   const returnHref = homonymLinks[0].getAttribute('href');
   const scrollStyle = appDocument.createElement('style');
-  scrollStyle.textContent = '.table-scroll[aria-label="Tabla de catálogo"] table { min-width: 1200px !important; }';
+  scrollStyle.textContent = '.catalog-table-wrap table { min-width: 1200px !important; }';
   appDocument.head.append(scrollStyle);
   const scrollSpacer = appDocument.createElement('div');
   scrollSpacer.style.height = '1200px';
   appDocument.body.append(scrollSpacer);
   homonymLinks[0].focus();
-  const sourceTableScroll = element('.table-scroll[aria-label="Tabla de catálogo"]');
+  const sourceTableScroll = element('.catalog-table-wrap');
   sourceTableScroll.scrollLeft = 180;
   const expectedTableScroll = sourceTableScroll.scrollLeft;
   assert(expectedTableScroll > 0, 'La tabla real debe desplazarse horizontalmente antes de navegar');
@@ -698,7 +759,7 @@ async function run() {
   await waitFor(() => viewHeading() === 'Explorar catálogo completo' && element('[data-explore-search]').value === 'Echo', 'volver a la consulta de homónimos');
   assert(frame.contentDocument.activeElement.getAttribute('href') === returnHref, 'Atrás debe restaurar el foco en el enlace de origen');
   assert(appWindow.scrollY === expectedPageScroll, 'Atrás debe restaurar el scroll real de página');
-  const restoredTableScroll = element('.table-scroll[aria-label="Tabla de catálogo"]').scrollLeft;
+  const restoredTableScroll = element('.catalog-table-wrap').scrollLeft;
   assert(restoredTableScroll === expectedTableScroll, `Atrás debe restaurar el scroll real de la tabla: ${restoredTableScroll}/${expectedTableScroll}; ${JSON.stringify(appWindow.history.state?.returnState?.tableScrolls)}`);
   appDocument.documentElement.style.scrollBehavior = pageScrollBehavior;
   scrollStyle.remove();
