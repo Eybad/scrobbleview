@@ -717,6 +717,43 @@ export function artistView(model, ar, ctx = {}) {
     .slice(0, albumsLimit)
     .map((al) => ({ name: al.name, value: byMs ? al.ms : al.plays, plays: al.plays, ms: al.ms, id: al.id }));
 
+  const trackRows = topTracks.map(({ tr }) => ({
+    name: tr.name,
+    value: byMs ? tr.ms : tr.plays,
+    plays: tr.plays,
+    ms: tr.ms,
+    id: tr.tk
+  }));
+  const tracksCard = cardWithLimit(
+    'Tus canciones de este artista',
+    'artist-tracks',
+    tracksLimit,
+    rankTable(trackRows, {
+      valueFmt: valFmt,
+      subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
+      valueLabel: valLabel,
+      link: (r) => formatSemanticRoute('track', model.tracks.byId.get(r.id), ctx.query),
+      caption: `Canciones del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
+      spark: (r) => rowSeries(model, 'tracks', byMs ? 'ms' : 'plays', r.id)
+    })
+  );
+
+  const albumsCard = cardWithLimit(
+    'Álbumes de este artista',
+    'artist-albums',
+    albumsLimit,
+    albumRows.length
+      ? rankTable(albumRows, {
+        valueFmt: valFmt,
+        subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
+        valueLabel: valLabel,
+        link: (r) => formatSemanticRoute('album', model.albums.byId.get(r.id), ctx.query),
+        caption: `Álbumes del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
+        spark: (r) => rowSeries(model, 'albums', byMs ? 'ms' : 'plays', r.id)
+      })
+      : '<p class="empty">Sin álbumes registrados.</p>'
+  );
+
   const clockSrc = byMs && a.clockMs ? a.clockMs : a.clock;
   const clockCells = [];
   let maxVal = 0;
@@ -764,27 +801,11 @@ export function artistView(model, ar, ctx = {}) {
     ], 'kpis--entity')}
     <div class="grid-2">
       ${evolution}
-      ${cardWithLimit('Tus canciones de este artista', 'artist-tracks', tracksLimit, rankTable(topTracks.map(({ tr }) => ({ name: tr.name, value: byMs ? tr.ms : tr.plays, plays: tr.plays, ms: tr.ms, id: tr.tk })), {
-        valueFmt: valFmt,
-        subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
-        valueLabel: valLabel,
-        link: (r) => formatSemanticRoute('track', model.tracks.byId.get(r.id), ctx.query),
-        caption: `Canciones del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
-        spark: (r) => rowSeries(model, 'tracks', byMs ? 'ms' : 'plays', r.id)
-      }))}
+      ${clockChart}
     </div>
     <div class="grid-2">
-      ${clockChart}
-      ${cardWithLimit('Álbumes de este artista', 'artist-albums', albumsLimit, albumRows.length
-        ? rankTable(albumRows, {
-          valueFmt: valFmt,
-          subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
-          valueLabel: valLabel,
-          link: (r) => formatSemanticRoute('album', model.albums.byId.get(r.id), ctx.query),
-          caption: `Álbumes del artista por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
-          spark: (r) => rowSeries(model, 'albums', byMs ? 'ms' : 'plays', r.id)
-        })
-        : '<p class="empty">Sin álbumes registrados.</p>')}
+      ${tracksCard}
+      ${albumsCard}
     </div>
     ${cardWithLimit('Transiciones', 'artist-trans', transLimit, transitions.length
       ? table(['#', 'De', 'A', 'Veces'], transitions.map((x, i) => [
@@ -892,10 +913,8 @@ export function trackView(model, tk, ctx = {}) {
       ...(ctx.detail ? [{ label: 'Primera aparición histórica', value: fmtLocal(ctx.detail.firstLocal) }] : []),
       { label: 'Última escucha', value: fmtLocal(tr.lastTs) }
     ], 'kpis--entity')}
-    <div class="grid-2">
-      ${evolution}
-      ${albumsCard}
-    </div>`;
+    ${evolution}
+    ${albumsCard}`;
 }
 
 export function albumView(model, ak, ctx = {}) {
@@ -937,19 +956,17 @@ export function albumView(model, ak, ctx = {}) {
       { label: 'Primera escucha', value: fmtLocal(al.firstTs) },
       { label: 'Última escucha', value: fmtLocal(al.lastTs) }
     ])}
-    <div class="grid-2">
-      ${evolution}
-      ${cardWithLimit('Canciones del álbum', 'album-tracks', tracksLimit, songRows.length
-        ? rankTable(songRows, {
-          valueFmt: valFmt,
-          subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
-          valueLabel: valLabel,
-          link: (r) => formatTrackFromAlbum(model.tracks.byId.get(r.id), al, ctx.query ?? ''),
-          caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
-          spark: (r) => albumSeries(model, al.trackStats.get(r.id).monthly, byMs ? 'ms' : 'plays').map((point) => point.y)
-        })
-        : '<p class="empty">Sin canciones registradas.</p>')}
-    </div>`;
+    ${evolution}
+    ${cardWithLimit('Canciones del álbum', 'album-tracks', tracksLimit, songRows.length
+      ? rankTable(songRows, {
+        valueFmt: valFmt,
+        subValue: (r) => (byMs ? `${fmtNum(r.plays)} rep.` : fmtMs(r.ms)),
+        valueLabel: valLabel,
+        link: (r) => formatTrackFromAlbum(model.tracks.byId.get(r.id), al, ctx.query ?? ''),
+        caption: `Canciones del álbum por ${byMs ? 'tiempo escuchado' : 'reproducciones'}`,
+        spark: (r) => albumSeries(model, al.trackStats.get(r.id).monthly, byMs ? 'ms' : 'plays').map((point) => point.y)
+      })
+      : '<p class="empty">Sin canciones registradas.</p>')}`;
 }
 
 export function sessionsView(model, ctx = {}) {

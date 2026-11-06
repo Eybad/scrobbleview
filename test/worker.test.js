@@ -301,6 +301,16 @@ test('worker client and controller render actual track album attribution', async
   assert.match(html, /First/);
   assert.match(html, /Second/);
   assert.match(html, /Primera aparición histórica/);
+  const positions = [
+    '<div class="scope-notice card"',
+    '<dl class="kpis kpis--entity">',
+    'data-chart-id="track-monthly"',
+    '<h2>Álbumes asociados</h2>'
+  ].map((marker) => html.indexOf(marker));
+  assert.ok(
+    positions.every((position, index) => position >= 0 && (index === 0 || position > positions[index - 1])),
+    `track attribution order: ${JSON.stringify(positions)}`
+  );
   assert.doesNotMatch(html, /NaN|undefined/);
 });
 

@@ -271,6 +271,44 @@ test('album: el enlace al artista usa la parte alta de ak', async () => {
   assert.ok(html.includes('href="#/v1/artist/X"'));
 });
 
+test('entity detail views place evolution before relationship tables', async () => {
+  const model = await demoModel();
+  const assertOrder = (html, markers, view) => {
+    const positions = markers.map((marker) => html.indexOf(marker));
+    assert.ok(
+      positions.every((position, index) => position >= 0 && (index === 0 || position > positions[index - 1])),
+      `${view}: ${JSON.stringify(positions)}`
+    );
+  };
+
+  const artist = renderView('artist', model, model.artists.top.byPlays[0].id);
+  assertOrder(artist, [
+    '<h1>',
+    '<dl class="kpis kpis--entity">',
+    'data-chart-id="artist-monthly"',
+    'data-chart-id="artist-week-clock"',
+    'data-table-limit="artist-tracks"',
+    'data-table-limit="artist-albums"',
+    '<h2>Transiciones</h2>'
+  ], 'artist');
+
+  const track = renderView('track', model, model.tracks.top.byPlays[0].tk);
+  assertOrder(track, [
+    '<h1>',
+    '<dl class="kpis kpis--entity">',
+    'data-chart-id="track-monthly"',
+    '<h2>Álbumes asociados</h2>'
+  ], 'track');
+
+  const album = renderView('album', model, [...model.albums.byId.keys()][0]);
+  assertOrder(album, [
+    '<h1>',
+    '<dl class="kpis">',
+    'data-chart-id="album-monthly"',
+    'data-table-limit="album-tracks"'
+  ], 'album');
+});
+
 test('calendar: último año desplegado, anteriores en details', async () => {
   const model = await model2y();
   const html = renderView('calendar', model);
