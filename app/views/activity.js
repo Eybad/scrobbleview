@@ -88,7 +88,7 @@ function eventDetailView(model, id, ctx, type) {
           <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page - 1}"${detail.page <= 1 ? ' disabled' : ''}>Anterior</button>
           <span class="pagination-current">Página ${fmtNum(detail.page)} de ${fmtNum(pages)}</span>
           <button type="button" class="btn btn-sm btn-page" data-detail-page="${detail.page + 1}"${detail.page >= pages ? ' disabled' : ''}>Siguiente</button>
-          <label class="pagination-size-label">Por página <select class="pagination-select" data-detail-size>${[25, 50, 100].map(size => `<option value="${size}"${size === detail.pageSize ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
+          <label class="pagination-size-label">Por página <select class="pagination-select" name="detail-page-size" data-detail-size>${[25, 50, 100].map(size => `<option value="${size}"${size === detail.pageSize ? ' selected' : ''}>${size}</option>`).join('')}</select></label>
         </div>
       </nav>`);
   return `
