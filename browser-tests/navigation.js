@@ -2,6 +2,9 @@ const frame = document.getElementById('app');
 const runButton = document.getElementById('run');
 const results = document.getElementById('results');
 let auxiliaryTab = null;
+let focusGuardElementPrototype = null;
+let focusGuardSetAttribute = null;
+let focusedAriaHideTargets = [];
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -232,6 +235,7 @@ function collectCssRules(rules) {
 
 async function run() {
   results.textContent = 'Ejecutando…';
+  focusedAriaHideTargets = [];
   localStorage.removeItem('scrobbleview:favorites');
   auxiliaryTab = window.open('about:blank', '_blank');
   assert(auxiliaryTab, 'El navegador debe permitir la pestaña de prueba');
@@ -243,6 +247,17 @@ async function run() {
   });
   const appWindow = frame.contentWindow;
   const appDocument = frame.contentDocument;
+  focusGuardElementPrototype = appWindow.Element.prototype;
+  focusGuardSetAttribute = focusGuardElementPrototype.setAttribute;
+  focusGuardElementPrototype.setAttribute = function (name, value) {
+    const activeElement = appDocument.activeElement;
+    if (name === 'aria-hidden' && value === 'true' && this.contains(activeElement)) {
+      const target = `${this.tagName.toLowerCase()}#${this.id}.${this.classList?.value ?? ''}`;
+      const active = `${activeElement.tagName.toLowerCase()}#${activeElement.id}.${activeElement.classList?.value ?? ''}`;
+      focusedAriaHideTargets.push(`${target} contains ${active}`);
+    }
+    return focusGuardSetAttribute.call(this, name, value);
+  };
   const expectedStylesheets = ['tokens', 'base', 'layout', 'components', 'navigation', 'data', 'style']
     .map(name => `css/${name}.css`);
   const stylesheetPaths = [...appDocument.querySelectorAll('link[rel="stylesheet"]')]
@@ -1200,6 +1215,7 @@ async function run() {
   frame.style.width = '640px';
   await waitFor(() => frame.contentDocument.activeElement.dataset.navGroup === 'more' && element('.app-nav-panel').hidden, 'restaurar foco de Patrones a Más al volver bajo 48rem');
   assert(failureWindow.getComputedStyle(element('.app-nav')).display === 'grid' && frame.contentDocument.activeElement.getAttribute('aria-label') === 'Más secciones, sección actual', 'El cruce a móvil conserva foco y sección actual');
+  assert(focusedAriaHideTargets.length === 0, `aria-hidden no se aplica mientras un descendiente conserva el foco: ${focusedAriaHideTargets.join('; ')}`);
   results.textContent = 'APROBADO: navegación, exportación y cancelación, scroll real, responsive, caché IndexedDB real, carga desde una pestaña nueva y recuperación ante error.';
 }
 
@@ -1210,6 +1226,11 @@ runButton.addEventListener('click', async () => {
   } catch (error) {
     results.textContent = `FALLÓ: ${error.message}`;
   } finally {
+    if (focusGuardElementPrototype && focusGuardSetAttribute) {
+      focusGuardElementPrototype.setAttribute = focusGuardSetAttribute;
+      focusGuardElementPrototype = null;
+      focusGuardSetAttribute = null;
+    }
     if (auxiliaryTab && !auxiliaryTab.closed) auxiliaryTab.close();
     auxiliaryTab = null;
     runButton.disabled = false;

@@ -56,6 +56,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
       if (cacheChoice) cacheChoice.hidden = true;
       zone.hidden = false;
       zoneContent.classList.add('is-suspended');
+      if (zoneContent.contains(document.activeElement)) document.activeElement.blur();
       zoneContent.toggleAttribute('inert', true);
       zoneContent.setAttribute('aria-hidden', 'true');
       zone.classList.add('busy');

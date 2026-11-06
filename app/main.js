@@ -361,6 +361,8 @@ function setFilterBusy(busy) {
   frame.filters.toggleAttribute('inert', busy);
   frame.context.querySelector('.metric-switch')?.toggleAttribute('inert', busy);
   if (viewContent) {
+    const activeElement = document.activeElement;
+    if (busy && viewContent.contains(activeElement)) activeElement.blur();
     viewContent.style.visibility = busy ? 'hidden' : '';
     viewContent.toggleAttribute('inert', busy);
     if (busy) viewContent.setAttribute('aria-hidden', 'true');
