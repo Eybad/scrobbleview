@@ -44,7 +44,7 @@ export function sessionsView(model, ctx = {}) {
       { label: 'Reproducciones mediana', value: s.medianPlays.toFixed(1) },
       { label: 'Sesiones con repeticiones', value: fmtNum(model.intraSession.sessionsWithRepeats), sub: pctOf(model.intraSession.sessionsWithRepeats, s.count) },
       { label: 'Reproducciones repetidas', value: fmtNum(model.intraSession.repeatedPlays) }
-    ])}
+    ], 'sessions-kpis')}
     <div class="grid-2">
       ${cardWithLimit('Sesiones más largas', 'sessions-dur', durLimit, table(['#', 'Inicio estimado', 'Duración estimada', 'Reproducciones', 'Tiempo escuchado'], sessRows(topDur), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones más largas'))}
       ${cardWithLimit('Sesiones con más reproducciones', 'sessions-plays', playsLimit, table(['#', 'Inicio estimado', 'Duración estimada', 'Reproducciones', 'Tiempo escuchado'], sessRows(topPlays), '', ['c', '', 'n', 'n', 'n'], null, 'Sesiones con más reproducciones'))}

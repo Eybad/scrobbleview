@@ -590,6 +590,19 @@ async function run() {
   assert(kpiValue('Reproducciones') === '4', 'Saltar al contenido debe conservar las cifras');
   navLink('Sesiones').click();
   await waitFor(() => viewHeading() === 'Sesiones de escucha', 'abrir Sesiones');
+  const sessionsKpis = element('#view-root .kpis.sessions-kpis');
+  const sessionsKpiColumns = () => appWindow.getComputedStyle(sessionsKpis).gridTemplateColumns.split(' ').length;
+  const sessionsFrameWidth = frame.style.width;
+  for (const [width, expectedColumns] of [[1440, 4], [768, 4], [390, 2]]) {
+    frame.style.width = `${width}px`;
+    await nextFrame();
+    assert(sessionsKpiColumns() === expectedColumns, `Sesiones debe usar ${expectedColumns} columnas de KPI a ${width}px`);
+    if (width === 390) {
+      assert(appDocument.documentElement.scrollWidth === appDocument.documentElement.clientWidth, 'Sesiones no debe desbordar horizontalmente en móvil');
+    }
+  }
+  frame.style.width = sessionsFrameWidth;
+  await nextFrame();
   element('[data-preset="all"]').click();
   await waitFor(() => !element('#view-root').hidden && kpiValue('Sesiones') === '8', 'Todo en Sesiones');
   const allHash = appWindow.location.hash;

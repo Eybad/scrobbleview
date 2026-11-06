@@ -885,6 +885,8 @@ test('habits view: concentration, Pareto curve, monthly behavior, transitions, p
 test('sessions, discovery, yearly, and calendar enrichments and metric switching', async () => {
   const model = await model2y();
   const sess = renderView('sessions', model);
+  assert.ok(sess.includes('class="kpis sessions-kpis"'));
+  assert.equal((sess.match(/class="kpi(?: kpi-text)?"/g) || []).length, 7);
   assert.ok(sess.includes('Reproducciones mediana'));
   assert.ok(sess.includes('Sesiones por mes'));
   assert.ok(sess.includes('Sesiones por día de la semana'));
