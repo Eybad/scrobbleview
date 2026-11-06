@@ -1,8 +1,9 @@
 import {
-  DOW_LONG, DOW_SHORT, esc, fmtMs, fmtNum, fmtPct,
+  DOW_LONG, DOW_SHORT, MONTHS_SHORT, esc, fmtMs, fmtNum, fmtPct,
   heatLegend, heatmap, heatmapTable, makeScale
 } from '../../src/charts.js';
 import { createChartContract, renderChartWithContract } from '../../src/chart-contract.js';
+import { civilFromDays } from '../../src/aggregate/impl/derive.js';
 import { formatSemanticRoute } from '../routes.js';
 
 export function card(title, body, cls = '', titleHtml = false, headingTag = 'h2') {
@@ -110,4 +111,95 @@ export function dayHourHeatChart(model, { id, title, metric }) {
   });
   const chart = `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>${heatLegend()}`;
   return renderChartWithContract(contract, chart);
+}
+
+
+function limitSelect(key, currentLimit, label) {
+  return `<select class="table-limit" name="limit-${esc(key)}" autocomplete="off" data-table-limit="${esc(key)}" aria-label="${esc(label)}">${[10, 25, 50, 100].map((n) => `<option value="${n}"${currentLimit === n ? ' selected' : ''}>Top ${n}</option>`).join('')}</select>`;
+}
+
+export function cardWithLimit(title, key, limit, body, cls = '', catalogHref = '', headingTag = 'h2') {
+  const content = limit >= 25
+    ? body.replace('class="table-scroll"', 'class="table-scroll table-scroll--tall"')
+    : body;
+  const catalog = catalogHref ? `<p><a href="${esc(catalogHref)}">Ver todos en Explorar</a></p>` : '';
+  return `<section class="card ${cls}"><div class="card-head"><${headingTag}>${esc(title)}</${headingTag}>${limitSelect(key, limit, `Cantidad en ${title}`)}</div>${content}${catalog}</section>`;
+}
+
+export function catalogHref(ctx, tab, sort, thresholdKey, threshold) {
+  const params = new URLSearchParams((ctx.query ?? '').replace(/^\?/, ''));
+  params.set('tab', tab);
+  params.set('sort', sort);
+  params.set('dir', sort === 'lowSkipRate' || sort === 'forgotten' ? 'asc' : 'desc');
+  if (thresholdKey) params.set(thresholdKey, String(threshold));
+  return `#/v1/explore?${params}`;
+}
+
+export function resolveLimit(ctx, key, fallback = 10) {
+  const store = ctx?.limits ?? ctx?.tableLimits;
+  if (!store) return fallback;
+  const val = store instanceof Map ? store.get(key) : store[key];
+  return Number.isFinite(val) && val > 0 ? val : fallback;
+}
+
+export function fmtLocal(loc) {
+  const c = civilFromDays(Math.floor(loc / 86400));
+  const sec = ((loc % 86400) + 86400) % 86400;
+  const h = Math.floor(sec / 3600);
+  const mi = Math.floor((sec % 3600) / 60);
+  return `${c.d} ${MONTHS_SHORT[c.m - 1]} ${c.y}, ${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
+}
+
+export function fmtDay(day) {
+  const c = civilFromDays(day);
+  return `${c.d} ${MONTHS_SHORT[c.m - 1]} ${c.y}`;
+}
+
+export function monthLabel(mi) {
+  const y = Math.floor(mi / 100);
+  const m = mi % 100;
+  return `${MONTHS_SHORT[m - 1]} ${y}`;
+}
+
+// Keep unknown Spotify reason codes verbatim instead of guessing translations.
+const REASON_LABELS = new Map([
+  ['trackdone', 'Fin de pista (trackdone)'],
+  ['fwdbtn', 'Botón siguiente (fwdbtn)'],
+  ['backbtn', 'Botón anterior (backbtn)'],
+  ['clickrow', 'Clic en lista (clickrow)'],
+  ['appload', 'Carga de app (appload)'],
+  ['appstart', 'Inicio de reproducción (appstart)'],
+  ['endplay', 'Fin de reproducción (endplay)'],
+  ['logout', 'Cierre de sesión (logout)'],
+  ['remote', 'Control remoto (remote)'],
+  ['unexpected-exit', 'Cierre inesperado (unexpected-exit)'],
+  ['shuffle', 'Modo aleatorio (shuffle)'],
+  ['trackerror', 'Error de pista (trackerror)']
+]);
+export const reasonLabel = (code) => REASON_LABELS.get(code) ?? code;
+
+export function sortedMonths(map) {
+  return [...map.keys()].sort((a, b) => a - b);
+}
+
+function nextMonth(mi) {
+  const y = Math.floor(mi / 100);
+  const m = mi % 100;
+  return m === 12 ? (y + 1) * 100 + 1 : mi + 1;
+}
+
+// Preserve elapsed time on the x-axis when months have no activity.
+export function fillMonths(keys) {
+  if (keys.length === 0) return [];
+  const out = [];
+  let mi = keys[0];
+  for (const k of keys) {
+    while (mi < k) {
+      out.push(mi);
+      mi = nextMonth(mi);
+    }
+    out.push(k);
+    mi = nextMonth(k);
+  }
+  return out;
 }
