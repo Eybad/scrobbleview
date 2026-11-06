@@ -546,6 +546,13 @@ async function run() {
   }));
   assert(dayHourChart.querySelector('.chart-inspector__label').textContent === 'Miércoles 8:00', 'El mapa atribuye la celda seleccionada al día y hora correctos');
   assert(dayHourChart.querySelector('.chart-inspector__value').textContent === '3 min 0 s', 'El mapa refleja la duración de la celda seleccionada');
+  const originalHoursFrameWidth = frame.style.width;
+  frame.style.width = '768px';
+  await nextFrame();
+  const hoursKpiColumns = appWindow.getComputedStyle(element('.hours-kpis')).gridTemplateColumns.trim().split(/\s+/).length;
+  assert(hoursKpiColumns === 3, 'Horarios distribuye sus seis KPIs en dos filas completas a 768px');
+  frame.style.width = originalHoursFrameWidth;
+  await nextFrame();
   navLink('Resumen').click();
   await waitFor(() => viewHeading() === 'Resumen', 'volver al Resumen tras inspeccionar el mapa de Horarios');
 

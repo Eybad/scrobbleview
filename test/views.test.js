@@ -839,6 +839,7 @@ test('rankings offer Top 100, the page has a skip link, and spacing tokens are d
 test('hours view: 24-hour grouped detail table, 4 blocks comparison, and metric switching', async () => {
   const model = await demoModel();
   const playsHtml = renderView('hours', model, null, { metric: 'plays' });
+  assert.ok(playsHtml.includes('class="kpis hours-kpis"'));
   assert.ok(playsHtml.includes('data-chart-id="hours-day-hour"'));
   assert.ok(playsHtml.includes('data-chart-unit="reproducciones"'));
   assert.ok(playsHtml.includes('aria-label="Actividad por hora y día de la semana"'));

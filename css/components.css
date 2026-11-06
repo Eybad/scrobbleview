@@ -1201,6 +1201,11 @@
 
 
 @media (min-width: 761px) and (max-width: 1100px) {
+  .kpis.hours-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+
   .kpis:has(.kpi-group-heading) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

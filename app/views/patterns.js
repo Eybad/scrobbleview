@@ -113,7 +113,7 @@ export function hoursView(model, ctx = {}) {
       { label: 'Franja dominante', value: esc(blockNames[peakBlock].split(' ')[0]), sub: `${pctOf(byMs ? model.blocks[peakBlock].ms : model.blocks[peakBlock].plays, totalVal)} · ${fmtMs(model.blocks[peakBlock].ms)}`, text: true },
       { label: 'Fin de semana', value: pctOf(weekendVal, totalVal), sub: `${fmtNum(model.weekday[5].plays + model.weekday[6].plays)} rep. · ${fmtMs(model.weekday[5].ms + model.weekday[6].ms)}` },
       { label: 'Lunes a viernes', value: pctOf(weekdayVal, totalVal), sub: `${fmtNum(model.totals.records - (model.weekday[5].plays + model.weekday[6].plays))} rep. · ${fmtMs(model.totals.ms - (model.weekday[5].ms + model.weekday[6].ms))}` }
-    ])}
+    ], 'hours-kpis')}
     <div class="grid-2">
       ${hourChart}
       ${dowChart}
