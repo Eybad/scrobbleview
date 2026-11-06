@@ -922,6 +922,28 @@ async function run() {
   const playsRow = [...element('.compare-results-table tbody').rows].find(row => row.cells[0].textContent.includes('Reproducciones'));
   assert(playsRow?.cells[2].textContent.trim() === '0', 'El período vacío debe conservar su base cero');
   assert(playsRow?.cells[4].textContent.trim() === 'nuevo', 'La comparación con base cero debe identificarse sin fabricar porcentaje');
+  const compareOriginalFrameWidth = frame.style.width;
+  frame.style.width = '390px';
+  await nextFrame();
+  const selectedTitle = element('.compare-selected__heading h2');
+  const selectedTitleRange = appDocument.createRange();
+  selectedTitleRange.selectNodeContents(selectedTitle);
+  const selectedTitleLines = new Set([...selectedTitleRange.getClientRects()]
+    .filter(rect => rect.width > 2)
+    .map(rect => Math.round(rect.top))).size;
+  assert(selectedTitleLines <= 2, 'El encabezado de entidades no debe ocupar más de dos líneas en móvil');
+  assert(appDocument.documentElement.scrollWidth === appDocument.documentElement.clientWidth, 'Comparar no debe desbordar la página en móvil');
+  assert(appWindow.getComputedStyle(element('.compare-ranking-table th:first-child')).position === 'sticky', 'Los rankings deben fijar la primera columna en su scroll interno');
+  frame.style.width = '1440px';
+  await nextFrame();
+  const compareRankings = element('.compare-rankings');
+  assert(appWindow.getComputedStyle(compareRankings).gridTemplateColumns.split(/\s+/).length === 1, 'Los rankings deben usar el ancho completo en escritorio');
+  const rankingFrames = [...appDocument.querySelectorAll('.compare-ranking-table')]
+    .map(table => table.parentElement);
+  assert(rankingFrames.length > 0 && rankingFrames.every(scroll => scroll.scrollWidth <= scroll.clientWidth + 1), 'Los rankings deben caber en sus paneles en escritorio');
+  assert(appDocument.documentElement.scrollWidth === appDocument.documentElement.clientWidth, 'Comparar no debe desbordar la página en escritorio');
+  frame.style.width = compareOriginalFrameWidth;
+  await nextFrame();
 
   navLink('Resumen').click();
   await waitFor(() => viewHeading() === 'Resumen', 'volver al resumen para exportar la selección');

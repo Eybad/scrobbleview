@@ -450,7 +450,20 @@
 
 
 .compare-rankings {
+  grid-template-columns: minmax(0, 1fr);
   margin-top: var(--sp-4);
+}
+
+
+@media (max-width: 47.999rem) {
+  .compare-selected__heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .compare-selected__heading select {
+    width: 100%;
+  }
 }
 
 
