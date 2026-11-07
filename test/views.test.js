@@ -1123,7 +1123,7 @@ test('home page UI: brief privacy-first copy, explicit file selection, cached se
   assert.ok(html.includes('Se procesa en tu dispositivo. Tus archivos nunca se suben'), 'privacy copy remains visible and concise');
   assert.ok(html.includes('Para usarla sin internet, cargá antes la página o servila localmente.'), 'offline clarification remains in help without a guarantee');
   assert.ok(html.indexOf('class="home-copy"') < html.indexOf('class="home-import"') && html.indexOf('class="home-import"') < html.indexOf('class="home-help"'), 'DOM order follows the mobile onboarding sequence');
-  assert.ok(html.includes('Tu historial de Spotify, en perspectiva') && html.includes('Explorá tus artistas, canciones y hábitos de escucha'), 'home title and description match the defined copy');
+  assert.ok(html.includes('Tu Spotify,<br>en perspectiva') && html.includes('Explorá tus artistas, canciones y hábitos de escucha'), 'home title keeps a short two-line composition with a listening-history description');
   assert.doesNotMatch(html, /class="tagline"/, 'redundant home header tagline is removed');
   assert.doesNotMatch(inputJs, /pointer: coarse|Tocá para seleccionar/, 'selection copy does not diverge on touch devices');
 });
