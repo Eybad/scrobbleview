@@ -128,7 +128,7 @@ test('metric ordering marks only one table column as sorted', () => {
     totalItems: 1, totalMatches: 1, page: 1, pageSize: 25, totalPages: 1, startRow: 1, endRow: 1
   };
   const html = catalogTableHTML(result, { tab: 'artists', metric: 'plays', sortBy: 'metric', sortDir: 'asc' });
-  assert.equal((html.match(/aria-sort="ascending"/g) ?? []).length, 1);
-  assert.match(html, /<th[^>]*class="n col-plays" aria-sort="ascending"/);
+  assert.equal((html.match(/aria-sort="descending"/g) ?? []).length, 1);
+  assert.match(html, /<th[^>]*class="n col-plays" aria-sort="descending"/);
   assert.match(html, /<th[^>]*class="n col-time" aria-sort="none"/);
 });

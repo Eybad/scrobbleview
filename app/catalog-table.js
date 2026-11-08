@@ -167,15 +167,18 @@ export function catalogTableHTML(queryResult, {
       (col.key === 'plays' && ((isMetricSort && metric === 'plays') || sortBy === 'plays')) ||
       (col.key !== 'share' && col.key !== 'rank' && col.key !== 'ms' && col.key !== 'plays' && (sortBy === col.sortKey || (col.key === 'skipRate' && sortBy === 'lowSkipRate')));
 
+    const displayDir = isMetricSort && col.key !== 'rank'
+      ? (sortDir === 'asc' ? 'desc' : 'asc')
+      : sortDir;
     const currentAriaSort = isSorted
-      ? (sortDir === 'asc' ? 'ascending' : 'descending')
+      ? (displayDir === 'asc' ? 'ascending' : 'descending')
       : 'none';
 
     const nextDir = isSorted
-      ? (sortDir === 'asc' ? 'desc' : 'asc')
+      ? (displayDir === 'asc' ? 'desc' : 'asc')
       : (col.sortKey === 'name' || col.sortKey === 'artist' || col.sortKey === 'rank' ? 'asc' : 'desc');
 
-    const sortIndicator = isSorted ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    const sortIndicator = isSorted ? (displayDir === 'asc' ? ' ▲' : ' ▼') : '';
     const numericClass = ['ms', 'plays', 'share', 'days', 'months', 'intensity', 'skipRate', 'constancy', 'longevity'].includes(col.key) ? 'n' : '';
 
     const sizingClass = {

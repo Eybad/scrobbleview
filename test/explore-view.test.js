@@ -132,3 +132,9 @@ test('rankCardHTML: includes contextual access link to explore view', () => {
   assert.ok(html.includes('#/v1/explore?tab=artists'));
   assert.ok(html.includes('Explorar'));
 });
+
+test('exploreView: metric ranking reports descending values and offers ascending next', () => {
+  const html = exploreView(createMockModel(), { metric: 'ms', state: {} });
+  assert.match(html, /aria-sort="descending"/);
+  assert.match(html, /data-sort="ms" data-dir="asc"/);
+});
