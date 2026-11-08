@@ -903,7 +903,8 @@ async function applyAndRenderView(focusSelector = null) {
   unresolvedFilter = false;
   appRoot.querySelector('#filter-resolution-warning')?.remove();
   syncHash();
-  if (!await refreshModel()) return;
+  const requestedHash = location.hash;
+  if (!await refreshModel() || requestedHash !== location.hash) return;
   const [name, id] = parseHash();
   const isEmpty = name !== 'compare' && isFilterActive(state) && current.totals.records === 0;
   const viewCtx = buildViewContext(name);

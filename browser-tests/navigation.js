@@ -715,6 +715,7 @@ async function run() {
   await waitFor(() => frame.contentDocument.querySelector('[data-explore-search]') !== search, 'buscar en Explorar');
   const updatedSearch = element('[data-explore-search]');
   assert(frame.contentDocument.activeElement === updatedSearch, 'La búsqueda debe conservar el foco');
+  assert(updatedSearch.value === 'Synthetic artist' && new URLSearchParams(appWindow.location.hash.split('?')[1]).get('q') === 'Synthetic artist', 'La búsqueda conserva el texto y confirma la consulta después de navegar desde el restablecimiento de filtros');
   assert(updatedSearch.selectionStart === 4 && updatedSearch.selectionEnd === 4, 'La búsqueda debe conservar la posición del cursor');
   assert(element('.explore-match-count').textContent.trim() === '1 coincidencia', 'La búsqueda debe actualizar la cantidad visible de coincidencias');
   const originalExploreWidth = frame.style.width || '640px';
