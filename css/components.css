@@ -1177,6 +1177,11 @@
   }
 
 
+  .overview-kpis--primary .kpi--metric-primary dd {
+    font-size: clamp(1rem, 5.1vw, var(--fs-kpi));
+  }
+
+
   .card {
     padding: var(--sp-3) var(--sp-4);
   }
