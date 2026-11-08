@@ -341,3 +341,24 @@ main.container {
     padding-top: 24px;
   }
 }
+
+@media (max-width: 640px) {
+  main.container {
+    padding-top: var(--sp-4);
+  }
+
+  .overview-index {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-bottom: var(--sp-4);
+    padding-bottom: var(--sp-2);
+  }
+
+  .overview-index > button {
+    flex-shrink: 0;
+  }
+
+  .overview-section {
+    margin-block: var(--sp-4);
+  }
+}
