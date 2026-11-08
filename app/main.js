@@ -1098,13 +1098,25 @@ function wireRankCard() {
   });
   card.querySelectorAll('[data-metric]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (activeMetric === btn.dataset.metric) return;
+      const controlTop = btn.getBoundingClientRect().top;
+      const scrollPositions = [...card.querySelectorAll('.tabs, .table-scroll')]
+        .map((element) => ({ left: element.scrollLeft, top: element.scrollTop }));
       activeMetric = btn.dataset.metric;
       rankUI.metric = activeMetric;
       try { localStorage.setItem(METRIC_STORAGE_KEY, activeMetric); } catch (_) {}
       syncHash();
       render();
       const newBtn = document.getElementById('rank-card')?.querySelector(`[data-metric="${activeMetric}"]`);
-      if (newBtn) newBtn.focus({ preventScroll: true });
+      const nextCard = document.getElementById('rank-card');
+      nextCard?.querySelectorAll('.tabs, .table-scroll').forEach((element, index) => {
+        element.scrollLeft = scrollPositions[index]?.left ?? 0;
+        element.scrollTop = scrollPositions[index]?.top ?? 0;
+      });
+      if (newBtn) {
+        newBtn.focus({ preventScroll: true });
+        window.scrollBy({ top: newBtn.getBoundingClientRect().top - controlTop, behavior: 'instant' });
+      }
     });
   });
   const sel = card.querySelector('[data-topn]');
