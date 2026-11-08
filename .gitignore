@@ -10,16 +10,9 @@ Thumbs.db
 .idea/
 *.swp
 
-# JSON privados: solo se permiten el manifiesto y el fixture sintético.
 *.json
 !/package.json
 !/test/fixtures/sample.json
 *.csv
 *.zip
 *.gz
-
-# Pruebas temporales locales.
-test/_*.test.js
-
-AGENTS.md
-.agent-notes/
