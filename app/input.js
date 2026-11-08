@@ -1,5 +1,7 @@
 import { fmtNum } from '../src/charts.js';
 
+export const PROCESSING_INDICATOR_DELAY_MS = 500;
+
 export function assertDistinctFiles(files) {
   const seen = new Set();
   for (const file of files) {
@@ -40,6 +42,7 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
   const viewApp = document.getElementById('view-app');
 
   let busy = false;
+  let busyTimer = 0;
   let cachedInfo = null;
 
   function syncCacheChoice() {
@@ -51,17 +54,26 @@ export function setupInput({ analyze, onReady, onError, onLoadCached, onClearCac
     if (btnUploadAlt) btnUploadAlt.hidden = !active;
   }
 
+  function showImportBusy() {
+    if (cacheChoice) cacheChoice.hidden = true;
+    zone.hidden = false;
+    zoneContent.classList.add('is-suspended');
+    zoneContent.setAttribute('aria-hidden', 'true');
+    zone.classList.add('busy');
+  }
+
   function setImportBusy(active) {
     if (active) {
-      if (cacheChoice) cacheChoice.hidden = true;
-      zone.hidden = false;
-      zoneContent.classList.add('is-suspended');
       if (zoneContent.contains(document.activeElement)) document.activeElement.blur();
       zoneContent.toggleAttribute('inert', true);
-      zoneContent.setAttribute('aria-hidden', 'true');
-      zone.classList.add('busy');
+      busyTimer = setTimeout(() => {
+        busyTimer = 0;
+        if (busy) showImportBusy();
+      }, PROCESSING_INDICATOR_DELAY_MS);
       return;
     }
+    clearTimeout(busyTimer);
+    busyTimer = 0;
     zoneContent.classList.remove('is-suspended');
     zoneContent.toggleAttribute('inert', false);
     zoneContent.removeAttribute('aria-hidden');

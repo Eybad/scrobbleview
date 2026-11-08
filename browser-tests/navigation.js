@@ -326,6 +326,8 @@ async function run() {
       assert(cancelledDrop.defaultPrevented, 'El drop mantiene la carga por arrastre');
       await waitFor(() => delayedLoad !== null, 'iniciar importación sintética cancelable');
       await new Promise(resolve => appWindow.requestAnimationFrame(resolve));
+      assert(element('#import-progress').hidden && element('#drop-zone-content').inert && appWindow.getComputedStyle(element('#drop-zone-content')).visibility !== 'hidden', 'La selección se mantiene visible mientras la carga es breve');
+      await waitFor(() => !element('#import-progress').hidden, 'mostrar el progreso tras el umbral');
       const during = dropZone.getBoundingClientRect();
       assert(!element('#import-progress').hidden && element('#drop-zone-content').inert && appWindow.getComputedStyle(element('#drop-zone-content')).visibility === 'hidden', 'La importación reemplaza el contenido visible y accesible de la zona de carga');
       assert(element('#processing-status').textContent.endsWith('%') && element('#status').textContent === '', 'El porcentaje de importación es visual y la región de inicio no repite actualizaciones');

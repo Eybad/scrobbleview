@@ -2,7 +2,7 @@ import { createAnalysisClient } from './analysis-client.js';
 import { createAnalysisState } from './analysis-state.js';
 import { AbortError } from '../src/parse/errors.js';
 import { emptyFilterState, RANGE_PRESETS } from '../src/filters.js';
-import { setupInput } from './input.js';
+import { PROCESSING_INDICATOR_DELAY_MS, setupInput } from './input.js';
 import { renderView, rankCardHTML, receiptTextFromConfirmed, emptyFiltersHTML, footerMetaText, calendarYearGridHTML } from './views.js';
 import { createExportUI } from './export-ui.js';
 import { esc, fmtNum, fmtMs } from '../src/charts.js';
@@ -168,7 +168,8 @@ function updateProcessing() {
   const globalEntry = importEntry ?? exportEntry ?? generalEntry;
   const [jobId, job] = globalEntry ?? [];
   displayedJobId = jobId ?? null;
-  const target = processingTarget(job);
+  const visibleJob = job?.visible ? job : null;
+  const target = processingTarget(visibleJob);
   const importProgress = document.getElementById('import-progress');
   const exportProgress = document.getElementById('export-progress');
   const slots = [processing, importProgress, exportProgress].filter(Boolean);
@@ -182,31 +183,32 @@ function updateProcessing() {
     processingStatus.setAttribute('role', 'status');
     processingStatus.setAttribute('aria-live', 'off');
   }
-  processingStatus.textContent = job ? `${job.label}… ${Math.round(job.fraction * 100)}%` : processingError ?? '';
-  processingProgress.hidden = !job;
-  if (job) {
-    processingProgress.value = job.fraction;
-    processingStatus.style.setProperty('--processing-progress', `${job.fraction * 100}%`);
+  processingStatus.textContent = visibleJob ? `${visibleJob.label}… ${Math.round(visibleJob.fraction * 100)}%` : processingError ?? '';
+  processingProgress.hidden = !visibleJob;
+  if (visibleJob) {
+    processingProgress.value = visibleJob.fraction;
+    processingStatus.style.setProperty('--processing-progress', `${visibleJob.fraction * 100}%`);
   } else {
     processingStatus.style.removeProperty('--processing-progress');
   }
-  cancelProcessing.hidden = !job;
+  cancelProcessing.hidden = !visibleJob;
   cancelProcessing.textContent = 'Cancelar';
-  cancelProcessing.setAttribute('aria-label', job?.type === 'import' ? 'Cancelar carga' : 'Cancelar exportación');
+  cancelProcessing.setAttribute('aria-label', visibleJob?.type === 'import' ? 'Cancelar carga' : 'Cancelar exportación');
   processing.hidden = target !== processing;
 
   const filterProgress = appFrame?.context.querySelector('#filter-progress');
   const filterJob = activeEntries.filter(([, item]) => item.type === 'filter').at(-1)?.[1] ?? null;
+  const filterVisible = Boolean(filterJob?.visible);
   const filterStatus = filterProgress?.querySelector('#filter-processing-status');
   const filterNativeProgress = filterProgress?.querySelector('#filter-processing-progress');
   const cancelFilter = filterProgress?.querySelector('#cancel-filter-processing');
   const resetFilterProcessing = appFrame?.context.querySelector('#reset-filter-processing');
   const filterError = !filterJob && Boolean(filterProcessingError);
   if (filterProgress) {
-    filterProgress.hidden = !filterJob && !filterError;
+    filterProgress.hidden = !filterVisible && !filterError;
     filterProgress.classList.toggle('is-error', filterError);
   }
-  appFrame?.context.querySelector('.context-period')?.toggleAttribute('hidden', Boolean(filterJob || filterError));
+  appFrame?.context.querySelector('.context-period')?.toggleAttribute('hidden', filterVisible || filterError);
   if (filterStatus) {
     if (filterError) {
       filterStatus.setAttribute('role', 'alert');
@@ -215,17 +217,17 @@ function updateProcessing() {
     } else {
       filterStatus.setAttribute('role', 'status');
       filterStatus.setAttribute('aria-live', 'off');
-      filterStatus.textContent = filterJob ? `${filterJob.label}… ${Math.round(filterJob.fraction * 100)}%` : '';
-      filterStatus.style.setProperty('--processing-progress', `${(filterJob?.fraction ?? 0) * 100}%`);
+      filterStatus.textContent = filterVisible ? `${filterJob.label}… ${Math.round(filterJob.fraction * 100)}%` : '';
+      filterStatus.style.setProperty('--processing-progress', `${(filterVisible ? filterJob.fraction : 0) * 100}%`);
     }
   } else {
     filterStatus?.removeAttribute('role');
   }
   if (filterNativeProgress) {
-    filterNativeProgress.hidden = !filterJob;
-    if (filterJob) filterNativeProgress.value = filterJob.fraction;
+    filterNativeProgress.hidden = !filterVisible;
+    if (filterVisible) filterNativeProgress.value = filterJob.fraction;
   }
-  if (cancelFilter) cancelFilter.hidden = !filterJob;
+  if (cancelFilter) cancelFilter.hidden = !filterVisible;
   if (filterError) filterProgress?.append(retryProcessing);
   else processing.append(retryProcessing);
   retryProcessing.hidden = !filterError || (!analysisState.getFailed() && !cancelledFilter) || !analysisState.getConfirmed().context;
@@ -246,8 +248,14 @@ function beginProcessing(label, type = 'general') {
     processingError = null;
     processingErrorType = null;
   }
-  const job = { label, fraction: 0, type };
+  const job = { label, fraction: 0, type, visible: false, timer: 0 };
   jobs.set(id, job);
+  job.timer = setTimeout(() => {
+    const activeJob = jobs.get(id);
+    if (!activeJob) return;
+    activeJob.visible = true;
+    updateProcessing();
+  }, PROCESSING_INDICATOR_DELAY_MS);
   if (!(type === 'filter' && activeImportJob)) announce(`${label}.`);
   updateProcessing();
   return {
@@ -259,9 +267,10 @@ function beginProcessing(label, type = 'general') {
       if (!activeJob) return;
       activeJob.fraction = fraction;
       if (nextLabel) activeJob.label = nextLabel;
-      updateProcessing();
+      if (activeJob.visible) updateProcessing();
     },
     finish() {
+      clearTimeout(job.timer);
       jobs.delete(id);
       updateProcessing();
     }
