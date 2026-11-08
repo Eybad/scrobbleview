@@ -1422,6 +1422,19 @@ details.calendar-year summary:hover {
 }
 
 
+.compare-series-table tbody th[scope="row"],
+.compare-series-table td.n,
+.compare-results-table td.n,
+.compare-ranking-table td.n {
+  white-space: nowrap;
+}
+
+
+.compare-results-table {
+  min-width: 620px;
+}
+
+
 .monthly-longitudinal-table {
   min-width: 1100px;
 }
@@ -1429,6 +1442,118 @@ details.calendar-year summary:hover {
 
 .compare-ranking-table {
   min-width: 760px;
+}
+
+
+.compare-ranking-table th:first-child {
+  min-width: 190px;
+}
+
+
+.compare-ranking-entity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+
+.compare-ranking-entity > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+
+.compare-ranking-entity .compare-select-button {
+  padding-inline: var(--sp-2);
+  white-space: nowrap;
+}
+
+
+@media (max-width: 640px) {
+  .compare-results-scroll {
+    overflow-x: visible;
+    scrollbar-gutter: auto;
+    padding-bottom: 0;
+    background: none;
+  }
+
+
+  .compare-results-table {
+    min-width: 0;
+  }
+
+
+  .compare-selected-table {
+    display: none;
+  }
+
+
+  .compare-results-head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+
+  .compare-results-table caption,
+  .compare-series-table caption,
+  .compare-selected-table caption,
+  .compare-ranking-table caption {
+    text-align: left;
+  }
+
+
+  .compare-results-table tbody {
+    display: block;
+  }
+
+
+  .compare-results-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+
+  .compare-results-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+
+  .compare-results-table tbody th[scope="row"] {
+    position: static;
+    grid-column: 1 / -1;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+
+  .compare-results-table tbody td {
+    display: grid;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+
+  .compare-results-table tbody td::before {
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: var(--fs-xs);
+  }
 }
 
 

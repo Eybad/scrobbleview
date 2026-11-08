@@ -56,7 +56,7 @@ function comparisonForm(ctx) {
 function metricRow(label, valueA, valueB, format) {
   const hasBase = Number.isFinite(valueA) && Number.isFinite(valueB);
   const delta = hasBase ? computeMetricDelta(valueA, valueB, format) : null;
-  return `<tr><th scope="row">${esc(label)}</th><td class="n">${esc(Number.isFinite(valueA) ? format(valueA) : '—')}</td><td class="n">${esc(Number.isFinite(valueB) ? format(valueB) : '—')}</td><td class="n">${esc(delta?.diffFormatted ?? '—')}</td><td class="n">${esc(delta?.pctLabel ?? 'sin base')}</td></tr>`;
+  return `<tr><th scope="row">${esc(label)}</th><td class="n" data-label="A">${esc(Number.isFinite(valueA) ? format(valueA) : '—')}</td><td class="n" data-label="B">${esc(Number.isFinite(valueB) ? format(valueB) : '—')}</td><td class="n" data-label="Diferencia">${esc(delta?.diffFormatted ?? '—')}</td><td class="n" data-label="Variación">${esc(delta?.pctLabel ?? 'sin base')}</td></tr>`;
 }
 
 function formatAveragePlays(value) {
@@ -76,9 +76,9 @@ function averagesRows(periodA, periodB, rangeA, rangeB) {
 }
 
 function totalsTable(periodA, periodB, rangeA, rangeB) {
-  return `<div class="table-scroll"><table class="compare-results-table">
+  return `<div class="table-scroll compare-results-scroll"><table class="compare-results-table">
     <caption>Resultados de A frente a B</caption>
-    <thead><tr><th scope="col">Indicador</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Variación</th></tr></thead>
+    <thead class="compare-results-head"><tr><th scope="col">Indicador</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Variación</th></tr></thead>
     <tbody>
       ${metricRow('Tiempo escuchado', periodA.totals.ms, periodB.totals.ms, fmtMs)}
       ${metricRow('Reproducciones', periodA.totals.plays, periodB.totals.plays, fmtNum)}
@@ -135,7 +135,7 @@ function rankingTable(kind, periodA, periodB, metric, selectedEntities) {
   const selectedKeys = new Set(selectedEntities.map(compareEntityKey));
   return `<div class="table-scroll"><table class="compare-ranking-table">
     <caption>Top 50 ${CATEGORY_NAMES[kind].toLowerCase()}: posiciones y cuotas (${metric === 'ms' ? 'tiempo' : 'reproducciones'})</caption>
-    <thead><tr><th scope="col">Entidad</th><th scope="col" class="n">Pos. A</th><th scope="col" class="n">Pos. B</th><th scope="col" class="n">Valor A</th><th scope="col" class="n">Valor B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Cuota A</th><th scope="col" class="n">Cuota B</th><th scope="col" class="n">Cambio</th><th scope="col">Movimiento</th><th scope="col">Comparar</th></tr></thead>
+    <thead><tr><th scope="col">Entidad</th><th scope="col" class="n">Pos. A</th><th scope="col" class="n">Pos. B</th><th scope="col" class="n">Valor A</th><th scope="col" class="n">Valor B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Cuota A</th><th scope="col" class="n">Cuota B</th><th scope="col" class="n">Cambio</th><th scope="col">Movimiento</th></tr></thead>
     <tbody>${rows.map((row) => {
       const entity = entitiesA.get(row.key) ?? entitiesB.get(row.key);
       const identity = kind === 'artists'
@@ -146,11 +146,11 @@ function rankingTable(kind, periodA, periodB, metric, selectedEntities) {
       const canSelect = isSelected || selectedEntities.length < 3;
       const button = key == null ? '—' : `<button type="button" class="btn btn-secondary compare-select-button" data-compare-entity="${esc(JSON.stringify(identity))}" aria-pressed="${isSelected}" aria-label="${isSelected ? 'Quitar' : 'Agregar'} ${esc(row.name)} ${isSelected ? 'de' : 'a'} la comparación"${canSelect ? '' : ' disabled'}>${isSelected ? 'Quitar' : 'Agregar'}</button>`;
       return `<tr>
-        <th scope="row">${esc(row.name)}</th>
+        <th scope="row"><div class="compare-ranking-entity"><span>${esc(row.name)}</span>${button}</div></th>
         <td class="n">${row.rankA ?? '—'}</td><td class="n">${row.rankB ?? '—'}</td>
         <td class="n">${esc(format(row.valA))}</td><td class="n">${esc(format(row.valB))}</td>
         <td class="n">${esc(format(row.diff))}</td><td class="n">${row.shareA == null ? 'sin base' : `${row.shareA.toFixed(1).replace('.', ',')}%`}</td>
-        <td class="n">${row.shareB == null ? 'sin base' : `${row.shareB.toFixed(1).replace('.', ',')}%`}</td><td class="n">${esc(row.shareDiffLabel)}</td><td>${esc(row.status)}</td><td>${button}</td>
+        <td class="n">${row.shareB == null ? 'sin base' : `${row.shareB.toFixed(1).replace('.', ',')}%`}</td><td class="n">${esc(row.shareDiffLabel)}</td><td>${esc(row.status)}</td>
       </tr>`;
     }).join('')}</tbody>
   </table></div>`;
@@ -247,7 +247,7 @@ export function compareView(_model, _id, ctx = {}) {
   else if (ctx.compareStatus === 'error') results = `<p class="status error" role="alert">${esc(ctx.compareLoadError || 'No se pudo calcular la comparación.')}</p>`;
   else if (result && rangeA && rangeB) {
     results = `<p class="view-meta">A: ${esc(dateRangeLabel(result.rangeA))} · B: ${esc(dateRangeLabel(result.rangeB))} · zona horaria ${esc(result.timeZone)}</p>
-      ${result.warning ? `<p class="status status--warning" role="status">${esc(result.warning)}</p>` : ''}
+      ${result.warning ? `<p class="status status--warning compare-warning" role="status">${esc(result.warning)}</p>` : ''}
       ${totalsTable(result.periodA, result.periodB, result.rangeA, result.rangeB)}
       <section class="compare-series card-subtle"><h2>Evolución por período</h2>${seriesRows(result.periodA, result.periodB, result.rangeA, result.rangeB, ctx.compareGranularity, byMs ? 'ms' : 'plays')}</section>
       ${selectedEntitiesView(result.periodA, result.periodB, normalizeCompareEntities(ctx.compareEntities), ctx.compareEntityMode === 'share' ? 'share' : 'absolute', byMs ? 'ms' : 'plays')}
@@ -256,6 +256,6 @@ export function compareView(_model, _id, ctx = {}) {
   else if (ctx.compareLoading) results = '<p class="status" role="status">Preparando comparación…</p>';
   return `<header class="view-header"><h1>Comparación de períodos</h1></header>
     ${comparisonForm(ctx)}
-    ${!result && ctx.compareWarning ? `<p class="status status--warning" role="status">${esc(ctx.compareWarning)}</p>` : ''}
+    ${!result && ctx.compareWarning ? `<p class="status status--warning compare-warning" role="status">${esc(ctx.compareWarning)}</p>` : ''}
     ${results}`;
 }
