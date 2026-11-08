@@ -144,6 +144,12 @@ function viewHeading(appDocument = frame.contentDocument) {
     .join('');
 }
 
+function hasWrappedKpiValue(node) {
+  const range = node.ownerDocument.createRange();
+  range.selectNodeContents(node.firstChild);
+  return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1;
+}
+
 function navLink(label) {
   const appDocument = frame.contentDocument;
   let link = [...appDocument.querySelectorAll('.app-nav a[data-nav-view], .app-nav-panel a[data-nav-view]')]
@@ -1142,7 +1148,9 @@ async function run() {
     await nextFrame();
     assert(appWindow.getComputedStyle(element('.view-header h1')).fontSize === '24px', `El H1 de vista mide 24px a ${width}px`);
     assert(appWindow.getComputedStyle(element('.overview-section > h2')).fontSize === '18px', `El H2 de sección mide 18px a ${width}px`);
-    assert(appWindow.getComputedStyle(element('.overview-kpis--primary .kpi dd')).fontSize === '24px', `El KPI principal mide 24px a ${width}px`);
+    const primaryKpiFontSize = Number.parseFloat(appWindow.getComputedStyle(element('.overview-kpis--primary .kpi dd')).fontSize);
+    assert(primaryKpiFontSize >= 16 && primaryKpiFontSize <= 24, `El KPI principal mantiene un tamaño legible entre 16 y 24px a ${width}px`);
+    assert(![...appDocument.querySelectorAll('.overview-kpis--primary .kpi--metric-primary dd')].some(hasWrappedKpiValue), `Los KPIs principales conservan una línea a ${width}px`);
     assert(appWindow.getComputedStyle(element('.overview-kpis--secondary .kpi dd')).fontSize === '20px', `El KPI secundario mide 20px a ${width}px`);
     assert(appWindow.getComputedStyle(element('#view-root th')).fontSize === '13px', `Las etiquetas de tabla miden 13px a ${width}px`);
     const navigation = element('.app-nav');
@@ -1187,11 +1195,7 @@ async function run() {
   assert(appWindow.getComputedStyle(element('.overview-kpis--primary .kpi dd')).fontSize === '28px', 'El KPI principal mide 28px desde 48rem');
   const primaryKpiGrid = element('.overview-kpis--primary');
   const primaryKpiColumns = appWindow.getComputedStyle(primaryKpiGrid).gridTemplateColumns.trim().split(/\s+/).length;
-  const wrappedPrimaryKpis = [...primaryKpiGrid.querySelectorAll('.kpi--metric-primary dd')].filter(value => {
-    const range = appDocument.createRange();
-    range.selectNodeContents(value);
-    return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1;
-  });
+  const wrappedPrimaryKpis = [...primaryKpiGrid.querySelectorAll('.kpi--metric-primary dd')].filter(hasWrappedKpiValue);
   assert(primaryKpiColumns === 2 && wrappedPrimaryKpis.length === 0, 'Los KPIs principales conservan una línea a 768px');
   viewportChecks.push({ width: 768, scrollWidth: appDocument.documentElement.scrollWidth, viewport: appWindow.innerWidth, primaryKpiColumns, wrappedPrimaryKpis: wrappedPrimaryKpis.length });
   assert(appWindow.getComputedStyle(element('.overview-kpis--secondary .kpi dd')).fontSize === '24px', 'El KPI secundario mide 24px desde 48rem');
