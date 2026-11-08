@@ -556,6 +556,7 @@
 .app-nav__item:hover {
   background: var(--surface-2);
   color: var(--text);
+  text-decoration: none;
 }
 
 
@@ -563,22 +564,6 @@
 .app-nav__item.is-section-current {
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-
-.app-nav__trigger::after {
-  position: absolute;
-  right: var(--sp-3);
-  bottom: 0;
-  left: var(--sp-3);
-  height: 2px;
-  background: transparent;
-  content: "";
-}
-
-
-.app-nav__trigger.is-section-current::after {
-  background: var(--accent);
 }
 
 
