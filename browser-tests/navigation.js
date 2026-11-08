@@ -184,8 +184,8 @@ function trackLinkFor(artist, title) {
   return link;
 }
 
-function nextFrame() {
-  return new Promise(resolve => {
+async function nextFrame() {
+  await new Promise(resolve => {
     let settled = false;
     const timer = setTimeout(finish, 250);
     function finish() {
@@ -196,6 +196,10 @@ function nextFrame() {
     }
     frame.contentWindow.requestAnimationFrame(finish);
   });
+  await waitFor(() => {
+    const desktop = frame.contentWindow.matchMedia('(min-width: 48rem)').matches;
+    return Boolean(frame.contentDocument.querySelector(`.app-nav [data-nav-group="${desktop ? 'patterns' : 'more'}"]`));
+  }, 'sincronizar la navegación con el viewport');
 }
 
 function waitForWindowScroll(targetWindow, targetY) {
