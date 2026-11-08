@@ -1001,3 +1001,24 @@
     flex: 1 1 auto;
   }
 }
+
+.rankings-card > h3 {
+  margin-bottom: var(--sp-4);
+}
+
+@media (max-width: 640px) {
+  .rank-opts > .tabs {
+    grid-column: 1 / -1;
+  }
+
+  .rank-opts > input[type="search"] {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  .rank-opts > select {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}

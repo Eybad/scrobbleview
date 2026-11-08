@@ -420,7 +420,7 @@ export function dashboard(model, ctx = {}) {
     <section class="overview-section" id="overview-catalog" aria-labelledby="overview-catalog-heading">
       <h2 id="overview-catalog-heading" tabindex="-1">Catálogo</h2>
       ${kpis([{ label: 'Álbumes', value: fmtNum(model.albums.byId.size) }], 'overview-kpis--secondary')}
-      ${card('Rankings', rankings, '', false, 'h3')}
+      ${card('Rankings', rankings, 'rankings-card', false, 'h3')}
     </section>
     <section class="overview-section" id="overview-patterns" aria-labelledby="overview-patterns-heading">
       <h2 id="overview-patterns-heading" tabindex="-1">Patrones</h2>
