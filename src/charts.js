@@ -167,18 +167,26 @@ export function lineChart({ points, width = 640, height = 200, format = fmtNum, 
   const keep = new Set();
   const labeled = points.map((p, i) => i).filter((i) => points[i].label != null);
   if (labeled.length > 0) {
-    const last = labeled[labeled.length - 1];
-    if (labeled.length <= maxTicks) {
-      labeled.forEach((i) => keep.add(i));
-    } else {
-      const step = Math.ceil((labeled.length - 1) / (maxTicks - 1));
-      const cands = [];
-      for (let k = 0; k < labeled.length - 1; k += step) cands.push(labeled[k]);
-      const prev = cands[cands.length - 1];
-      if (span(prev)[1] + minGap > span(last)[0]) cands.pop();
-      cands.push(last);
-      cands.forEach((i) => keep.add(i));
+    const widestLabel = Math.max(...labeled.map((i) => estW(points[i].label)));
+    const fitTicks = Math.floor((plotW + minGap) / (widestLabel + minGap));
+    const tickLimit = Math.max(2, Math.min(maxTicks, fitTicks));
+    for (let tickCount = Math.min(tickLimit, labeled.length); tickCount >= 2; tickCount--) {
+      const candidates = tickCount === labeled.length
+        ? labeled
+        : Array.from({ length: tickCount }, (_, tick) => {
+          const position = Math.round(tick * (labeled.length - 1) / (tickCount - 1));
+          return labeled[position];
+        });
+      const fits = candidates.every((index, position) => {
+        if (position === 0) return true;
+        return span(candidates[position - 1])[1] <= span(index)[0];
+      });
+      if (fits) {
+        candidates.forEach((index) => keep.add(index));
+        break;
+      }
     }
+    if (keep.size === 0) keep.add(labeled[0]);
   }
   const labels = points.map((p, i) => {
     if (p.label == null || !keep.has(i)) return '';
