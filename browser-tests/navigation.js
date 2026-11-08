@@ -1162,8 +1162,13 @@ async function run() {
     const contextColumns = appWindow.getComputedStyle(contextInner).gridTemplateColumns.trim().split(/\s+/);
     const contextPeriodRect = element('.context-period').getBoundingClientRect();
     const metricRect = element('.context-controls .metric-switch').getBoundingClientRect();
-    assert(contextColumns.length === 1, `Período y métrica se apilan a ${width}px`);
-    assert(Math.abs(contextPeriodRect.width - metricRect.width) < 1, `La métrica ocupa el ancho del período a ${width}px`);
+    const stackedContext = width <= 360;
+    assert(contextColumns.length === (stackedContext ? 1 : 2), `Período y métrica usan ${stackedContext ? 'una columna' : 'una fila'} a ${width}px`);
+    if (stackedContext) {
+      assert(Math.abs(contextPeriodRect.width - metricRect.width) < 1, `La métrica ocupa el ancho del período a ${width}px`);
+    } else {
+      assert(contextPeriodRect.right <= metricRect.left && Math.abs(contextPeriodRect.top + contextPeriodRect.height / 2 - metricRect.top - metricRect.height / 2) < 1, `Período y métrica comparten la fila sin superponerse a ${width}px`);
+    }
     assert(appWindow.getComputedStyle(element('.filter-toolbar')).flexDirection === 'column', `Presets y summary se apilan a ${width}px`);
     assert(element('.filter-presets').getBoundingClientRect().width === element('.filter-advanced-toggle').getBoundingClientRect().width, `Los presets y el summary ocupan el ancho disponible a ${width}px`);
     const dateColumns = appWindow.getComputedStyle(element('#filter-panel .filter-dates')).gridTemplateColumns.trim().split(/\s+/).length;
