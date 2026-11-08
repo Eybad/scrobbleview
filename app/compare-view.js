@@ -231,7 +231,7 @@ function selectedEntitiesView(periodA, periodB, selections, mode, metric) {
   });
   return `<section class="compare-selected card" aria-labelledby="compare-selected-title">
     <div class="compare-selected__heading"><div><h2 id="compare-selected-title" tabindex="-1">Entidades seleccionadas (${selections.length} de 3)</h2><p>Escala común para A y B${mode === 'share' ? ': cuota del total de su categoría.' : ` en ${metric === 'ms' ? 'tiempo' : 'reproducciones'}.`}</p></div>
-      <label class="field"><span>Comparar por</span><select data-compare-entity-mode><option value="absolute"${mode === 'absolute' ? ' selected' : ''}>Valor absoluto</option><option value="share"${mode === 'share' ? ' selected' : ''}>Cuota</option></select></label></div>
+      <label class="field"><span>Comparar por</span><select id="compare-entity-mode" data-compare-entity-mode><option value="absolute"${mode === 'absolute' ? ' selected' : ''}>Valor absoluto</option><option value="share"${mode === 'share' ? ' selected' : ''}>Cuota</option></select></label></div>
     <p class="compare-selected__status" data-compare-entity-status role="status" aria-live="polite">${announcement}</p>
     ${selections.length ? `<div class="compare-entity-grid">${rows.join('')}</div><div class="table-scroll"><table class="compare-selected-table"><caption>Valores exactos de las entidades seleccionadas (${mode === 'share' ? 'cuota' : metric === 'ms' ? 'tiempo' : 'reproducciones'})</caption><thead><tr><th scope="col">Entidad</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th></tr></thead><tbody>${tableRows.join('')}</tbody></table></div>` : empty}
   </section>`;

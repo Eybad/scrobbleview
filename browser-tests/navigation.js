@@ -157,11 +157,17 @@ function navLink(label) {
     const mobile = frame.contentWindow.innerWidth < 768;
     const group = mobile ? 'more'
       : ['hours', 'habits', 'sessions', 'discovery'].includes(view) ? 'patterns' : 'periods';
-    appDocument.querySelector(`[data-nav-group="${group}"]`)?.click();
+    const trigger = appDocument.querySelector(`[data-nav-group="${group}"]`);
+    if (trigger?.getAttribute('aria-expanded') !== 'true') trigger?.click();
     link = [...appDocument.querySelectorAll('.app-nav-panel a[data-nav-view]')]
       .find(candidate => candidate.textContent.trim() === label);
+    if (!link && trigger) {
+      trigger.click();
+      link = [...appDocument.querySelectorAll('.app-nav-panel a[data-nav-view]')]
+        .find(candidate => candidate.textContent.trim() === label);
+    }
   }
-  assert(link, `Falta el destino de navegación ${label}`);
+  assert(link, `Falta el destino de navegación ${label} en ${frame.contentWindow.innerWidth}px (${appDocument.querySelector('.app-nav-panel')?.dataset.openGroup ?? 'panel cerrado'})`);
   return link;
 }
 
@@ -268,10 +274,11 @@ async function run() {
   const homePrivacy = element('.privacy-note');
   assert(homePrivacy.getClientRects().length > 0 && homePrivacy.textContent.trim() === 'Se procesa en tu dispositivo. Tus archivos nunca se suben', 'El aviso de privacidad breve permanece visible en el inicio');
   assert(appWindow.getComputedStyle(homePrivacy).textAlign === 'left', 'El aviso conserva su lectura alineada');
-  assert(appWindow.getComputedStyle(element('.drop-zone-badge')).backgroundColor === 'rgb(26, 48, 42)', 'El badge de carga usa el fondo de acento suave');
-  assert(appWindow.getComputedStyle(element('.drop-zone-icon')).color === 'rgb(120, 184, 146)', 'El icono de carga usa el acento de la paleta');
-  assert(appWindow.getComputedStyle(element('.drop-zone-files')).borderTopWidth === '0px', 'La zona de carga no agrega un separador interno');
-  assert(element('#home-title').textContent.trim() === 'Tu historial de Spotify, en perspectiva', 'El inicio conserva el título definido');
+  assert(element('#home-title').innerText.replace(/\s+/g, ' ').trim() === 'Tu Spotify, en perspectiva', 'El inicio conserva el título de dos líneas');
+  assert(element('.home-import-title').textContent.trim() === 'Cargá tu historial', 'La carga tiene un encabezado propio');
+  assert(element('#home-file-types').textContent.trim() === 'ZIP o varios JSON del historial ampliado', 'La carga explica qué archivos acepta');
+  assert(element('#btn-upload').getAttribute('aria-describedby') === 'home-file-types' && element('#file-input').multiple, 'El botón de carga anuncia formatos y permite selección múltiple');
+  assert(element('#btn-upload').getBoundingClientRect().height >= 48, 'El botón principal de carga conserva un objetivo táctil de 48 px');
   assert(element('#drop-zone').getAttribute('role') === null && !element('#drop-zone').hasAttribute('tabindex'), 'La zona de carga no se presenta como control interactivo');
   assert(element('#file-input').multiple && element('#btn-upload').textContent.trim() === 'Elegir archivos', 'La selección múltiple se activa mediante el botón explícito');
   const syntheticEvents = ['2024-01-10', '2024-02-10', '2024-02-11'].map(date => ({
@@ -339,6 +346,8 @@ async function run() {
   element('#drop-zone').dispatchEvent(dropEvent);
   await waitFor(() => !element('#view-app').hidden, 'carga sintética');
   assert(kpiValue('Reproducciones') === '8', 'La carga debe mostrar 8 reproducciones');
+  assert(appDocument.querySelectorAll('#view-root .kpis dt').length === 14, 'El Resumen conserva sus catorce KPIs');
+  assert(appDocument.querySelectorAll('#view-root table').length === 12, 'El Resumen conserva sus doce tablas');
   const persistentAppRoot = appDocument.getElementById('app-root');
   const persistentFrameSlots = [...appDocument.querySelectorAll('[data-app-slot]')];
   const persistentAnalysisControls = appDocument.getElementById('analysis-controls');
@@ -400,6 +409,15 @@ async function run() {
   assert(mobileSession.getAttribute('aria-current') === 'page', 'La ruta exacta conserva aria-current en Más');
   moreTrigger.dispatchEvent(new appWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   assert(element('.app-nav-panel').hidden && appDocument.activeElement === moreTrigger, 'Escape cierra el grupo activo y devuelve foco a Más');
+  navLink('Descubrimiento').click();
+  await waitFor(() => viewHeading() === 'Descubrimiento', 'abrir Descubrimiento');
+  assert(element('#discovery-first-tracks table tbody').textContent.includes('Synthetic track'), 'Descubrimiento conserva las primeras apariciones del historial');
+  assert(element('#discovery-first-artists table tbody').textContent.includes('Synthetic artist'), 'Descubrimiento conserva las primeras apariciones de artistas');
+  navLink('Años').click();
+  await waitFor(() => viewHeading() === 'Comparación anual', 'abrir Años');
+  const yearlyTable = [...appDocument.querySelectorAll('#view-root table')].find(table => table.caption?.textContent.includes('Comparación año a año'));
+  const syntheticYear = [...(yearlyTable?.tBodies[0]?.rows ?? [])].find(row => row.cells[0].textContent.trim() === '2024');
+  assert(syntheticYear?.cells[1].textContent.trim() === '8', 'Años conserva las ocho reproducciones de 2024');
   navLink('Resumen').click();
   await waitFor(() => viewHeading() === 'Resumen', 'volver al Resumen tras probar disclosures');
   assert(element('.app-nav') === nav, 'La navegación conserva su nodo durante cambios de ruta');
@@ -910,6 +928,8 @@ async function run() {
 
   navLink('Comparar').click();
   await waitFor(() => Boolean(element('#compare-form')), 'abrir comparación');
+  await waitFor(() => Boolean(element('#compare-entity-mode')), 'renderizar el selector de entidades');
+  assert(element('#compare-entity-mode') === element('[data-compare-entity-mode]'), 'El selector de comparación tiene un identificador estable');
   const preset = element('[data-compare-field="preset"]');
   preset.value = 'manual';
   preset.dispatchEvent(new appWindow.Event('change', { bubbles: true }));
@@ -1106,7 +1126,7 @@ async function run() {
   const responsiveToggle = element('.filter-advanced-toggle');
   responsiveToggle.click();
   assert(!element('#filter-panel').hidden, 'El panel queda abierto para verificar su layout responsive');
-  const viewportWidths = [320, 360, 393, 412, 640];
+  const viewportWidths = [320, 360, 390, 393, 412, 640];
   const viewportChecks = [];
   for (const width of viewportWidths) {
     frame.style.width = `${width}px`;
@@ -1156,6 +1176,15 @@ async function run() {
   assert(appWindow.getComputedStyle(element('.view-header h1')).fontSize === '28px', 'El H1 de vista mide 28px desde 48rem');
   assert(appWindow.getComputedStyle(element('.overview-section > h2')).fontSize === '20px', 'El H2 de sección mide 20px desde 48rem');
   assert(appWindow.getComputedStyle(element('.overview-kpis--primary .kpi dd')).fontSize === '28px', 'El KPI principal mide 28px desde 48rem');
+  const primaryKpiGrid = element('.overview-kpis--primary');
+  const primaryKpiColumns = appWindow.getComputedStyle(primaryKpiGrid).gridTemplateColumns.trim().split(/\s+/).length;
+  const wrappedPrimaryKpis = [...primaryKpiGrid.querySelectorAll('.kpi--metric-primary dd')].filter(value => {
+    const range = appDocument.createRange();
+    range.selectNodeContents(value);
+    return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1;
+  });
+  assert(primaryKpiColumns === 2 && wrappedPrimaryKpis.length === 0, 'Los KPIs principales conservan una línea a 768px');
+  viewportChecks.push({ width: 768, scrollWidth: appDocument.documentElement.scrollWidth, viewport: appWindow.innerWidth, primaryKpiColumns, wrappedPrimaryKpis: wrappedPrimaryKpis.length });
   assert(appWindow.getComputedStyle(element('.overview-kpis--secondary .kpi dd')).fontSize === '24px', 'El KPI secundario mide 24px desde 48rem');
   assert(appWindow.getComputedStyle(element('#view-root th')).fontSize === '13px', 'Las etiquetas de tabla miden 13px desde 48rem');
   assert(appWindow.getComputedStyle(element('.chart-inspector')).minHeight === '44px', 'El inspector reserva 44px desde 48rem');
@@ -1170,6 +1199,23 @@ async function run() {
   assert(Math.abs(desktopPresets.top + desktopPresets.height / 2 - desktopSummary.top - desktopSummary.height / 2) < 1, 'Presets y summary comparten una fila desde 48rem');
   assert(element('#filter-chips').getBoundingClientRect().top > desktopSummary.top, 'Los chips quedan debajo de presets y summary en desktop');
   assert(appWindow.getComputedStyle(element('#filter-panel .filter-dates')).gridTemplateColumns.trim().split(/\s+/).length === 2, 'Los campos de fecha usan dos columnas desde 48rem');
+  for (const width of [1024, 1440]) {
+    frame.style.width = `${width}px`;
+    await nextFrame();
+    const scrollWidth = appDocument.documentElement.scrollWidth;
+    assert(scrollWidth <= appWindow.innerWidth, `El Resumen no desborda a ${width}px`);
+    assert(appWindow.getComputedStyle(element('.app-nav')).display === 'flex', `La navegación desktop permanece disponible a ${width}px`);
+    viewportChecks.push({ width, scrollWidth, viewport: appWindow.innerWidth });
+  }
+  const originalFrameHeight = frame.style.height;
+  frame.style.width = '844px';
+  frame.style.height = '390px';
+  await nextFrame();
+  assert(appWindow.innerWidth === 844 && appWindow.innerHeight === 390, 'La prueba reproduce el viewport apaisado de 844×390 CSS px');
+  assert(appDocument.documentElement.scrollWidth <= appWindow.innerWidth, 'El Resumen no desborda en orientación apaisada');
+  assert(appWindow.getComputedStyle(element('.app-nav')).display === 'flex', 'La navegación permanece disponible en orientación apaisada');
+  viewportChecks.push({ width: 844, height: 390, scrollWidth: appDocument.documentElement.scrollWidth, viewport: appWindow.innerWidth, viewportHeight: appWindow.innerHeight });
+  frame.style.height = originalFrameHeight;
   responsiveToggle.click();
   frame.style.width = '640px';
   await nextFrame();

@@ -1229,6 +1229,13 @@
 }
 
 
+@media (min-width: 761px) and (max-width: 860px) {
+  .overview-kpis--primary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
 @media (max-width: 360px) {
   .kpi {
     padding-inline: var(--sp-2);
