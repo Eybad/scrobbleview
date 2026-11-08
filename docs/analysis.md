@@ -34,9 +34,9 @@ La caché es opcional y descartable. Errores de apertura o transacción se infor
 
 La exportación de tabla usa la misma descripción de catálogo que el render: selección analítica, búsqueda, campos buscados, elegibilidad, orden y desempates. El Worker exporta todas las coincidencias sin paginación; la posición y cuota mantienen sus denominadores de catálogo completos. El ZIP de tabla separa `<tab>.csv` de `metadata.csv`, para que la metadata no altere el formato tabular. La metadata declara versión/esquema, zona horaria, alcance, filtros y rangos, métrica y unidad, elegibilidad, denominadores y definiciones de ranking/cuota.
 
-El diálogo toma el conteo y la dirección efectiva del resultado ya renderizado. Si no encuentra ese resultado, deshabilita la opción de tabla y muestra un mensaje recuperable en vez de recalcular el catálogo. Cancelar exportaciones concurrentes invalida sus respuestas sin terminar el Worker ni descartar el dataset. La verificación Node lee el ZIP generado por el Worker, revisa CRC y compara filtros, cantidad y filas con la consulta; todavía no prueba la descarga del navegador.
+El diálogo toma el conteo y la dirección efectiva del resultado ya renderizado. Si no encuentra ese resultado, deshabilita la opción de tabla y muestra un mensaje recuperable en vez de recalcular el catálogo. Cancelar exportaciones concurrentes invalida sus respuestas sin terminar el Worker ni descartar el dataset. Las pruebas de Node leen el ZIP generado por el Worker, revisan CRC y comparan filtros, cantidad y filas con la consulta. El harness de navegador comprueba el inicio de descargas y su cancelación; son verificaciones complementarias.
 
-Copiar resumen toma modelo, período y métrica del último contexto confirmado. Restablecer preferencias elimina ajustes visuales persistidos y sincroniza URL/controles conservando filtros analíticos, historial en memoria e IndexedDB. Las operaciones de almacenamiento siguen sus errores y confirmaciones transaccionales; las regresiones actuales usan IndexedDB simulado, con aceptación del navegador pendiente.
+Copiar resumen toma modelo, período y métrica del último contexto confirmado. Restablecer preferencias elimina ajustes visuales persistidos y sincroniza URL/controles conservando filtros analíticos, historial en memoria e IndexedDB. Las pruebas de Node cubren los estados de almacenamiento con un IndexedDB simulado; el harness de navegador comprueba consentimiento, guardado, carga y borrado con IndexedDB real.
 
 ## Procesamiento y memoria
 
@@ -63,11 +63,11 @@ Datos sintéticos: 500 artistas, `min(50.000, eventos/10)` canciones, reproducci
 
 Estas muestras muestran un menor pico RSS en la corrida compacta. El conteo directo evita calcular modelos enteros para comparar totales. Las muestras no prueban una mejora uniforme de tiempos de filtrado. No son promedios, una ley de escalado ni predicciones para otro teléfono. El consumo sigue siendo alto en historiales grandes; conviene cargar períodos más pequeños si el navegador no dispone de recursos suficientes.
 
-### Comparación R10 del 29 de octubre de 2026
+### Comparación local de versiones (29 de octubre de 2026)
 
-Comando: `node --expose-gc bench/r10.js 100000 5`. Se comparó la base `55f9d9289f09b07808147de0b03e0b413b5e0852` con el checkout de R10 en Termux/Android aarch64, Node v26.12.1. Como el harness R10 no existía en la base, se copió temporalmente el mismo archivo al worktree separado de esa revisión. Ambas corridas usaron el mismo fixture sintético: 100.000 eventos, 10.000 canciones, 500 artistas, 500 álbumes, 23.133.801 bytes JSON y rango `2020-01-01T00:00:00.000Z..2021-04-16T21:18:00.000Z`. Cinco muestras por operación; se informa mediana y peor muestra. La comparación R10 se limitó a 100.000 eventos porque ese proceso alcanzó 407,8 MiB de RSS en Android.
+Comando: `node --expose-gc bench/r10.js 100000 5`. La comparación se ejecutó en Termux/Android aarch64 con Node v26.12.1. Ambas versiones usaron el mismo fixture sintético: 100.000 eventos, 10.000 canciones, 500 artistas, 500 álbumes, 23.133.801 bytes JSON y rango `2020-01-01T00:00:00.000Z..2021-04-16T21:18:00.000Z`. Se tomaron cinco muestras por operación; la tabla informa mediana y peor muestra. La prueba se limitó a 100.000 eventos porque un proceso alcanzó 407,8 MiB de RSS en Android.
 
-| Operación | Base mediana / peor (ms) | R10 mediana / peor (ms) |
+| Operación | Versión anterior: mediana / peor (ms) | Versión medida: mediana / peor (ms) |
 | --- | ---: | ---: |
 | Parseo | 2.262,58 / 2.340,47 | 2.262,18 / 2.399,09 |
 | Derivación + agregación compacta | 1.998,25 / 2.186,22 | 2.134,86 / 2.387,23 |
@@ -79,7 +79,7 @@ Comando: `node --expose-gc bench/r10.js 100000 5`. Se comparó la base `55f9d928
 
 En esta comparación, parseo y consulta quedaron cerca de la base; derivación/agregación, render y exportación fueron algo más lentos. El clonado de la proyección y el RSS aumentaron de forma clara. Consulta y render quedaron debajo de 200 ms en estas muestras Node, pero eso no mide latencia del DOM ni respuesta visual en navegador. `structuredClone` representa el costo de copiar la proyección, no el mensaje real de un Worker; el render solo produce un string y no construye el DOM; la exportación mide la tabla sintética y su ZIP. La medición no demuestra el objetivo de feedback de 100 ms ni la RAM disponible para un historial personal. Las corridas son sensibles a la carga y temperatura del dispositivo.
 
-El 29 de octubre se ejecutó además una corrida compacta de 500.000 eventos: `node --expose-gc bench/aggregate.js 500000 --compact`. Con 50.000 canciones sintéticas registró 11.624 ms de agregación, 8.619 ms de filtro, 6 ms de conteo y 802 MiB de RSS pico. Es una muestra aislada sin lectura JSON, construcción de zona IANA, Worker ni renderizado; no es comparable con la tabla R10 de 100.000 eventos ni sustituye la carga de 500.000 eventos en navegador.
+El 29 de octubre se ejecutó además una corrida compacta de 500.000 eventos: `node --expose-gc bench/aggregate.js 500000 --compact`. Con 50.000 canciones sintéticas registró 11.624 ms de agregación, 8.619 ms de filtro, 6 ms de conteo y 802 MiB de RSS pico. Es una muestra aislada sin lectura JSON, construcción de zona IANA, Worker ni renderizado; no es comparable con la tabla de versiones de 100.000 eventos ni sustituye la carga de 500.000 eventos en navegador.
 
 ## Verificación de navegador y pendientes manuales
 
@@ -101,22 +101,8 @@ Las cuatro ejecuciones extendidas guardaron ocho eventos tras consentimiento, re
 
 Siguen pendientes comprobaciones con TalkBack y tacto físico, scroll de mapas/calendario, revisión visual del resto de controles, consola/CSP en otros navegadores y carga de 500.000 eventos en navegador. El harness usa teclado/CDP y clic sintético; no sustituye esas pruebas.
 
-## Cobertura de la auditoría
+## Alcance de las pruebas
 
-| Hallazgo | Implementación y evidencia |
-| --- | --- |
-| F01 | Restauración URL → estado → modelo y rechazo de respuestas obsoletas; regresión de navegador preparada, ejecución manual pendiente. |
-| F02 | Intervalos UTC estimados, suma escuchada independiente, pistas largas y solapamientos cubiertos por regresiones. |
-| F03 | Relación álbum–canción en fichas, series, minigráficos y CSV; agrupación global por título/artista conservada. |
-| F04 | Orden UTC e índice local separado, con regresiones para DST. |
-| F05 | Conteos directos, derivados reutilizados, modelo compacto, detalle diferido, Worker con progreso y cancelación; memoria todavía considerable. |
-| F06 | Gramática, UTF-8, escapes, timestamps e identidad canónica; corpus diferencial contra JSON.parse. |
-| F07 | Bits de validez, filtros y tasas con desconocidos, exclusión de duraciones desconocidas y caché compatible. |
-| F08 | Definiciones explícitas, trackdone separado, descubrimiento histórico y períodos observados. |
-| F09 | Ancla con foco y sin navegación del router; verificación de teclado real pendiente. |
-| F10 | Título y etiquetas según año completo o período efectivo. |
-| F11 | Node ≥24 declarado, ejecución local con 26.12.1; detección real del formato ZIP y alternativas probadas. |
-| F12 | Defaults compartidos y la misma fachada para fuentes y datasets parseados. |
-| F13 | Archivos repetidos, avisos de solapamiento, límites de recursos y fallos de caché cubiertos por regresiones. |
+La suite `node --test` verifica el parsing, las métricas, las rutas, las vistas y los recorridos del Worker con datos sintéticos. Las mediciones de esta página son corridas locales fechadas; documentan el método y un resultado observado, no una garantía de rendimiento para otros dispositivos.
 
-Se conservaron el formato estático, el procesamiento local y la ausencia de build/dependencias. No se aplicaron las preferencias estéticas de la sección «Interfaz y móvil» de la auditoría.
+El harness `browser-tests/navigation.html` cubre recorridos representativos en Chromium. La interacción con lectores de pantalla y tacto físico, y el comportamiento en otros motores, requieren pruebas manuales adicionales. La suite y el harness no acreditan por sí solos conformidad integral con WCAG.
