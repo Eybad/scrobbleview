@@ -145,6 +145,44 @@ test('overlapping export requests cancel together and ignore cancelled late resu
   client.cancel();
 });
 
+for (const stopType of ['cancel', 'cancelImport', 'error', 'messageerror']) {
+  test(`${stopType} rejects active and queued filters and permits recovery`, async () => {
+    const ports = [];
+    const client = createAnalysisClient({ createWorker() {
+      const listeners = new Map();
+      const messages = [];
+      const port = {
+        postMessage(message) { messages.push(message); },
+        terminate() {},
+        addEventListener(type, listener) { listeners.set(type, listener); }
+      };
+      ports.push({ listeners, messages });
+      return port;
+    } });
+    const settlements = [null, null];
+    for (let index = 0; index < settlements.length; index++) {
+      client.request('filter').then(
+        () => { settlements[index] = { status: 'fulfilled' }; },
+        error => { settlements[index] = { status: 'rejected', error }; }
+      );
+    }
+
+    if (stopType === 'cancel' || stopType === 'cancelImport') client[stopType]();
+    else ports[0].listeners.get(stopType)({});
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(settlements.map(result => result?.status), ['rejected', 'rejected']);
+    assert.ok(settlements[0].error instanceof Error);
+    assert.equal(settlements[1].error, settlements[0].error);
+
+    const recovered = client.request('filter');
+    const port = ports.at(-1);
+    port.listeners.get('message')({ data: { id: port.messages[0].id, result: { model: null } } });
+    assert.deepEqual(await recovered, { model: null });
+    client.cancel();
+  });
+}
+
 test('analysisState preserves confirmed model and supports cancelUpdate', async () => {
   let pendingResolve = null;
   const mockClient = {

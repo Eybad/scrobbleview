@@ -12,6 +12,7 @@ export function createAnalysisClient({ createWorker = () => new Worker(new URL('
     worker?.terminate();
     worker = null;
     inFlightFilter = null;
+    pendingFilter?.reject(error);
     pendingFilter = null;
     activeExports.clear();
     for (const request of pending.values()) request.reject(error);
