@@ -1628,3 +1628,12 @@ td {
     overflow-wrap: anywhere;
   }
 }
+
+@media (max-width: 640px) {
+  .table-scroll .compare-ranking-table th:first-child,
+  .table-scroll .compare-series-table th:first-child,
+  .table-scroll .compare-series-table td:first-child {
+    position: static;
+    box-shadow: none;
+  }
+}
