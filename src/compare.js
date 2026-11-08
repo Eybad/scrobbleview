@@ -218,7 +218,7 @@ export function buildCompareSeries(dailyMap, range, granularity = 'daily', byMs 
           endDay: d,
           startDow: dow,
           endDow: dow,
-          label: `Semana ${c.d}/${c.m}`,
+          label: `Semana ${c.y}-${String(c.m).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`,
           value: 0,
           isPartial: dow !== 0
         };
