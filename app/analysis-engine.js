@@ -326,7 +326,8 @@ export function createAnalysisEngine() {
       if (type === 'longitudinal') {
         const state = payload.state ?? emptyFilterState();
         const thresholdDays = [30, 90, 180].includes(payload.thresholdDays) ? payload.thresholdDays : 30;
-        const cacheKey = JSON.stringify([state, thresholdDays]);
+        const cacheKey = JSON.stringify([state, thresholdDays], (key, value) =>
+          value instanceof Set ? [...value].sort((a, b) => a - b) : value);
         let result = longitudinalCache.get(cacheKey);
         if (!result) {
           const selectedIndices = isFilterActive(state) ? applyFilters(ds, state, tz, derived).indices : null;

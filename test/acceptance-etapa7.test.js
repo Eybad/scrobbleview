@@ -295,6 +295,33 @@ test('Worker longitudinal query keeps historical returns and pages filtered disc
   assert.equal(longerThreshold.comebacks.artists.total, 0);
 });
 
+for (const [field, values] of [
+  ['years', [2024, 2025]],
+  ['months', [202401, 202502]],
+  ['hours', [12, 13]],
+  ['dows', [0, 1]]
+]) {
+  test(`longitudinal queries refresh results when ${field} change`, async () => {
+    const entries = [
+      { ts: '2024-01-01T12:00:00Z', ms_played: 60000, master_metadata_track_name: 'First' },
+      { ts: '2025-02-04T13:00:00Z', ms_played: 120000, master_metadata_track_name: 'Second' }
+    ].map(event => ({ ...event, master_metadata_album_artist_name: 'Artist' }));
+    const engine = createAnalysisEngine();
+    await engine.handle('load', {
+      timeZone: 'UTC', files: [{ name: 'synthetic.json', blob: new Blob([JSON.stringify(entries)]) }]
+    });
+
+    for (const index of [0, 1, 0]) {
+      const result = await engine.handle('longitudinal', {
+        state: { ...emptyFilterState(), [field]: new Set([values[index]]) }
+      });
+      assert.deepEqual(result.firstAppearances.tracks.rows.map(row => row.name), [index === 0 ? 'First' : 'Second']);
+      assert.deepEqual([...result.monthly.keys()], [index === 0 ? 202401 : 202502]);
+      assert.equal([...result.monthly.values()][0].ms, index === 0 ? 60000 : 120000);
+    }
+  });
+}
+
 test('discoveryView renders comebacks, retention and first appearances', async () => {
   const UTC = fixedTz('UTC', 0);
   const D0 = 1704067200;
