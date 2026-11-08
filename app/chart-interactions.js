@@ -93,6 +93,12 @@ export function mountChartInteractions(root, { announce }) {
 
   function refresh() {
     resizeCharts();
+    root.querySelectorAll('.chart-scroll--heat').forEach((chart) => {
+      const hint = chart.nextElementSibling;
+      if (hint?.classList.contains('chart-scroll-hint')) {
+        hint.hidden = chart.scrollWidth <= chart.clientWidth + 1;
+      }
+    });
     restoreSelections();
   }
 

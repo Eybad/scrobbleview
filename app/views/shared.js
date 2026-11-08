@@ -109,7 +109,7 @@ export function dayHourHeatChart(model, { id, title, metric }) {
     chartType: 'grid',
     fallbackTable
   });
-  const chart = `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div>${heatLegend()}`;
+  const chart = `<div class="chart-scroll chart-scroll--heat" tabindex="0" role="region" aria-label="Actividad por hora y día de la semana">${heat}</div><p class="chart-scroll-hint view-meta" hidden>Deslizá horizontalmente para ver todas las horas.</p>${heatLegend()}`;
   return renderChartWithContract(contract, chart);
 }
 
