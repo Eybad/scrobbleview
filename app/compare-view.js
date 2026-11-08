@@ -11,6 +11,14 @@ function dateRangeLabel(range) {
   return from && to ? `${from} → ${to}` : 'Período inválido';
 }
 
+function compareTableCaption(text) {
+  const safeText = esc(text);
+  return {
+    visible: `<p class="compare-table-caption" aria-hidden="true">${safeText}</p>`,
+    accessible: `<caption class="visually-hidden">${safeText}</caption>`
+  };
+}
+
 function comparisonForm(ctx) {
   const manual = ctx.comparePreset === 'manual';
   const rangeA = ctx.compareRangeA;
@@ -76,8 +84,9 @@ function averagesRows(periodA, periodB, rangeA, rangeB) {
 }
 
 function totalsTable(periodA, periodB, rangeA, rangeB) {
-  return `<div class="table-scroll compare-results-scroll"><table class="compare-results-table">
-    <caption>Resultados de A frente a B</caption>
+  const caption = compareTableCaption('Resultados de A frente a B');
+  return `${caption.visible}<div class="table-scroll compare-results-scroll"><table class="compare-results-table">
+    ${caption.accessible}
     <thead class="compare-results-head"><tr><th scope="col">Indicador</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Variación</th></tr></thead>
     <tbody>
       ${metricRow('Tiempo escuchado', periodA.totals.ms, periodB.totals.ms, fmtMs)}
@@ -116,8 +125,9 @@ function seriesRows(periodA, periodB, rangeA, rangeB, granularity, metric) {
       <span aria-live="polite">Mostrando 1–${Math.min(25, rows.length)} de ${rows.length}</span>
       <button type="button" class="btn btn-secondary" data-compare-series-page="1">Siguiente</button>
     </div>` : '';
-  return `<div class="table-scroll"><table class="compare-series-table">
-    <caption>Series ${granularity === 'daily' ? 'diarias' : granularity === 'weekly' ? 'semanales' : 'mensuales'} (${byMs ? 'tiempo escuchado' : 'reproducciones'})</caption>
+  const caption = compareTableCaption(`Series ${granularity === 'daily' ? 'diarias' : granularity === 'weekly' ? 'semanales' : 'mensuales'} (${byMs ? 'tiempo escuchado' : 'reproducciones'})`);
+  return `${caption.visible}<div class="table-scroll"><table class="compare-series-table">
+    ${caption.accessible}
     <thead><tr><th scope="col">Período A</th><th scope="col" class="n">Valor A</th><th scope="col">Período B</th><th scope="col" class="n">Valor B</th></tr></thead>
     <tbody>${rows.join('')}</tbody>
   </table></div>${controls}`;
@@ -133,8 +143,9 @@ function rankingTable(kind, periodA, periodB, metric, selectedEntities) {
   if (!rows.length) return `<p class="empty">No hay ${CATEGORY_NAMES[kind].toLowerCase()} en estos períodos.</p>`;
   const format = metric === 'ms' ? fmtMs : fmtNum;
   const selectedKeys = new Set(selectedEntities.map(compareEntityKey));
-  return `<div class="table-scroll"><table class="compare-ranking-table">
-    <caption>Top 50 ${CATEGORY_NAMES[kind].toLowerCase()}: posiciones y cuotas (${metric === 'ms' ? 'tiempo' : 'reproducciones'})</caption>
+  const caption = compareTableCaption(`Top 50 ${CATEGORY_NAMES[kind].toLowerCase()}: posiciones y cuotas (${metric === 'ms' ? 'tiempo' : 'reproducciones'})`);
+  return `${caption.visible}<div class="table-scroll"><table class="compare-ranking-table">
+    ${caption.accessible}
     <thead><tr><th scope="col">Entidad</th><th scope="col" class="n">Pos. A</th><th scope="col" class="n">Pos. B</th><th scope="col" class="n">Valor A</th><th scope="col" class="n">Valor B</th><th scope="col" class="n">Diferencia</th><th scope="col" class="n">Cuota A</th><th scope="col" class="n">Cuota B</th><th scope="col" class="n">Cambio</th><th scope="col">Movimiento</th></tr></thead>
     <tbody>${rows.map((row) => {
       const entity = entitiesA.get(row.key) ?? entitiesB.get(row.key);
@@ -218,6 +229,7 @@ function selectedEntitiesView(periodA, periodB, selections, mode, metric) {
   });
   const announcement = selections.length === 3 ? 'Límite de tres entidades alcanzado.' : `Podés agregar ${3 - selections.length} ${3 - selections.length === 1 ? 'entidad más' : 'entidades más'}.`;
   const empty = '<p class="empty">Agregá artistas, canciones o álbumes desde los rankings para compararlos.</p>';
+  const caption = compareTableCaption(`Valores exactos de las entidades seleccionadas (${mode === 'share' ? 'cuota' : metric === 'ms' ? 'tiempo' : 'reproducciones'})`);
   const tableRows = selections.map((selection) => {
     const valueA = selectedEntityValue(indexA, selection, metric);
     const valueB = selectedEntityValue(indexB, selection, metric);
@@ -233,7 +245,7 @@ function selectedEntitiesView(periodA, periodB, selections, mode, metric) {
     <div class="compare-selected__heading"><div><h2 id="compare-selected-title" tabindex="-1">Entidades seleccionadas (${selections.length} de 3)</h2><p>Escala común para A y B${mode === 'share' ? ': cuota del total de su categoría.' : ` en ${metric === 'ms' ? 'tiempo' : 'reproducciones'}.`}</p></div>
       <label class="field"><span>Comparar por</span><select id="compare-entity-mode" data-compare-entity-mode><option value="absolute"${mode === 'absolute' ? ' selected' : ''}>Valor absoluto</option><option value="share"${mode === 'share' ? ' selected' : ''}>Cuota</option></select></label></div>
     <p class="compare-selected__status" data-compare-entity-status role="status" aria-live="polite">${announcement}</p>
-    ${selections.length ? `<div class="compare-entity-grid">${rows.join('')}</div><div class="table-scroll"><table class="compare-selected-table"><caption>Valores exactos de las entidades seleccionadas (${mode === 'share' ? 'cuota' : metric === 'ms' ? 'tiempo' : 'reproducciones'})</caption><thead><tr><th scope="col">Entidad</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th></tr></thead><tbody>${tableRows.join('')}</tbody></table></div>` : empty}
+    ${selections.length ? `<div class="compare-entity-grid">${rows.join('')}</div><div class="compare-selected-table-block">${caption.visible}<div class="table-scroll"><table class="compare-selected-table">${caption.accessible}<thead><tr><th scope="col">Entidad</th><th scope="col" class="n">A</th><th scope="col" class="n">B</th><th scope="col" class="n">Diferencia</th></tr></thead><tbody>${tableRows.join('')}</tbody></table></div></div>` : empty}
   </section>`;
 }
 

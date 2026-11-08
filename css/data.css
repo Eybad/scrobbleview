@@ -1450,6 +1450,14 @@ details.calendar-year summary:hover {
 }
 
 
+.compare-table-caption {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+
+
 .compare-ranking-entity {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1484,7 +1492,7 @@ details.calendar-year summary:hover {
   }
 
 
-  .compare-selected-table {
+  .compare-selected-table-block {
     display: none;
   }
 
@@ -1502,10 +1510,7 @@ details.calendar-year summary:hover {
   }
 
 
-  .compare-results-table caption,
-  .compare-series-table caption,
-  .compare-selected-table caption,
-  .compare-ranking-table caption {
+  .compare-table-caption {
     text-align: left;
   }
 
