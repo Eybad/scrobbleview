@@ -735,9 +735,15 @@ async function run() {
   };
   assert(catalogScroll.clientWidth >= 288, `La tabla conserva el gutter de página a 320px: ${catalogScroll.clientWidth}px`);
   assert(catalogWidths.rank >= 44 && catalogWidths.name >= 140 && catalogWidths.time >= 104 && catalogWidths.plays >= 128 && catalogWidths.share >= 88, `Las columnas cumplen sus mínimos móviles: ${JSON.stringify(catalogWidths)}`);
-  assert(appWindow.getComputedStyle(catalogScroll.querySelector('th.col-rank')).position === 'static', 'El ordinal no queda fijo');
+  assert(appWindow.getComputedStyle(catalogScroll.querySelector('th.col-rank')).position === 'sticky', 'El ordinal queda fijo');
   assert(appWindow.getComputedStyle(catalogScroll.querySelector('td.col-name')).position === 'sticky', 'La identidad queda fija dentro de la tabla');
-  assert(appWindow.getComputedStyle(catalogScroll.querySelector('td.col-name')).insetInlineStart === '0px', 'La identidad sticky empieza en el borde inline');
+  assert(appWindow.getComputedStyle(catalogScroll.querySelector('td.col-name')).insetInlineStart === '44px', 'La identidad sticky empieza después del ordinal');
+  catalogScroll.scrollLeft = 160;
+  const ordinalBounds = catalogScroll.querySelector('td.col-rank').getBoundingClientRect();
+  const identityBounds = catalogScroll.querySelector('td.col-name').getBoundingClientRect();
+  assert(Math.abs(ordinalBounds.left - catalogScroll.getBoundingClientRect().left) < 1, 'El ordinal permanece visible al deslizar');
+  assert(Math.abs(identityBounds.left - ordinalBounds.right) < 1, 'Nombre y ordinal no se superponen al deslizar');
+  catalogScroll.scrollLeft = 0;
   assert(catalogScroll.getAttribute('role') === 'region' && catalogScroll.tabIndex === 0 && catalogScroll.getAttribute('aria-describedby') === catalogHint.id, 'El scroll de catálogo tiene foco y un nombre/instrucción accesibles');
   assert(catalogScroll.scrollWidth > catalogScroll.clientWidth && !catalogHint.hidden, 'La indicación aparece cuando hay más columnas para consultar');
   assert(appDocument.documentElement.scrollWidth <= appWindow.innerWidth, 'El catálogo no desplaza horizontalmente la página a 320px');

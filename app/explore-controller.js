@@ -22,7 +22,7 @@ function updateCatalogScrollHint(card) {
   const hint = card.querySelector('[data-catalog-scroll-hint]');
   if (!wrap || !hint) return;
   hint.hidden = wrap.scrollWidth <= wrap.clientWidth;
-  wrap.classList.toggle('catalog-table-wrap--no-sticky', wrap.clientWidth < 244);
+  wrap.classList.toggle('catalog-table-wrap--no-sticky', wrap.clientWidth < 288);
 }
 
 export function mountExplore(root, { readSnapshot, commitQuery, savePreference, exportTable }) {

@@ -641,6 +641,7 @@ details.calendar-year summary:hover {
   max-width: none;
   margin: var(--sp-2) calc(-1 * var(--catalog-table-outset)) 0;
   scrollbar-gutter: auto;
+  scroll-padding-inline-start: 184px;
 }
 
 
@@ -696,6 +697,8 @@ details.calendar-year summary:hover {
 }
 
 
+.catalog-table th.col-rank,
+.catalog-table td.col-rank,
 .catalog-table th.col-name-head,
 .catalog-table td.col-name {
   position: sticky;
@@ -707,11 +710,25 @@ details.calendar-year summary:hover {
 }
 
 
+.catalog-table th.col-name-head,
+.catalog-table td.col-name {
+  inset-inline-start: 44px;
+}
+
+
+.catalog-table th.col-rank,
 .catalog-table th.col-name-head {
   z-index: 2;
 }
 
 
+.catalog-table-wrap--no-sticky {
+  scroll-padding-inline-start: 0;
+}
+
+
+.catalog-table-wrap--no-sticky .catalog-table th.col-rank,
+.catalog-table-wrap--no-sticky .catalog-table td.col-rank,
 .catalog-table-wrap--no-sticky .catalog-table th.col-name-head,
 .catalog-table-wrap--no-sticky .catalog-table td.col-name {
   position: static;
@@ -891,6 +908,11 @@ details.calendar-year summary:hover {
 @media (min-width: 48rem) {
   .catalog-table-wrap {
     --catalog-table-outset: calc(var(--sp-5) + 1px);
+  }
+
+
+  .catalog-table-wrap {
+    scroll-padding-inline-start: 284px;
   }
 
 
