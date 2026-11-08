@@ -140,6 +140,11 @@ main.container {
 
 
 .overview-index {
+  position: sticky;
+  top: var(--sp-2);
+  z-index: 3;
+  background: var(--bg);
+  padding-block: var(--sp-2);
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
@@ -156,7 +161,7 @@ main.container {
   font-size: var(--fs-h2);
   line-height: 1.25;
   margin: 0 0 var(--sp-4);
-  scroll-margin-top: var(--sp-6);
+  scroll-margin-top: 6rem;
 }
 
 
